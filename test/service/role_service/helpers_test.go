@@ -39,6 +39,9 @@ type fakeRoles struct {
 
 	listRoles []role.Role
 	listErr   error
+
+	updateErr error
+	updated   role.Role
 }
 
 func (f *fakeRoles) Create(_ context.Context, r role.Role) error {
@@ -62,6 +65,14 @@ func (f *fakeRoles) ListByServer(_ context.Context, _ uuid.UUID) ([]role.Role, e
 		return nil, f.listErr
 	}
 	return f.listRoles, nil
+}
+
+func (f *fakeRoles) Update(_ context.Context, r role.Role) error {
+	if f.updateErr != nil {
+		return f.updateErr
+	}
+	f.updated = r
+	return nil
 }
 
 func ownerServer() model.Server {

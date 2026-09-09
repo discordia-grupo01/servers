@@ -19,6 +19,7 @@ import (
 type RoleUseCases interface {
 	CreateRole(ctx context.Context, p role_service.CreateRoleParams) (role.Role, error)
 	ListRoles(ctx context.Context, serverID uuid.UUID) ([]role.Role, error)
+	UpdateRolePermissions(ctx context.Context, p role_service.UpdateRolePermissionsParams) (role.Role, error)
 }
 
 type Handler struct {
@@ -109,4 +110,37 @@ func (h *Handler) ListRoles(c *gin.Context) {
 		resp = append(resp, toRoleResponse(rl))
 	}
 	c.JSON(http.StatusOK, resp)
+}
+
+type updateRolePermissionsRequest struct {
+	Permissions []string `json:"permissions"`
+	Name        *string  `json:"name"`
+	Color       *string  `json:"color"`
+}
+
+// PATCH /v1/roles/:roleId
+func (h *Handler) UpdateRolePermissions(c *gin.Context) {
+	roleID, ok := parseUUIDParam(c, "roleId")
+	if !ok {
+		return
+	}
+
+	var req updateRolePermissionsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		apierr.RespondError(c, http.StatusBadRequest, "invalid request body", map[string]any{"reason": "invalid_json"})
+		return
+	}
+
+	rl, err := h.uc.UpdateRolePermissions(c.Request.Context(), role_service.UpdateRolePermissionsParams{
+		RoleID:      roleID,
+		UserID:      middleware.UserID(c),
+		Permissions: req.Permissions,
+		Name:        req.Name,
+		Color:       req.Color,
+	})
+	if err != nil {
+		apierr.WriteDomainError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, toRoleResponse(rl))
 }

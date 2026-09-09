@@ -211,3 +211,55 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/roles/{roleId}:
+    patch:
+      summary: Update a role's permissions (and optionally its name/color)
+      description: >
+        Only the server owner (of the role's server) can edit it. `permissions`
+        omitted means "leave the current permissions untouched"; an empty array
+        clears them. `name`/`color` are optional too.
+      parameters:
+        - name: roleId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                permissions:
+                  type: array
+                  items: { type: string }
+                  example: [SEND_MESSAGES, MANAGE_CHANNELS]
+                name: { type: string }
+                color: { type: string }
+      responses:
+        "200":
+          description: Role updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Role" }
+        "400":
+          description: Invalid name, color, or an unknown permission name.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not the owner of the role's server.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Role not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }

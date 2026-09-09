@@ -71,3 +71,18 @@ func (r *RoleRepository) ListByServer(ctx context.Context, serverID uuid.UUID) (
 	}
 	return roles, nil
 }
+
+func (r *RoleRepository) Update(ctx context.Context, rl role.Role) error {
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE roles SET name = $1, color = $2, permissions = $3, updated_at = $4
+		 WHERE id = $5`,
+		rl.Name, rl.Color, rl.Permissions, rl.UpdatedAt, rl.ID,
+	)
+	if err != nil {
+		return fmt.Errorf("update role: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return model.ErrRoleNotFound
+	}
+	return nil
+}

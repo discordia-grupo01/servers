@@ -33,6 +33,10 @@ type fakeRoleUseCases struct {
 	listResult  []role.Role
 	listErr     error
 	gotServerID uuid.UUID
+
+	updateErr error
+	updated   role.Role
+	gotUpdate role_service.UpdateRolePermissionsParams
 }
 
 func (f *fakeRoleUseCases) CreateRole(_ context.Context, p role_service.CreateRoleParams) (role.Role, error) {
@@ -52,6 +56,17 @@ func (f *fakeRoleUseCases) ListRoles(_ context.Context, serverID uuid.UUID) ([]r
 		return nil, f.listErr
 	}
 	return f.listResult, nil
+}
+
+func (f *fakeRoleUseCases) UpdateRolePermissions(_ context.Context, p role_service.UpdateRolePermissionsParams) (role.Role, error) {
+	f.gotUpdate = p
+	if f.updateErr != nil {
+		return role.Role{}, f.updateErr
+	}
+	if f.updated.ID == uuid.Nil {
+		f.updated = role.Role{ID: p.RoleID, Name: "Updated"}
+	}
+	return f.updated, nil
 }
 
 type okPinger struct{}

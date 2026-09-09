@@ -52,6 +52,7 @@ func NewRouter(d Deps) *gin.Engine {
 
 	v1.POST("/servers/:serverId/roles", roleH.CreateRole)
 	v1.GET("/servers/:serverId/roles", roleH.ListRoles)
+	v1.PATCH("/roles/:roleId", roleH.UpdateRolePermissions)
 
 	return r
 }
