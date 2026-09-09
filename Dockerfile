@@ -6,7 +6,7 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -o /bin/api ./cmd/api
 
 FROM alpine:3.19
-RUN adduser -D appuser
+RUN adduser -D appuser && mkdir -p /data/icons && chown -R appuser /data
 USER appuser
 COPY --from=builder /bin/api /bin/api
 EXPOSE 8080

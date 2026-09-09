@@ -1,12 +1,17 @@
-# discordia-SERVICIO
+# discordia-servers
 
-Servicio de <Epica> de Discordia. Cubre las historias: <lista de historias>.
+Servicio de **Servidores** de Discordia (servidores, canales, roles/permisos,
+moderación). Historias cubiertas hasta ahora:
+
+- **Crear servidor**.
 
 ## Stack
 - Lenguaje: Go
 - Framework: Gin (github.com/gin-gonic/gin)
-- BDD: PostgreSQL
-- Infra extra: <completar>
+- BDD: PostgreSQL (driver `pgx/v5`)
+- Auth: el JWT lo valida el gateway (Kong). Este servicio confía en eso y solo
+  toma el user id (del header que inyecta Kong, o del claim `sub` del token).
+- Infra extra: volumen para iconos
 
 ## Setup local
 ```bash
@@ -14,22 +19,24 @@ cp .env.example .env
 docker compose up -d db
 make run
 ```
+Con `docker compose up` se levanta también el servicio (`api`) contra la base.
 
 ## Variables de entorno
 | Variable | Default | Descripcion |
 |---|---|---|
 | ENVIRONMENT | development | `development` o `production`. |
-| HOST | 0.0.0.0 | IP donde escucha el servicio. `0.0.0.0` permite acceso desde otras redes/contenedores; `127.0.0.1` restringe a conexiones locales. |
-| PORT | 8080 | Puerto donde escucha el servicio. La API REST y el WebSocket comparten `${HOST}:${PORT}`. |
-| DATABASE_HOST | localhost | Host de PostgreSQL. |
-| DATABASE_PORT | 5432 | Puerto de PostgreSQL. |
-| DATABASE_NAME | - | Nombre de la base. En local, coincide con `POSTGRES_DB` de docker-compose.yml. |
-| DATABASE_USER | - | Usuario de conexion. En local, coincide con `POSTGRES_USER` de docker-compose.yml. |
-| DATABASE_PASSWORD | - | Password de conexion. En local, coincide con `POSTGRES_PASSWORD` de docker-compose.yml. |
-| JWT_SECRET | - | Secreto para firmar/validar JWT. |
-| RABBITMQ_URL | - | URL de conexion a RabbitMQ. |
+| HOST | 0.0.0.0 | IP donde escucha el servicio. |
+| PORT | 8080 | Puerto donde escucha el servicio. |
+| DATABASE_HOST | **(obligatoria)** | Host de PostgreSQL. |
+| DATABASE_PORT | **(obligatoria)** | Puerto de PostgreSQL. |
+| DATABASE_NAME | **(obligatoria)** | Nombre de la base. |
+| DATABASE_USER | **(obligatoria)** | Usuario de conexion. |
+| DATABASE_PASSWORD | **(obligatoria)** | Password de conexion. |
+| USER_ID_HEADER | X-User-Id | Header con el user id que inyecta Kong tras validar el JWT. |
+| ICON_DIR | ./data/icons | Directorio donde se guardan los iconos subidos. |
+| ICON_MAX_BYTES | 2097152 | Tamano maximo (bytes) de un icono. |
 
-`.env.example` solo trae la estructura (sin valores sensibles). Los valores reales van en tu propio `.env`, que nunca se sube (ya esta en `.gitignore`).
+Las `DATABASE_*` no tienen default: si falta alguna, el servicio no arranca (no se usa una credencial adivinada). Los valores reales van en el `.env`; `.env.example` trae los del Postgres local.
 
 ## Estructura de carpetas
 ```
@@ -56,32 +63,36 @@ go-template/
 ├── Makefile                   comandos run/test/build/migrate
 └── .env.example                estructura de variables de entorno (sin valores sensibles)
 ```
-`internal/` esta pensado para no exponer estos paquetes fuera del modulo (restriccion de Go). Las carpetas de `internal/` y `migrations/` vienen vacias (`.gitkeep`) porque el codigo de negocio todavia no existe en el template.
 
 ## Comandos (Makefile)
-- `make run` - corre el servicio localmente (`go run ./cmd/api`).
-- `make test` - corre los tests con cobertura (`go test ./... -cover`).
+- `make run` - corre el servicio localmente.
+- `make test` - corre los tests con cobertura.
 - `make build` - compila el binario en `bin/api`.
-- `make migrate` - placeholder, todavia hay que definir la herramienta de migraciones.
+- `make db-reset` - recrea la base desde cero (borra el volumen).
 
 ## Tests
 ```bash
 make test
 ```
-Cobertura minima: 70% (requisito del proyecto).
+Cobertura mínima del proyecto: 70%. El test de `internal/repository` es de
+integración: se saltea si no hay `DATABASE_HOST`. Para correrlo:
+```bash
+docker compose up -d db
+DATABASE_HOST=localhost DATABASE_PORT=5432 DATABASE_NAME=discordia_servicio \
+  DATABASE_USER=discordia DATABASE_PASSWORD=discordia go test ./...
+```
 
 ## Endpoints
-Ver openapi.yaml.
+Ver [`openapi.yaml`](openapi.yaml).
 
-## Eventos que publica
-- <evento> - cuando se dispara
-
-## Eventos que consume
-- <evento> - que hace al recibirlo
+| Metodo | Ruta | Auth | Descripcion |
+|---|---|---|---|
+| POST | `/v1/servers` | si | Crear servidor (multipart: `name`, `icon?`). |
+| GET | `/livez` `/readyz` | no | Health checks. |
 
 ## Health checks
-- GET /livez
-- GET /readyz
+- `GET /livez` - el proceso esta vivo.
+- `GET /readyz` - el servicio puede operar (pinguea la base; 503 si no responde).
 
 ## Formateo automatico
 Este repo se autoformatea con gofmt en cada commit. Activalo una vez por clone:

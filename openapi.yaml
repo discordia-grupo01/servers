@@ -1,16 +1,132 @@
 openapi: 3.0.3
 info:
-  title: Discordia - SERVICIO
+  title: Discordia - Servers
   version: "1.0.0"
+  description: >
+    Servers service. Covered story: "Create server".
+    All /v1/** routes require identity: the JWT is validated by Kong at the
+    gateway, and this service takes the user id from the X-User-Id header (or from
+    the "sub" claim of the token Kong forwards).
+
+servers:
+  - url: http://localhost:8000
+    description: Through the gateway (Kong)
+  - url: http://localhost:8080
+    description: Directly to the service
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Channel:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, example: general }
+        kind: { type: string, enum: [text, voice] }
+        position: { type: integer, example: 0 }
+    Server:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, example: My Community }
+        icon_url:
+          type: string
+          nullable: true
+          description: Relative URL to fetch the icon, or null if there is none.
+        owner_id: { type: string, description: user id of the creator }
+        created_at: { type: string, format: date-time }
+        channels:
+          type: array
+          items: { $ref: "#/components/schemas/Channel" }
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: integer
+              description: HTTP status code.
+              example: 400
+            message:
+              type: string
+              example: name is too long
+            details:
+              type: object
+              additionalProperties: true
+              description: Structured context; {} when there is nothing to add.
+              example: { field: name, reason: name_too_long }
+
+security:
+  - bearerAuth: []
+
 paths:
   /livez:
     get:
       summary: Liveness check
+      security: []
       responses:
         "200": { description: OK }
   /readyz:
     get:
       summary: Readiness check
+      security: []
       responses:
         "200": { description: OK }
-        "503": { description: Dependencias no disponibles }
+        "503": { description: Dependencies unavailable }
+
+  /v1/servers:
+    post:
+      summary: Create a server
+      description: >
+        Creates a server, makes the authenticated user its owner, and
+        automatically generates one text channel ("general") and one voice
+        channel ("General").
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  minLength: 2
+                  maxLength: 100
+                  description: >
+                    2..100 characters (counted after Unicode NFC normalization,
+                    so an accented letter counts as one). Control characters are
+                    rejected. Uniqueness per owner is case-, accent- and
+                    whitespace-insensitive.
+                icon:
+                  type: string
+                  format: binary
+                  description: Optional. PNG, JPEG or WEBP, up to 2 MB.
+      responses:
+        "201":
+          description: Server created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Server" }
+        "400":
+          description: >
+            Invalid name (empty, out of range, or containing control characters)
+            or invalid icon (unsupported format or size). The server is not created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: The authenticated user already has a server with that name.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }

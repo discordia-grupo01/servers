@@ -1,13 +1,14 @@
-.PHONY: run test build migrate
+.PHONY: run test build db-reset
 
 run:
 	go run ./cmd/api
 
 test:
-	go test ./... -cover
+	go test ./... -coverpkg=./internal/... -cover
 
 build:
 	go build -o bin/api ./cmd/api
 
-migrate:
-	@echo "TODO: correr migraciones (ej. golang-migrate)"
+db-reset:
+	docker compose down -v
+	docker compose up -d db

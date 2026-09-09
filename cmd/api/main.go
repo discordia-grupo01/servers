@@ -1,51 +1,50 @@
 package main
 
 import (
+	"context"
 	"log"
-	"net/http"
-	"os"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/discordia-grupo01/servers/internal/config"
+	"github.com/discordia-grupo01/servers/internal/handler"
+	"github.com/discordia-grupo01/servers/internal/iconstore"
+	"github.com/discordia-grupo01/servers/internal/middleware"
+	"github.com/discordia-grupo01/servers/internal/repository"
+	"github.com/discordia-grupo01/servers/internal/service"
 )
 
 func main() {
-	environment := os.Getenv("ENVIRONMENT")
-	if environment == "" {
-		environment = "development"
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("config: %v", err)
 	}
-
-	host := os.Getenv("HOST")
-	if host == "" {
-		host = "0.0.0.0"
-	}
-
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
-
-	if environment == "production" {
+	if cfg.IsProduction() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	router := gin.Default()
+	ctx := context.Background()
 
-	// /livez: solo confirma que el proceso esta vivo. No toca la BDD.
-	router.GET("/livez", func(c *gin.Context) {
-		c.String(http.StatusOK, "ok")
+	pool, err := repository.NewPool(ctx, cfg.PostgresDSN())
+	if err != nil {
+		log.Fatalf("postgres: %v", err)
+	}
+	defer pool.Close()
+
+	icons, err := iconstore.NewLocalStore(cfg.IconDir, cfg.IconMaxBytes)
+	if err != nil {
+		log.Fatalf("iconstore: %v", err)
+	}
+
+	svc := service.New(repository.NewServerRepository(pool), icons)
+
+	router := handler.NewRouter(handler.Deps{
+		Servers: svc,
+		Auth:    middleware.AuthConfig{UserIDHeader: cfg.UserIDHeader},
+		DB:      pool,
 	})
 
-	// /readyz: confirma que el servicio puede operar (chequear BDD aca).
-	router.GET("/readyz", func(c *gin.Context) {
-		// TODO: chequear conexion a Postgres antes de responder 200
-		c.JSON(http.StatusOK, gin.H{"status": "ready"})
-	})
-
-	router.GET("/", func(c *gin.Context) {
-		c.String(http.StatusOK, "discordia-SERVICIO up")
-	})
-
-	addr := host + ":" + port
+	addr := cfg.Host + ":" + cfg.Port
 	log.Printf("listening on %s", addr)
 	log.Fatal(router.Run(addr))
 }
