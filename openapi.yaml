@@ -60,6 +60,21 @@ components:
               additionalProperties: true
               description: Structured context; {} when there is nothing to add.
               example: { field: name, reason: name_too_long }
+    Role:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        server_id: { type: string, format: uuid }
+        name: { type: string, example: Moderator }
+        color: { type: string, example: "#FF00AA", description: Hex color, #RRGGBB. }
+        permissions:
+          type: array
+          items:
+            type: string
+            enum: [VIEW_CHANNELS, SEND_MESSAGES, MANAGE_CHANNELS, MANAGE_ROLES, KICK_MEMBERS, BAN_MEMBERS, MANAGE_SERVER]
+          example: [SEND_MESSAGES, MANAGE_CHANNELS]
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
 
 security:
   - bearerAuth: []
@@ -127,6 +142,72 @@ paths:
               schema: { $ref: "#/components/schemas/Error" }
         "409":
           description: The authenticated user already has a server with that name.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/servers/{serverId}/roles:
+    post:
+      summary: Create a role
+      description: Only the server owner can create roles. Permissions start empty.
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, color]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 100 }
+                color: { type: string, example: "#FF00AA" }
+      responses:
+        "201":
+          description: Role created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Role" }
+        "400":
+          description: Invalid name or color.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not the server owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Server not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    get:
+      summary: List a server's roles
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: List of roles
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Role" }
+        "404":
+          description: Server not found.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }

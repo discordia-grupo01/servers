@@ -11,7 +11,9 @@ import (
 	"github.com/discordia-grupo01/servers/internal/iconstore"
 	"github.com/discordia-grupo01/servers/internal/middleware"
 	"github.com/discordia-grupo01/servers/internal/repository"
+	"github.com/discordia-grupo01/servers/internal/repository/role_repo"
 	"github.com/discordia-grupo01/servers/internal/service"
+	"github.com/discordia-grupo01/servers/internal/service/role_service"
 )
 
 func main() {
@@ -36,10 +38,13 @@ func main() {
 		log.Fatalf("iconstore: %v", err)
 	}
 
-	svc := service.New(repository.NewServerRepository(pool), icons)
+	serverRepo := repository.NewServerRepository(pool)
+	svc := service.New(serverRepo, icons)
+	roleSvc := role_service.New(serverRepo, role_repo.NewRoleRepository(pool))
 
 	router := handler.NewRouter(handler.Deps{
 		Servers: svc,
+		Roles:   roleSvc,
 		Auth:    middleware.AuthConfig{UserIDHeader: cfg.UserIDHeader},
 		DB:      pool,
 	})

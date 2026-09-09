@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/discordia-grupo01/servers/internal/handler/role_handler"
 	"github.com/discordia-grupo01/servers/internal/middleware"
 )
 
@@ -16,12 +17,14 @@ type Pinger interface {
 
 type Deps struct {
 	Servers ServerUseCases
+	Roles   role_handler.RoleUseCases
 	Auth    middleware.AuthConfig
 	DB      Pinger
 }
 
 func NewRouter(d Deps) *gin.Engine {
 	h := &serverHandler{uc: d.Servers}
+	roleH := role_handler.New(d.Roles)
 
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery())
@@ -46,6 +49,9 @@ func NewRouter(d Deps) *gin.Engine {
 	v1 := r.Group("/v1")
 	v1.Use(middleware.Auth(d.Auth))
 	v1.POST("/servers", h.createServer)
+
+	v1.POST("/servers/:serverId/roles", roleH.CreateRole)
+	v1.GET("/servers/:serverId/roles", roleH.ListRoles)
 
 	return r
 }

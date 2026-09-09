@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -56,4 +57,30 @@ func (r *ServerRepository) CreateServer(ctx context.Context, srv model.Server, c
 		}
 		return nil
 	})
+}
+
+func (r *ServerRepository) GetByID(ctx context.Context, id uuid.UUID) (model.Server, error) {
+	row := r.pool.QueryRow(ctx, `
+		SELECT id, name, name_key, icon_url, owner_id, created_at
+		  FROM servers WHERE id = $1`, id)
+
+	var s model.Server
+	if err := row.Scan(&s.ID, &s.Name, &s.NameKey, &s.IconURL, &s.OwnerID, &s.CreatedAt); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return model.Server{}, model.ErrServerNotFound
+		}
+		return model.Server{}, fmt.Errorf("select server: %w", err)
+	}
+	return s, nil
+}
+
+func (r *ServerRepository) SetDefaultRole(ctx context.Context, serverID, roleID uuid.UUID) error {
+	tag, err := r.pool.Exec(ctx, `UPDATE servers SET default_role_id = $1 WHERE id = $2`, roleID, serverID)
+	if err != nil {
+		return fmt.Errorf("set default role: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return model.ErrServerNotFound
+	}
+	return nil
 }
