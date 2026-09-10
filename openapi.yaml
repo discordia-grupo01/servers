@@ -47,8 +47,7 @@ components:
         expires_at:
           type: string
           format: date-time
-          nullable: true
-          description: Null means it never expires.
+          description: Always set. Fixed at 7 days after creation.
         revoked_at:
           type: string
           format: date-time
@@ -171,9 +170,9 @@ paths:
     post:
       summary: Generate an invitation
       description: >
-        A member of the server generates a unique invite link. Both limits are
-        optional: omit "max_uses" for unlimited uses and "expires_in_seconds"
-        for a link that never expires.
+        A member of the server generates a unique invite link. It expires 7 days
+        after creation (fixed server-side, not client-configurable). "max_uses"
+        is optional: omit it for unlimited uses.
       parameters:
         - name: id
           in: path
@@ -190,10 +189,6 @@ paths:
                   type: integer
                   minimum: 1
                   description: Optional. Max number of successful joins before the link stops working.
-                expires_in_seconds:
-                  type: integer
-                  minimum: 1
-                  description: Optional. Lifetime of the link from now.
       responses:
         "201":
           description: Invitation created
@@ -201,7 +196,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Invitation" }
         "400":
-          description: "max_uses or expires_in_seconds is not a positive number, or the body is not valid JSON."
+          description: "max_uses is not a positive number, or the body is not valid JSON."
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }

@@ -4,7 +4,7 @@ Servicio de **Servidores** de Discordia (servidores, canales, roles/permisos,
 moderación). Historias cubiertas hasta ahora:
 
 - **Crear servidor**.
-- **Generar invitación** (link único, con o sin expiración y con o sin límite de usos; revocable).
+- **Generar invitación** (link único, expira a los 7 días, con o sin límite de usos; revocable).
 - **Unirse a servidor vía invitación**.
 
 ## Stack
@@ -90,7 +90,7 @@ Ver [`openapi.yaml`](openapi.yaml).
 | Metodo | Ruta | Auth | Descripcion |
 |---|---|---|---|
 | POST | `/v1/servers` | si | Crear servidor (multipart: `name`, `icon?`). |
-| POST | `/v1/servers/:id/invites` | si | Generar invitación (JSON opcional: `max_uses?`, `expires_in_seconds?`). |
+| POST | `/v1/servers/:id/invites` | si | Generar invitación (JSON opcional: `max_uses?`; expira a los 7 días). |
 | DELETE | `/v1/invites/:code` | si | Revocar una invitación (idempotente). |
 | POST | `/v1/invites/:code/join` | si | Unirse a un servidor con una invitación. |
 | GET | `/livez` `/readyz` | no | Health checks. |
