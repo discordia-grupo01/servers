@@ -12,6 +12,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/middleware"
 	"github.com/discordia-grupo01/servers/internal/repository"
 	"github.com/discordia-grupo01/servers/internal/service"
+	"github.com/discordia-grupo01/servers/internal/service/invitation"
 )
 
 func main() {
@@ -37,11 +38,13 @@ func main() {
 	}
 
 	svc := service.New(repository.NewServerRepository(pool), icons)
+	invSvc := invitation.NewService(repository.NewInvitationRepository(pool))
 
 	router := handler.NewRouter(handler.Deps{
-		Servers: svc,
-		Auth:    middleware.AuthConfig{UserIDHeader: cfg.UserIDHeader},
-		DB:      pool,
+		Servers:     svc,
+		Invitations: invSvc,
+		Auth:        middleware.AuthConfig{UserIDHeader: cfg.UserIDHeader},
+		DB:          pool,
 	})
 
 	addr := cfg.Host + ":" + cfg.Port
