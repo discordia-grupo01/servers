@@ -20,6 +20,7 @@ type RoleUseCases interface {
 	CreateRole(ctx context.Context, p role_service.CreateRoleParams) (role.Role, error)
 	ListRoles(ctx context.Context, serverID uuid.UUID) ([]role.Role, error)
 	UpdateRolePermissions(ctx context.Context, p role_service.UpdateRolePermissionsParams) (role.Role, error)
+	SetDefaultRole(ctx context.Context, p role_service.SetDefaultRoleParams) error
 }
 
 type Handler struct {
@@ -143,4 +144,38 @@ func (h *Handler) UpdateRolePermissions(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, toRoleResponse(rl))
+}
+
+type setDefaultRoleRequest struct {
+	RoleID string `json:"role_id"`
+}
+
+// PUT /v1/servers/:serverId/default-role
+func (h *Handler) SetDefaultRole(c *gin.Context) {
+	serverID, ok := parseUUIDParam(c, "serverId")
+	if !ok {
+		return
+	}
+
+	var req setDefaultRoleRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		apierr.RespondError(c, http.StatusBadRequest, "invalid request body", map[string]any{"reason": "invalid_json"})
+		return
+	}
+	roleID, err := uuid.Parse(req.RoleID)
+	if err != nil {
+		apierr.RespondError(c, http.StatusBadRequest, "invalid role_id", apierr.FieldErr("role_id", "invalid_uuid"))
+		return
+	}
+
+	err = h.uc.SetDefaultRole(c.Request.Context(), role_service.SetDefaultRoleParams{
+		ServerID: serverID,
+		RoleID:   roleID,
+		UserID:   middleware.UserID(c),
+	})
+	if err != nil {
+		apierr.WriteDomainError(c, err)
+		return
+	}
+	c.Status(http.StatusOK)
 }

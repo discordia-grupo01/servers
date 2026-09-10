@@ -37,6 +37,9 @@ func (fakeRoleUseCases) ListRoles(context.Context, uuid.UUID) ([]role.Role, erro
 func (fakeRoleUseCases) UpdateRolePermissions(context.Context, role_service.UpdateRolePermissionsParams) (role.Role, error) {
 	return role.Role{}, nil
 }
+func (fakeRoleUseCases) SetDefaultRole(context.Context, role_service.SetDefaultRoleParams) error {
+	return nil
+}
 
 type fakeMemberRoleUseCases struct {
 	assignErr error

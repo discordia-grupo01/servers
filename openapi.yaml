@@ -263,3 +263,49 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/servers/{serverId}/default-role:
+    put:
+      summary: Set the server's default role for new members
+      description: >
+        Only the server owner can set this. The role must belong to this
+        server. The default role is what new members will get assigned when
+        they join (applying it on join is out of scope until the "join
+        server" flow exists).
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role_id]
+              properties:
+                role_id: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Default role set.
+        "400":
+          description: The role belongs to a different server.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not the server owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Server or role not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }

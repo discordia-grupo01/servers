@@ -37,6 +37,9 @@ type fakeRoleUseCases struct {
 	updateErr error
 	updated   role.Role
 	gotUpdate role_service.UpdateRolePermissionsParams
+
+	setDefaultErr error
+	gotSetDefault role_service.SetDefaultRoleParams
 }
 
 func (f *fakeRoleUseCases) CreateRole(_ context.Context, p role_service.CreateRoleParams) (role.Role, error) {
@@ -67,6 +70,11 @@ func (f *fakeRoleUseCases) UpdateRolePermissions(_ context.Context, p role_servi
 		f.updated = role.Role{ID: p.RoleID, Name: "Updated"}
 	}
 	return f.updated, nil
+}
+
+func (f *fakeRoleUseCases) SetDefaultRole(_ context.Context, p role_service.SetDefaultRoleParams) error {
+	f.gotSetDefault = p
+	return f.setDefaultErr
 }
 
 type okPinger struct{}

@@ -1,0 +1,1 @@
+ALTER TABLE servers ADD COLUMN default_role_id UUID REFERENCES roles (id) ON DELETE SET NULL;

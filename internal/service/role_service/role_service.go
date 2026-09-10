@@ -154,3 +154,33 @@ func (s *RoleService) UpdateRolePermissions(ctx context.Context, p UpdateRolePer
 	// TODO(events): publicar "roles.role_permissions_updated" en discordia.events cuando exista un consumidor real (ver Canales).
 	return rl, nil
 }
+
+type SetDefaultRoleParams struct {
+	ServerID uuid.UUID
+	RoleID   uuid.UUID
+	UserID   string
+}
+
+func (s *RoleService) SetDefaultRole(ctx context.Context, p SetDefaultRoleParams) error {
+	srv, err := s.servers.GetByID(ctx, p.ServerID)
+	if err != nil {
+		return err
+	}
+	if err := service.RequireManageRoles(srv, p.UserID); err != nil {
+		return err
+	}
+
+	rl, err := s.roles.GetByID(ctx, p.RoleID)
+	if err != nil {
+		return err
+	}
+	if rl.ServerID != p.ServerID {
+		return model.ErrRoleServerMismatch
+	}
+
+	if err := s.servers.SetDefaultRole(ctx, p.ServerID, p.RoleID); err != nil {
+		return err
+	}
+	// TODO(events): publicar "roles.default_role_set" en discordia.events cuando exista un consumidor real (ver Canales).
+	return nil
+}

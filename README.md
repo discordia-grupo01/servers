@@ -5,6 +5,9 @@ moderación). Historias cubiertas hasta ahora:
 
 - **Crear servidor**.
 - **Crear rol** (#21).
+- **Editar permisos de un rol** (#22).
+- **Asignar/quitar rol a un miembro** (#23).
+- **Definir rol por defecto para nuevos miembros** (#24).
 
 ## Stack
 - Lenguaje: Go
@@ -75,13 +78,21 @@ go-template/
 ```bash
 make test
 ```
-Cobertura mínima del proyecto: 70%. El test de `internal/repository` es de
-integración: se saltea si no hay `DATABASE_HOST`. Para correrlo:
+Cobertura mínima del proyecto: 70%. Los tests de `test/repository/**` son de
+integración: se saltean si no hay `DATABASE_HOST`. Para correrlos:
 ```bash
 docker compose up -d db
 DATABASE_HOST=localhost DATABASE_PORT=5432 DATABASE_NAME=discordia_servicio \
-  DATABASE_USER=discordia DATABASE_PASSWORD=discordia go test ./...
+  DATABASE_USER=discordia DATABASE_PASSWORD=discordia go test ./... -p 1
 ```
+`-p 1` es necesario: hay más de un paquete de integración (`test/repository`,
+`test/repository/role_repo`, `test/repository/member_repo`) y todos hacen
+`DROP TABLE`/recrean el schema contra la misma base al empezar **y al
+terminar** — si Go los corre en paralelo (el default), se pisan entre sí.
+Por lo mismo, correrlos contra `discordia_servicio` la deja completamente
+vacía (sin tablas) al finalizar; si vas a seguir probando el servicio a mano
+después, hace falta recrear las tablas (`docker compose down -v && docker
+compose up -d db`, o reaplicar `migrations/*.sql` a mano).
 
 ## Endpoints
 Ver [`openapi.yaml`](openapi.yaml).
@@ -91,6 +102,11 @@ Ver [`openapi.yaml`](openapi.yaml).
 | POST | `/v1/servers` | si | Crear servidor (multipart: `name`, `icon?`). |
 | POST | `/v1/servers/{serverId}/roles` | si (owner) | Crear rol (`name`, `color`). |
 | GET | `/v1/servers/{serverId}/roles` | si | Listar roles de un server. |
+| PATCH | `/v1/roles/{roleId}` | si (owner) | Editar permisos/nombre/color de un rol. |
+| POST | `/v1/servers/{serverId}/members/{userId}/roles` | si (owner) | Asignar un rol a un miembro (idempotente). |
+| DELETE | `/v1/servers/{serverId}/members/{userId}/roles/{roleId}` | si (owner) | Quitar un rol de un miembro. |
+| GET | `/v1/servers/{serverId}/members/{userId}/roles` | si | Listar los roles de un miembro. |
+| PUT | `/v1/servers/{serverId}/default-role` | si (owner) | Definir el rol por defecto del server. |
 | GET | `/livez` `/readyz` | no | Health checks. |
 
 ## Health checks
