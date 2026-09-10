@@ -133,6 +133,23 @@ func (r *InvitationRepository) RedeemInvitation(ctx context.Context, code, userI
 		if ct.RowsAffected() == 0 {
 			return model.ErrAlreadyMember
 		}
+
+		var defaultRoleID *uuid.UUID
+		if err := tx.QueryRow(ctx,
+			`SELECT default_role_id FROM servers WHERE id = $1`, serverID,
+		).Scan(&defaultRoleID); err != nil {
+			return fmt.Errorf("select default role: %w", err)
+		}
+		if defaultRoleID != nil {
+			if _, err := tx.Exec(ctx, `
+				INSERT INTO member_roles (server_id, user_id, role_id, assigned_at)
+				VALUES ($1, $2, $3, $4)
+				ON CONFLICT (server_id, user_id, role_id) DO NOTHING`,
+				serverID, userID, *defaultRoleID, now,
+			); err != nil {
+				return fmt.Errorf("assign default role: %w", err)
+			}
+		}
 		return nil
 	})
 	if err != nil {
