@@ -14,11 +14,10 @@ var (
 
 	ErrUnauthorized = errors.New("authentication required")
 
-	ErrInviteServerNotFound    = errors.New("server not found")
-	ErrInvitePermissionDenied  = errors.New("you do not have permission to invite to this server")
-	ErrInviteMaxUsesInvalid    = errors.New("max uses must be a positive number")
-	ErrInviteExpirationInvalid = errors.New("expiration must be a future instant")
-	ErrInviteCodeUnavailable   = errors.New("could not allocate a unique invitation code")
+	ErrInviteServerNotFound   = errors.New("server not found")
+	ErrInvitePermissionDenied = errors.New("you do not have permission to invite to this server")
+	ErrInviteMaxUsesInvalid   = errors.New("max uses must be a positive number")
+	ErrInviteCodeUnavailable  = errors.New("could not allocate a unique invitation code")
 
 	ErrInvitationNotFound  = errors.New("invitation is not valid")
 	ErrInvitationRevoked   = errors.New("invitation is not valid: it has been revoked")

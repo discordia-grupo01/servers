@@ -12,7 +12,12 @@ import (
 	"github.com/discordia-grupo01/servers/internal/model"
 )
 
-const codeAttempts = 5
+const (
+	codeAttempts = 5
+	// TTL es cuánto vive un link de invitación desde que se genera. Fijo:
+	// el cliente nunca lo manda.
+	TTL = 7 * 24 * time.Hour
+)
 
 type Service struct {
 	repo Repository
@@ -49,19 +54,18 @@ func (s *Service) GenerateInvitation(ctx context.Context, p GenerateParams) (mod
 		return model.Invitation{}, model.ErrInvitePermissionDenied
 	}
 
-	now := s.now()
 	if p.MaxUses != nil && *p.MaxUses <= 0 {
 		return model.Invitation{}, model.ErrInviteMaxUsesInvalid
 	}
-	if p.ExpiresAt != nil && !p.ExpiresAt.After(now) {
-		return model.Invitation{}, model.ErrInviteExpirationInvalid
-	}
+
+	now := s.now()
+	expiresAt := now.Add(TTL)
 
 	inv := model.Invitation{
 		ServerID:  serverID,
 		CreatedBy: p.CreatedBy,
 		MaxUses:   p.MaxUses,
-		ExpiresAt: toUTC(p.ExpiresAt),
+		ExpiresAt: &expiresAt,
 		CreatedAt: now,
 	}
 
@@ -156,12 +160,4 @@ func newCode() (string, error) {
 		return "", err
 	}
 	return base64.RawURLEncoding.EncodeToString(b[:]), nil
-}
-
-func toUTC(t *time.Time) *time.Time {
-	if t == nil {
-		return nil
-	}
-	u := t.UTC()
-	return &u
 }

@@ -1,16 +1,11 @@
 package invitation
 
-import (
-	"time"
-
-	"github.com/google/uuid"
-)
+import "github.com/google/uuid"
 
 type GenerateParams struct {
 	ServerID  string
 	CreatedBy string
 	MaxUses   *int
-	ExpiresAt *time.Time
 }
 
 type RevokeParams struct {

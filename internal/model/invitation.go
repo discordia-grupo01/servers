@@ -42,8 +42,7 @@ func (i Invitation) Validate(now time.Time) error {
 }
 
 type GenerateInvitationRequest struct {
-	MaxUses          *int   `json:"max_uses"`
-	ExpiresInSeconds *int64 `json:"expires_in_seconds"`
+	MaxUses *int `json:"max_uses"`
 }
 
 type InvitationResponse struct {

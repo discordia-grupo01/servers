@@ -5,7 +5,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -55,15 +54,6 @@ func (h *Handler) generate(c *gin.Context) {
 		CreatedBy: middleware.UserID(c),
 		MaxUses:   req.MaxUses,
 	}
-	if req.ExpiresInSeconds != nil {
-		if *req.ExpiresInSeconds <= 0 {
-			apierror.Write(c, http.StatusBadRequest, model.ErrInviteExpirationInvalid.Error(),
-				apierror.Field("expires_in_seconds", "expiration_invalid"))
-			return
-		}
-		exp := time.Now().UTC().Add(time.Duration(*req.ExpiresInSeconds) * time.Second)
-		params.ExpiresAt = &exp
-	}
 
 	inv, err := h.uc.GenerateInvitation(c.Request.Context(), params)
 	if err != nil {
@@ -112,8 +102,6 @@ func writeError(c *gin.Context, err error) {
 		apierror.Write(c, http.StatusForbidden, err.Error(), map[string]any{"reason": "invite_permission_denied"})
 	case errors.Is(err, model.ErrInviteMaxUsesInvalid):
 		apierror.Write(c, http.StatusBadRequest, err.Error(), apierror.Field("max_uses", "max_uses_invalid"))
-	case errors.Is(err, model.ErrInviteExpirationInvalid):
-		apierror.Write(c, http.StatusBadRequest, err.Error(), apierror.Field("expires_in_seconds", "expiration_invalid"))
 	case errors.Is(err, model.ErrInvitationNotFound),
 		errors.Is(err, model.ErrInvitationRevoked),
 		errors.Is(err, model.ErrInvitationExpired),
