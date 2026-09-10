@@ -45,7 +45,6 @@ func (f *fakeInvites) GenerateInvitation(_ context.Context, p invitation.Generat
 	out.ServerID, _ = uuid.Parse(p.ServerID)
 	out.CreatedBy = p.CreatedBy
 	out.MaxUses = p.MaxUses
-	out.ExpiresAt = p.ExpiresAt
 	return out, nil
 }
 

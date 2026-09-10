@@ -111,11 +111,6 @@ func activeInvitation(serverID uuid.UUID) model.Invitation {
 
 func ptrInt(n int) *int { return &n }
 
-func future() *time.Time {
-	t := time.Now().UTC().Add(24 * time.Hour)
-	return &t
-}
-
 func past() *time.Time {
 	t := time.Now().UTC().Add(-time.Minute)
 	return &t

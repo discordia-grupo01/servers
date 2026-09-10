@@ -57,7 +57,7 @@ func TestGenerate_TwoInvitationsGetDifferentCodes(t *testing.T) {
 	}
 }
 
-func TestGenerate_WithoutExpirationOrLimit(t *testing.T) {
+func TestGenerate_WithoutMaxUses_HasNoLimit(t *testing.T) {
 	inv, err := newInviteService(memberRepo()).GenerateInvitation(context.Background(), genParams(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
@@ -65,15 +65,14 @@ func TestGenerate_WithoutExpirationOrLimit(t *testing.T) {
 	if inv.MaxUses != nil {
 		t.Errorf("max_uses = %v, want nil", *inv.MaxUses)
 	}
-	if inv.ExpiresAt != nil {
-		t.Errorf("expires_at = %v, want nil", *inv.ExpiresAt)
+	if inv.Uses != 0 {
+		t.Errorf("uses = %d, want 0", inv.Uses)
 	}
 }
 
-func TestGenerate_WithExpirationAndLimit(t *testing.T) {
+func TestGenerate_WithMaxUses(t *testing.T) {
 	p := genParams(uuid.NewString())
 	p.MaxUses = ptrInt(10)
-	p.ExpiresAt = future()
 
 	inv, err := newInviteService(memberRepo()).GenerateInvitation(context.Background(), p)
 	if err != nil {
@@ -82,11 +81,20 @@ func TestGenerate_WithExpirationAndLimit(t *testing.T) {
 	if inv.MaxUses == nil || *inv.MaxUses != 10 {
 		t.Errorf("max_uses = %v, want 10", inv.MaxUses)
 	}
-	if inv.ExpiresAt == nil || !inv.ExpiresAt.Equal(*p.ExpiresAt) {
-		t.Errorf("expires_at = %v, want %v", inv.ExpiresAt, p.ExpiresAt)
+}
+
+func TestGenerate_ExpiresAfterTheConfiguredTTL(t *testing.T) {
+	before := time.Now().UTC()
+	inv, err := newInviteService(memberRepo()).GenerateInvitation(context.Background(), genParams(uuid.NewString()))
+	if err != nil {
+		t.Fatal(err)
 	}
-	if inv.Uses != 0 {
-		t.Errorf("uses = %d, want 0", inv.Uses)
+	if inv.ExpiresAt == nil {
+		t.Fatal("expires_at is nil, want a fixed TTL from creation")
+	}
+	want := before.Add(invitation.TTL)
+	if d := inv.ExpiresAt.Sub(want); d < -time.Minute || d > time.Minute {
+		t.Errorf("expires_at = %v, want ~%v (TTL %v)", inv.ExpiresAt, want, invitation.TTL)
 	}
 }
 
@@ -155,15 +163,6 @@ func TestGenerate_RejectsNonPositiveMaxUses(t *testing.T) {
 		if !errors.Is(err, model.ErrInviteMaxUsesInvalid) {
 			t.Fatalf("max_uses=%d: err = %v, want ErrInviteMaxUsesInvalid", n, err)
 		}
-	}
-}
-
-func TestGenerate_RejectsPastExpiration(t *testing.T) {
-	p := genParams(uuid.NewString())
-	p.ExpiresAt = past()
-	_, err := newInviteService(memberRepo()).GenerateInvitation(context.Background(), p)
-	if !errors.Is(err, model.ErrInviteExpirationInvalid) {
-		t.Fatalf("err = %v, want ErrInviteExpirationInvalid", err)
 	}
 }
 

@@ -3,7 +3,6 @@ package handler_test
 import (
 	"net/http"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 
@@ -60,37 +59,6 @@ func TestGenerateHTTP_PassesMaxUses(t *testing.T) {
 	}
 }
 
-func TestGenerateHTTP_ExpiresInSecondsBecomesFutureInstant(t *testing.T) {
-	inv := &fakeInvites{}
-	r := newInviteRouter(t, inv)
-
-	before := time.Now().UTC()
-	doReq(t, r, http.MethodPost, invPath(uuid.NewString()), testUser, map[string]any{"expires_in_seconds": 3600})
-	got := inv.genParams.ExpiresAt
-	if got == nil {
-		t.Fatal("ExpiresAt is nil")
-	}
-	if got.Before(before.Add(30*time.Minute)) || got.After(before.Add(90*time.Minute)) {
-		t.Errorf("ExpiresAt = %v, want ~1h from now", got)
-	}
-}
-
-func TestGenerateHTTP_RejectsNonPositiveExpiresInSeconds(t *testing.T) {
-	inv := &fakeInvites{}
-	r := newInviteRouter(t, inv)
-
-	w := doReq(t, r, http.MethodPost, invPath(uuid.NewString()), testUser, map[string]any{"expires_in_seconds": 0})
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("code=%d", w.Code)
-	}
-	if e := decodeError(t, w); e.Error.Details["reason"] != "expiration_invalid" {
-		t.Errorf("reason = %v", e.Error.Details["reason"])
-	}
-	if inv.genCalled {
-		t.Error("service was called despite invalid expiration")
-	}
-}
-
 func TestGenerateHTTP_EmptyBodyIsAllowed(t *testing.T) {
 	inv := &fakeInvites{}
 	r := newInviteRouter(t, inv)
@@ -99,8 +67,8 @@ func TestGenerateHTTP_EmptyBodyIsAllowed(t *testing.T) {
 	if w.Code != http.StatusCreated {
 		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
 	}
-	if inv.genParams.MaxUses != nil || inv.genParams.ExpiresAt != nil {
-		t.Error("no options should have been set")
+	if inv.genParams.MaxUses != nil {
+		t.Error("no max_uses should have been set")
 	}
 }
 
@@ -132,7 +100,6 @@ func TestGenerateHTTP_MapsDomainErrors(t *testing.T) {
 	}{
 		{"permission", model.ErrInvitePermissionDenied, http.StatusForbidden, "invite_permission_denied"},
 		{"max_uses", model.ErrInviteMaxUsesInvalid, http.StatusBadRequest, "max_uses_invalid"},
-		{"expiration", model.ErrInviteExpirationInvalid, http.StatusBadRequest, "expiration_invalid"},
 		{"server", model.ErrInviteServerNotFound, http.StatusNotFound, "server_not_found"},
 	}
 	for _, tc := range cases {
