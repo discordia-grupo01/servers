@@ -1,4 +1,3 @@
-// Package handler expone la API HTTP del servicio.
 package handler
 
 import (
@@ -7,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/discordia-grupo01/servers/internal/handler/invitation"
 	"github.com/discordia-grupo01/servers/internal/middleware"
 )
 
@@ -15,9 +15,10 @@ type Pinger interface {
 }
 
 type Deps struct {
-	Servers ServerUseCases
-	Auth    middleware.AuthConfig
-	DB      Pinger
+	Servers     ServerUseCases
+	Invitations invitation.UseCases
+	Auth        middleware.AuthConfig
+	DB          Pinger
 }
 
 func NewRouter(d Deps) *gin.Engine {
@@ -46,6 +47,8 @@ func NewRouter(d Deps) *gin.Engine {
 	v1 := r.Group("/v1")
 	v1.Use(middleware.Auth(d.Auth))
 	v1.POST("/servers", h.createServer)
+
+	invitation.NewHandler(d.Invitations).Register(v1)
 
 	return r
 }
