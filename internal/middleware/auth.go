@@ -1,4 +1,3 @@
-// Package middleware contiene los middlewares HTTP (Gin) del servicio.
 package middleware
 
 import (

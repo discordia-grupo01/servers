@@ -1,4 +1,3 @@
-// Package iconstore valida y persiste los iconos de los servidores en disco.
 package iconstore
 
 import (
@@ -55,8 +54,6 @@ func NewLocalStore(dir string, maxBytes int64) (*LocalStore, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("iconstore: cannot create directory %s: %w", dir, err)
 	}
-	// Falla al arrancar si el directorio no es escribible (ej. volumen Docker
-	// montado como root), en vez de devolver 500 en cada upload.
 	probe := filepath.Join(dir, ".write-test")
 	if err := os.WriteFile(probe, []byte("ok"), 0o644); err != nil {
 		return nil, fmt.Errorf("iconstore: %s is not writable: %w", dir, err)

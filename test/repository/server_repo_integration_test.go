@@ -50,7 +50,7 @@ func newRepo(t *testing.T) (*repository.ServerRepository, *pgxpool.Pool) {
 // packages might have created, so a test run leaves the database exactly as
 // clean as it found it -- both before it starts and after it finishes.
 func dropAllTestTables(ctx context.Context, pool *pgxpool.Pool) {
-	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS member_roles, roles, server_members, channels, servers CASCADE`)
+	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS member_roles, roles, server_bans, invitations, server_members, channels, servers CASCADE`)
 }
 
 func serverFixture(name, owner string) (model.Server, []model.Channel) {

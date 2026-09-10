@@ -28,6 +28,41 @@ components:
         name: { type: string, example: general }
         kind: { type: string, enum: [text, voice] }
         position: { type: integer, example: 0 }
+    Invitation:
+      type: object
+      properties:
+        code: { type: string, example: 8sKq2Zr1a9Xa }
+        url:
+          type: string
+          description: Relative invite link (append to the frontend base URL).
+          example: /invite/8sKq2Zr1a9Xa
+        server_id: { type: string, format: uuid }
+        created_by: { type: string, description: user id of the member who generated it }
+        max_uses:
+          type: integer
+          nullable: true
+          description: Null means unlimited uses.
+          example: 10
+        uses: { type: integer, example: 0 }
+        expires_at:
+          type: string
+          format: date-time
+          description: Always set. Fixed at 7 days after creation.
+        revoked_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Non-null once the invitation has been revoked.
+        created_at: { type: string, format: date-time }
+    JoinResult:
+      type: object
+      properties:
+        server_id: { type: string, format: uuid }
+        already_member:
+          type: boolean
+          description: >
+            true when the caller was already a member; no new membership is
+            created and no invitation use is consumed.
     Server:
       type: object
       properties:
@@ -212,6 +247,56 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
 
+  /v1/servers/{serverId}/invites:
+    post:
+      summary: Generate an invitation
+      description: >
+        A member of the server generates a unique invite link. It expires 7 days
+        after creation (fixed server-side, not client-configurable). "max_uses"
+        is optional: omit it for unlimited uses.
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                max_uses:
+                  type: integer
+                  minimum: 1
+                  description: Optional. Max number of successful joins before the link stops working.
+      responses:
+        "201":
+          description: Invitation created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Invitation" }
+        "400":
+          description: "max_uses is not a positive number, or the body is not valid JSON."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The caller is not a member of the server and cannot invite.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: The server does not exist.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
   /v1/roles/{roleId}:
     patch:
       summary: Update a role's permissions (and optionally its name/color)
@@ -294,6 +379,35 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
 
+  /v1/invites/{code}:
+    delete:
+      summary: Revoke an invitation
+      description: >
+        Deactivates the invitation immediately. Idempotent: revoking an already
+        revoked invitation still returns 204.
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: Invitation revoked (or already revoked) }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The caller is not a member of the invitation's server.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: No invitation with that code.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
   /v1/servers/{serverId}/default-role:
     put:
       summary: Set the server's default role for new members
@@ -336,6 +450,45 @@ paths:
               schema: { $ref: "#/components/schemas/Error" }
         "404":
           description: Server or role not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/invites/{code}/join:
+    post:
+      summary: Join a server via an invitation
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "201":
+          description: The caller joined the server with the default role.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JoinResult" }
+        "200":
+          description: >
+            The caller was already a member; returned straight to the server
+            without duplicating the membership.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JoinResult" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The caller is banned from the server.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: >
+            The invitation is invalid: no such code, or it was revoked, has
+            expired, or reached its use limit.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
