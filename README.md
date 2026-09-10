@@ -8,6 +8,7 @@ moderación). Historias cubiertas hasta ahora:
 - **Editar permisos de un rol** (#22).
 - **Asignar/quitar rol a un miembro** (#23).
 - **Definir rol por defecto para nuevos miembros** (#24).
+- **Eliminar rol** (optativa).
 
 ## Stack
 - Lenguaje: Go
@@ -107,6 +108,7 @@ Ver [`openapi.yaml`](openapi.yaml).
 | DELETE | `/v1/servers/{serverId}/members/{userId}/roles/{roleId}` | si (owner) | Quitar un rol de un miembro. |
 | GET | `/v1/servers/{serverId}/members/{userId}/roles` | si | Listar los roles de un miembro. |
 | PUT | `/v1/servers/{serverId}/default-role` | si (owner) | Definir el rol por defecto del server. |
+| DELETE | `/v1/roles/{roleId}` | si (owner) | Eliminar un rol (optativa). Limpia asignaciones y `default_role_id` si correspondia. |
 | GET | `/livez` `/readyz` | no | Health checks. |
 
 ## Health checks

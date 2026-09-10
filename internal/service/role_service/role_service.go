@@ -29,6 +29,7 @@ type Repo interface {
 	GetByID(ctx context.Context, id uuid.UUID) (role.Role, error)
 	ListByServer(ctx context.Context, serverID uuid.UUID) ([]role.Role, error)
 	Update(ctx context.Context, r role.Role) error
+	Delete(ctx context.Context, id uuid.UUID) error
 }
 
 type RoleService struct {
@@ -182,5 +183,31 @@ func (s *RoleService) SetDefaultRole(ctx context.Context, p SetDefaultRoleParams
 		return err
 	}
 	// TODO(events): publicar "roles.default_role_set" en discordia.events cuando exista un consumidor real (ver Canales).
+	return nil
+}
+
+type DeleteRoleParams struct {
+	RoleID uuid.UUID
+	UserID string
+}
+
+func (s *RoleService) DeleteRole(ctx context.Context, p DeleteRoleParams) error {
+	rl, err := s.roles.GetByID(ctx, p.RoleID)
+	if err != nil {
+		return err
+	}
+
+	srv, err := s.servers.GetByID(ctx, rl.ServerID)
+	if err != nil {
+		return err
+	}
+	if err := service.RequireManageRoles(srv, p.UserID); err != nil {
+		return err
+	}
+
+	if err := s.roles.Delete(ctx, p.RoleID); err != nil {
+		return err
+	}
+	// TODO(events): publicar "roles.role_deleted" en discordia.events cuando exista un consumidor real (ver Canales).
 	return nil
 }

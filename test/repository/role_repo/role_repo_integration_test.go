@@ -38,7 +38,12 @@ func newRepo(t *testing.T) (*role_repo.RoleRepository, *repository.ServerReposit
 	t.Cleanup(func() { dropAllTestTables(ctx, pool) })
 
 	dropAllTestTables(ctx, pool)
-	for _, file := range []string{"../../../migrations/0001_init.sql", "../../../migrations/0002_roles.sql"} {
+	for _, file := range []string{
+		"../../../migrations/0001_init.sql",
+		"../../../migrations/0002_roles.sql",
+		"../../../migrations/0003_member_roles.sql",
+		"../../../migrations/0004_default_role.sql",
+	} {
 		schema, err := os.ReadFile(file)
 		if err != nil {
 			t.Fatalf("read migration %s: %v", file, err)

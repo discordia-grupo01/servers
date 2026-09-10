@@ -40,6 +40,9 @@ type fakeRoleUseCases struct {
 
 	setDefaultErr error
 	gotSetDefault role_service.SetDefaultRoleParams
+
+	deleteErr error
+	gotDelete role_service.DeleteRoleParams
 }
 
 func (f *fakeRoleUseCases) CreateRole(_ context.Context, p role_service.CreateRoleParams) (role.Role, error) {
@@ -75,6 +78,11 @@ func (f *fakeRoleUseCases) UpdateRolePermissions(_ context.Context, p role_servi
 func (f *fakeRoleUseCases) SetDefaultRole(_ context.Context, p role_service.SetDefaultRoleParams) error {
 	f.gotSetDefault = p
 	return f.setDefaultErr
+}
+
+func (f *fakeRoleUseCases) DeleteRole(_ context.Context, p role_service.DeleteRoleParams) error {
+	f.gotDelete = p
+	return f.deleteErr
 }
 
 type okPinger struct{}

@@ -42,6 +42,10 @@ type fakeRoles struct {
 
 	updateErr error
 	updated   role.Role
+
+	deleteErr    error
+	deletedID    uuid.UUID
+	deleteCalled bool
 }
 
 func (f *fakeRoles) Create(_ context.Context, r role.Role) error {
@@ -73,6 +77,12 @@ func (f *fakeRoles) Update(_ context.Context, r role.Role) error {
 	}
 	f.updated = r
 	return nil
+}
+
+func (f *fakeRoles) Delete(_ context.Context, id uuid.UUID) error {
+	f.deleteCalled = true
+	f.deletedID = id
+	return f.deleteErr
 }
 
 func ownerServer() model.Server {

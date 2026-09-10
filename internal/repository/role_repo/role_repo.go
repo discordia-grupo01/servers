@@ -86,3 +86,14 @@ func (r *RoleRepository) Update(ctx context.Context, rl role.Role) error {
 	}
 	return nil
 }
+
+func (r *RoleRepository) Delete(ctx context.Context, id uuid.UUID) error {
+	tag, err := r.pool.Exec(ctx, `DELETE FROM roles WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("delete role: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return model.ErrRoleNotFound
+	}
+	return nil
+}

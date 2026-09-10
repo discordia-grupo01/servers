@@ -263,6 +263,36 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+    delete:
+      summary: Delete a role
+      description: >
+        Only the server owner (of the role's server) can delete it. Any
+        member assignment of this role is removed automatically (`member_roles`
+        cascades on the role's FK); if this was the server's default role,
+        `servers.default_role_id` is set to NULL.
+      parameters:
+        - name: roleId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204":
+          description: Role deleted
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not the owner of the role's server.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Role not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
 
   /v1/servers/{serverId}/default-role:
     put:

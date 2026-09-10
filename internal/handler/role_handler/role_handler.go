@@ -21,6 +21,7 @@ type RoleUseCases interface {
 	ListRoles(ctx context.Context, serverID uuid.UUID) ([]role.Role, error)
 	UpdateRolePermissions(ctx context.Context, p role_service.UpdateRolePermissionsParams) (role.Role, error)
 	SetDefaultRole(ctx context.Context, p role_service.SetDefaultRoleParams) error
+	DeleteRole(ctx context.Context, p role_service.DeleteRoleParams) error
 }
 
 type Handler struct {
@@ -178,4 +179,22 @@ func (h *Handler) SetDefaultRole(c *gin.Context) {
 		return
 	}
 	c.Status(http.StatusOK)
+}
+
+// DELETE /v1/roles/:roleId
+func (h *Handler) DeleteRole(c *gin.Context) {
+	roleID, ok := parseUUIDParam(c, "roleId")
+	if !ok {
+		return
+	}
+
+	err := h.uc.DeleteRole(c.Request.Context(), role_service.DeleteRoleParams{
+		RoleID: roleID,
+		UserID: middleware.UserID(c),
+	})
+	if err != nil {
+		apierr.WriteDomainError(c, err)
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
