@@ -11,8 +11,10 @@ import (
 	"github.com/discordia-grupo01/servers/internal/iconstore"
 	"github.com/discordia-grupo01/servers/internal/middleware"
 	"github.com/discordia-grupo01/servers/internal/repository"
+	"github.com/discordia-grupo01/servers/internal/repository/member_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/role_repo"
 	"github.com/discordia-grupo01/servers/internal/service"
+	"github.com/discordia-grupo01/servers/internal/service/member_role_service"
 	"github.com/discordia-grupo01/servers/internal/service/role_service"
 )
 
@@ -39,14 +41,19 @@ func main() {
 	}
 
 	serverRepo := repository.NewServerRepository(pool)
+	roleRepo := role_repo.NewRoleRepository(pool)
+	memberRepo := member_repo.NewMemberRepository(pool)
+
 	svc := service.New(serverRepo, icons)
-	roleSvc := role_service.New(serverRepo, role_repo.NewRoleRepository(pool))
+	roleSvc := role_service.New(serverRepo, roleRepo)
+	memberRoleSvc := member_role_service.New(serverRepo, roleRepo, memberRepo)
 
 	router := handler.NewRouter(handler.Deps{
-		Servers: svc,
-		Roles:   roleSvc,
-		Auth:    middleware.AuthConfig{UserIDHeader: cfg.UserIDHeader},
-		DB:      pool,
+		Servers:     svc,
+		Roles:       roleSvc,
+		MemberRoles: memberRoleSvc,
+		Auth:        middleware.AuthConfig{UserIDHeader: cfg.UserIDHeader},
+		DB:          pool,
 	})
 
 	addr := cfg.Host + ":" + cfg.Port
