@@ -6,6 +6,7 @@ moderación). Historias cubiertas hasta ahora:
 - **Crear servidor**.
 - **Generar invitación** (link único, expira a los 7 días, con o sin límite de usos; revocable).
 - **Unirse a servidor vía invitación**.
+- **Abandonar servidor** 
 - **Crear rol** (#21).
 - **Editar permisos de un rol** (#22).
 - **Asignar/quitar rol a un miembro** (#23).
@@ -106,6 +107,7 @@ Ver [`openapi.yaml`](openapi.yaml).
 | POST | `/v1/servers/:serverId/invites` | si | Generar invitación (JSON opcional: `max_uses?`; expira a los 7 días). |
 | DELETE | `/v1/invites/:code` | si | Revocar una invitación (idempotente). |
 | POST | `/v1/invites/:code/join` | si | Unirse a un servidor con una invitación. |
+| DELETE | `/v1/servers/{serverId}/members/{userId}` | si (uno mismo) | Abandonar un servidor. `userId` debe ser el propio caller; el owner no puede abandonar así (409, primero tiene que transferir la propiedad o eliminar el servidor). |
 | POST | `/v1/servers/{serverId}/roles` | si (owner) | Crear rol (`name`, `color`). |
 | GET | `/v1/servers/{serverId}/roles` | si | Listar roles de un server. |
 | PATCH | `/v1/roles/{roleId}` | si (owner) | Editar permisos/nombre/color de un rol. |
