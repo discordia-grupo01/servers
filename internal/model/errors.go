@@ -17,6 +17,9 @@ var (
 	ErrServerNotFound    = errors.New("server not found")
 	ErrForbiddenNotOwner = errors.New("only the server owner can perform this action")
 
+	ErrLeaveForbidden   = errors.New("you can only remove your own membership")
+	ErrOwnerCannotLeave = errors.New("the server owner cannot leave; transfer ownership or delete the server first")
+
 	ErrRoleNotFound        = errors.New("role not found")
 	ErrRoleNameRequired    = errors.New("role name must be provided")
 	ErrRoleNameTooLong     = errors.New("role name is too long")
