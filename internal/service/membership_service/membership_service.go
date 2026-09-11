@@ -3,18 +3,8 @@ package membership_service
 import (
 	"context"
 
-	"github.com/google/uuid"
-
 	"github.com/discordia-grupo01/servers/internal/model"
 )
-
-type Servers interface {
-	GetByID(ctx context.Context, id uuid.UUID) (model.Server, error)
-}
-
-type Members interface {
-	RemoveMember(ctx context.Context, serverID uuid.UUID, userID string) (bool, error)
-}
 
 type MembershipService struct {
 	servers Servers
@@ -23,12 +13,6 @@ type MembershipService struct {
 
 func New(servers Servers, members Members) *MembershipService {
 	return &MembershipService{servers: servers, members: members}
-}
-
-type LeaveParams struct {
-	ServerID     uuid.UUID
-	ActorUserID  string
-	TargetUserID string
 }
 
 func (s *MembershipService) LeaveServer(ctx context.Context, p LeaveParams) error {
