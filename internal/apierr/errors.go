@@ -74,6 +74,10 @@ func WriteDomainError(c *gin.Context, err error) {
 
 	case errors.Is(err, model.ErrForbiddenNotOwner):
 		RespondError(c, http.StatusForbidden, err.Error(), nil)
+	case errors.Is(err, model.ErrLeaveForbidden):
+		RespondError(c, http.StatusForbidden, err.Error(), nil)
+	case errors.Is(err, model.ErrOwnerCannotLeave):
+		RespondError(c, http.StatusConflict, err.Error(), map[string]any{"reason": "owner_must_transfer_or_delete"})
 	case errors.Is(err, model.ErrServerNotFound):
 		RespondError(c, http.StatusNotFound, err.Error(), nil)
 	case errors.Is(err, model.ErrRoleNotFound):
