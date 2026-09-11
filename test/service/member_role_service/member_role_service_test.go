@@ -83,13 +83,39 @@ func TestAssignRole_NotOwner_Forbidden(t *testing.T) {
 
 func TestRemoveRole_NotAssigned_NotFound(t *testing.T) {
 	srv := ownerServer()
-	svc := newService(&fakeServers{server: srv}, &fakeRoles{}, &fakeMembers{removeErr: model.ErrMemberRoleNotFound})
+	rl := role.Role{ID: uuid.New(), ServerID: srv.ID}
+	svc := newService(&fakeServers{server: srv}, &fakeRoles{role: rl}, &fakeMembers{removeErr: model.ErrMemberRoleNotFound})
+
+	err := svc.RemoveRole(context.Background(), member_role_service.RemoveRoleParams{
+		ServerID: srv.ID, TargetUserID: testUser, RoleID: rl.ID, ActorUserID: testOwner,
+	})
+	if !errors.Is(err, model.ErrMemberRoleNotFound) {
+		t.Errorf("err = %v, want ErrMemberRoleNotFound", err)
+	}
+}
+
+func TestRemoveRole_RoleServerMismatch_BadRequest(t *testing.T) {
+	srv := ownerServer()
+	otherServerRole := role.Role{ID: uuid.New(), ServerID: uuid.New()} // belongs to a different server
+	svc := newService(&fakeServers{server: srv}, &fakeRoles{role: otherServerRole}, &fakeMembers{})
+
+	err := svc.RemoveRole(context.Background(), member_role_service.RemoveRoleParams{
+		ServerID: srv.ID, TargetUserID: testUser, RoleID: otherServerRole.ID, ActorUserID: testOwner,
+	})
+	if !errors.Is(err, model.ErrRoleServerMismatch) {
+		t.Errorf("err = %v, want ErrRoleServerMismatch", err)
+	}
+}
+
+func TestRemoveRole_RoleNotFound(t *testing.T) {
+	srv := ownerServer()
+	svc := newService(&fakeServers{server: srv}, &fakeRoles{getErr: model.ErrRoleNotFound}, &fakeMembers{})
 
 	err := svc.RemoveRole(context.Background(), member_role_service.RemoveRoleParams{
 		ServerID: srv.ID, TargetUserID: testUser, RoleID: uuid.New(), ActorUserID: testOwner,
 	})
-	if !errors.Is(err, model.ErrMemberRoleNotFound) {
-		t.Errorf("err = %v, want ErrMemberRoleNotFound", err)
+	if !errors.Is(err, model.ErrRoleNotFound) {
+		t.Errorf("err = %v, want ErrRoleNotFound", err)
 	}
 }
 

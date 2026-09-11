@@ -47,6 +47,24 @@ func TestDeleteRole_ServerNotFound(t *testing.T) {
 	}
 }
 
+func TestDeleteRole_IsServerDefault_Conflict(t *testing.T) {
+	srv := ownerServer()
+	rl := existingRole(srv.ID)
+	srv.DefaultRoleID = &rl.ID
+	roles := &fakeRoles{getByIDRole: rl}
+	svc := newService(&fakeServers{server: srv}, roles)
+
+	err := svc.DeleteRole(context.Background(), role_service.DeleteRoleParams{
+		RoleID: rl.ID, UserID: testOwner,
+	})
+	if !errors.Is(err, model.ErrRoleIsServerDefault) {
+		t.Errorf("err = %v, want ErrRoleIsServerDefault", err)
+	}
+	if roles.deleteCalled {
+		t.Error("repo.Delete should not be called when the role is the server's default")
+	}
+}
+
 func TestDeleteRole_Valid_CallsRepo(t *testing.T) {
 	srv := ownerServer()
 	rl := existingRole(srv.ID)

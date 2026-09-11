@@ -113,7 +113,7 @@ Ver [`openapi.yaml`](openapi.yaml).
 | DELETE | `/v1/servers/{serverId}/members/{userId}/roles/{roleId}` | si (owner) | Quitar un rol de un miembro. |
 | GET | `/v1/servers/{serverId}/members/{userId}/roles` | si | Listar los roles de un miembro. |
 | PUT | `/v1/servers/{serverId}/default-role` | si (owner) | Definir el rol por defecto del server. |
-| DELETE | `/v1/roles/{roleId}` | si (owner) | Eliminar un rol (optativa). Limpia asignaciones y `default_role_id` si correspondia. |
+| DELETE | `/v1/roles/{roleId}` | si (owner) | Eliminar un rol (optativa). Limpia asignaciones; rechaza con 409 si el rol es el default actual del server (hay que asignar otro default primero). |
 | GET | `/livez` `/readyz` | no | Health checks. |
 
 ## Health checks

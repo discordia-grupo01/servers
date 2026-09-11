@@ -204,6 +204,9 @@ func (s *RoleService) DeleteRole(ctx context.Context, p DeleteRoleParams) error 
 	if err := service.RequireManageRoles(srv, p.UserID); err != nil {
 		return err
 	}
+	if srv.DefaultRoleID != nil && *srv.DefaultRoleID == p.RoleID {
+		return model.ErrRoleIsServerDefault
+	}
 
 	if err := s.roles.Delete(ctx, p.RoleID); err != nil {
 		return err

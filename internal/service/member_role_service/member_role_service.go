@@ -40,6 +40,18 @@ func New(servers Servers, roles Roles, members Members) *MemberRoleService {
 	return &MemberRoleService{servers: servers, roles: roles, members: members}
 }
 
+// resolveRole fetches the role and confirms it belongs to serverID.
+func (s *MemberRoleService) resolveRole(ctx context.Context, serverID, roleID uuid.UUID) (role.Role, error) {
+	rl, err := s.roles.GetByID(ctx, roleID)
+	if err != nil {
+		return role.Role{}, err
+	}
+	if rl.ServerID != serverID {
+		return role.Role{}, model.ErrRoleServerMismatch
+	}
+	return rl, nil
+}
+
 type AssignRoleParams struct {
 	ServerID     uuid.UUID
 	TargetUserID string
@@ -56,12 +68,8 @@ func (s *MemberRoleService) AssignRole(ctx context.Context, p AssignRoleParams) 
 		return err
 	}
 
-	rl, err := s.roles.GetByID(ctx, p.RoleID)
-	if err != nil {
+	if _, err := s.resolveRole(ctx, p.ServerID, p.RoleID); err != nil {
 		return err
-	}
-	if rl.ServerID != p.ServerID {
-		return model.ErrRoleServerMismatch
 	}
 
 	isMember, err := s.members.IsMember(ctx, p.ServerID, p.TargetUserID)
@@ -92,6 +100,10 @@ func (s *MemberRoleService) RemoveRole(ctx context.Context, p RemoveRoleParams) 
 		return err
 	}
 	if err := service.RequireManageRoles(srv, p.ActorUserID); err != nil {
+		return err
+	}
+
+	if _, err := s.resolveRole(ctx, p.ServerID, p.RoleID); err != nil {
 		return err
 	}
 

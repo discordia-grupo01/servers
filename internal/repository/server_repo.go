@@ -61,11 +61,11 @@ func (r *ServerRepository) CreateServer(ctx context.Context, srv model.Server, c
 
 func (r *ServerRepository) GetByID(ctx context.Context, id uuid.UUID) (model.Server, error) {
 	row := r.pool.QueryRow(ctx, `
-		SELECT id, name, name_key, icon_url, owner_id, created_at
+		SELECT id, name, name_key, icon_url, owner_id, created_at, default_role_id
 		  FROM servers WHERE id = $1`, id)
 
 	var s model.Server
-	if err := row.Scan(&s.ID, &s.Name, &s.NameKey, &s.IconURL, &s.OwnerID, &s.CreatedAt); err != nil {
+	if err := row.Scan(&s.ID, &s.Name, &s.NameKey, &s.IconURL, &s.OwnerID, &s.CreatedAt, &s.DefaultRoleID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return model.Server{}, model.ErrServerNotFound
 		}

@@ -10,6 +10,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 
 	"github.com/discordia-grupo01/servers/internal/model"
 )
@@ -36,6 +37,17 @@ func RespondError(c *gin.Context, status int, message string, details map[string
 // FieldErr builds a {"field","reason"} details map for validation errors.
 func FieldErr(field, reason string) map[string]any {
 	return map[string]any{"field": field, "reason": reason}
+}
+
+// ParseUUIDParam parses the named gin path parameter as a UUID, writing a
+// standard 400 response and returning ok=false on failure.
+func ParseUUIDParam(c *gin.Context, name string) (uuid.UUID, bool) {
+	id, err := uuid.Parse(c.Param(name))
+	if err != nil {
+		RespondError(c, http.StatusBadRequest, "invalid "+name, FieldErr(name, "invalid_uuid"))
+		return uuid.UUID{}, false
+	}
+	return id, true
 }
 
 // WriteDomainError maps a domain error (from internal/model) to its HTTP
@@ -81,6 +93,8 @@ func WriteDomainError(c *gin.Context, err error) {
 		RespondError(c, http.StatusBadRequest, err.Error(), details)
 	case errors.Is(err, model.ErrRoleServerMismatch):
 		RespondError(c, http.StatusBadRequest, err.Error(), nil)
+	case errors.Is(err, model.ErrRoleIsServerDefault):
+		RespondError(c, http.StatusConflict, err.Error(), nil)
 	case errors.Is(err, model.ErrMemberNotFound):
 		RespondError(c, http.StatusNotFound, err.Error(), nil)
 	case errors.Is(err, model.ErrMemberRoleNotFound):

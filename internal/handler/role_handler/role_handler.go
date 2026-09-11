@@ -4,12 +4,12 @@ package role_handler
 import (
 	"context"
 	"net/http"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
 	"github.com/discordia-grupo01/servers/internal/apierr"
+	"github.com/discordia-grupo01/servers/internal/handler/roleview"
 	"github.com/discordia-grupo01/servers/internal/middleware"
 	"github.com/discordia-grupo01/servers/internal/model/role"
 	"github.com/discordia-grupo01/servers/internal/service/role_service"
@@ -37,40 +37,9 @@ type createRoleRequest struct {
 	Color string `json:"color"`
 }
 
-type roleResponse struct {
-	ID          string    `json:"id"`
-	ServerID    string    `json:"server_id"`
-	Name        string    `json:"name"`
-	Color       string    `json:"color"`
-	Permissions []string  `json:"permissions"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
-}
-
-func toRoleResponse(r role.Role) roleResponse {
-	return roleResponse{
-		ID:          r.ID.String(),
-		ServerID:    r.ServerID.String(),
-		Name:        r.Name,
-		Color:       r.Color,
-		Permissions: role.PermissionNames(r.Permissions),
-		CreatedAt:   r.CreatedAt,
-		UpdatedAt:   r.UpdatedAt,
-	}
-}
-
-func parseUUIDParam(c *gin.Context, name string) (uuid.UUID, bool) {
-	id, err := uuid.Parse(c.Param(name))
-	if err != nil {
-		apierr.RespondError(c, http.StatusBadRequest, "invalid "+name, apierr.FieldErr(name, "invalid_uuid"))
-		return uuid.UUID{}, false
-	}
-	return id, true
-}
-
 // POST /v1/servers/:serverId/roles
 func (h *Handler) CreateRole(c *gin.Context) {
-	serverID, ok := parseUUIDParam(c, "serverId")
+	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
 	if !ok {
 		return
 	}
@@ -91,12 +60,12 @@ func (h *Handler) CreateRole(c *gin.Context) {
 		apierr.WriteDomainError(c, err)
 		return
 	}
-	c.JSON(http.StatusCreated, toRoleResponse(rl))
+	c.JSON(http.StatusCreated, roleview.ToResponse(rl))
 }
 
 // GET /v1/servers/:serverId/roles
 func (h *Handler) ListRoles(c *gin.Context) {
-	serverID, ok := parseUUIDParam(c, "serverId")
+	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
 	if !ok {
 		return
 	}
@@ -107,9 +76,9 @@ func (h *Handler) ListRoles(c *gin.Context) {
 		return
 	}
 
-	resp := make([]roleResponse, 0, len(roles))
+	resp := make([]roleview.Response, 0, len(roles))
 	for _, rl := range roles {
-		resp = append(resp, toRoleResponse(rl))
+		resp = append(resp, roleview.ToResponse(rl))
 	}
 	c.JSON(http.StatusOK, resp)
 }
@@ -122,7 +91,7 @@ type updateRolePermissionsRequest struct {
 
 // PATCH /v1/roles/:roleId
 func (h *Handler) UpdateRolePermissions(c *gin.Context) {
-	roleID, ok := parseUUIDParam(c, "roleId")
+	roleID, ok := apierr.ParseUUIDParam(c, "roleId")
 	if !ok {
 		return
 	}
@@ -144,7 +113,7 @@ func (h *Handler) UpdateRolePermissions(c *gin.Context) {
 		apierr.WriteDomainError(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, toRoleResponse(rl))
+	c.JSON(http.StatusOK, roleview.ToResponse(rl))
 }
 
 type setDefaultRoleRequest struct {
@@ -153,7 +122,7 @@ type setDefaultRoleRequest struct {
 
 // PUT /v1/servers/:serverId/default-role
 func (h *Handler) SetDefaultRole(c *gin.Context) {
-	serverID, ok := parseUUIDParam(c, "serverId")
+	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
 	if !ok {
 		return
 	}
@@ -183,7 +152,7 @@ func (h *Handler) SetDefaultRole(c *gin.Context) {
 
 // DELETE /v1/roles/:roleId
 func (h *Handler) DeleteRole(c *gin.Context) {
-	roleID, ok := parseUUIDParam(c, "roleId")
+	roleID, ok := apierr.ParseUUIDParam(c, "roleId")
 	if !ok {
 		return
 	}
