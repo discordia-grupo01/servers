@@ -24,13 +24,14 @@ const (
 )
 
 type Server struct {
-	ID        uuid.UUID
-	Name      string
-	NameKey   string // No se si es muy necesario pero es para el tema de la mayucula, minusculas y tilde
-	IconURL   *string
-	OwnerID   string
-	CreatedAt time.Time
-	Channels  []Channel
+	ID            uuid.UUID
+	Name          string
+	NameKey       string // No se si es muy necesario pero es para el tema de la mayucula, minusculas y tilde
+	IconURL       *string
+	OwnerID       string
+	CreatedAt     time.Time
+	Channels      []Channel
+	DefaultRoleID *uuid.UUID
 }
 
 type Channel struct {

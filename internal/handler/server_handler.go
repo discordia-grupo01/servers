@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/discordia-grupo01/servers/internal/apierr"
 	"github.com/discordia-grupo01/servers/internal/middleware"
 	"github.com/discordia-grupo01/servers/internal/model"
 	"github.com/discordia-grupo01/servers/internal/service"
@@ -69,26 +70,26 @@ func (h *serverHandler) createServer(c *gin.Context) {
 	switch {
 	case err == nil && fileHeader != nil:
 		if fileHeader.Size > maxIconUploadBytes {
-			respondError(c, http.StatusBadRequest,
+			apierr.RespondError(c, http.StatusBadRequest,
 				fmt.Sprintf("icon file exceeds the maximum allowed size (%d MB)", maxIconUploadBytes>>20),
-				fieldErr("icon", "icon_too_large"))
+				apierr.FieldErr("icon", "icon_too_large"))
 			return
 		}
 		data, oerr := readUpload(fileHeader)
 		if oerr != nil {
-			respondError(c, http.StatusBadRequest, "could not read the icon file", fieldErr("icon", "icon_unreadable"))
+			apierr.RespondError(c, http.StatusBadRequest, "could not read the icon file", apierr.FieldErr("icon", "icon_unreadable"))
 			return
 		}
 		params.Icon = data
 	case errors.Is(err, http.ErrMissingFile):
 	default:
-		respondError(c, http.StatusBadRequest, "invalid multipart form", map[string]any{"reason": "invalid_multipart"})
+		apierr.RespondError(c, http.StatusBadRequest, "invalid multipart form", map[string]any{"reason": "invalid_multipart"})
 		return
 	}
 
 	srv, err := h.uc.CreateServer(c.Request.Context(), params)
 	if err != nil {
-		writeDomainError(c, err)
+		apierr.WriteDomainError(c, err)
 		return
 	}
 	c.JSON(http.StatusCreated, toServerResponse(srv))

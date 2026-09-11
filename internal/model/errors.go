@@ -14,6 +14,20 @@ var (
 
 	ErrUnauthorized = errors.New("authentication required")
 
+	ErrServerNotFound    = errors.New("server not found")
+	ErrForbiddenNotOwner = errors.New("only the server owner can perform this action")
+
+	ErrRoleNotFound        = errors.New("role not found")
+	ErrRoleNameRequired    = errors.New("role name must be provided")
+	ErrRoleNameTooLong     = errors.New("role name is too long")
+	ErrColorInvalid        = errors.New("color must be a hex value like #RRGGBB")
+	ErrInvalidPermission   = errors.New("unknown permission")
+	ErrRoleServerMismatch  = errors.New("role does not belong to this server")
+	ErrRoleIsServerDefault = errors.New("role is the server's default role; set a different default role before deleting it")
+
+	ErrMemberNotFound     = errors.New("member not found")
+	ErrMemberRoleNotFound = errors.New("member does not have this role")
+
 	ErrInviteServerNotFound   = errors.New("server not found")
 	ErrInvitePermissionDenied = errors.New("you do not have permission to invite to this server")
 	ErrInviteMaxUsesInvalid   = errors.New("max uses must be a positive number")
@@ -27,3 +41,17 @@ var (
 	ErrAlreadyMember = errors.New("already a member of this server")
 	ErrUserBanned    = errors.New("you are banned from this server")
 )
+
+// InvalidPermissionError wraps ErrInvalidPermission with the offending
+// permission name, so handlers can report it in the error details.
+type InvalidPermissionError struct {
+	Value string
+}
+
+func (e *InvalidPermissionError) Error() string {
+	return "unknown permission: " + e.Value
+}
+
+func (e *InvalidPermissionError) Is(target error) bool {
+	return target == ErrInvalidPermission
+}

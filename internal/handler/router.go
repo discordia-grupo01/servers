@@ -7,6 +7,8 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/discordia-grupo01/servers/internal/handler/invitation"
+	"github.com/discordia-grupo01/servers/internal/handler/member_role_handler"
+	"github.com/discordia-grupo01/servers/internal/handler/role_handler"
 	"github.com/discordia-grupo01/servers/internal/middleware"
 )
 
@@ -16,6 +18,8 @@ type Pinger interface {
 
 type Deps struct {
 	Servers     ServerUseCases
+	Roles       role_handler.RoleUseCases
+	MemberRoles member_role_handler.MemberRoleUseCases
 	Invitations invitation.UseCases
 	Auth        middleware.AuthConfig
 	DB          Pinger
@@ -23,6 +27,8 @@ type Deps struct {
 
 func NewRouter(d Deps) *gin.Engine {
 	h := &serverHandler{uc: d.Servers}
+	roleH := role_handler.New(d.Roles)
+	memberRoleH := member_role_handler.New(d.MemberRoles)
 
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery())
@@ -47,6 +53,16 @@ func NewRouter(d Deps) *gin.Engine {
 	v1 := r.Group("/v1")
 	v1.Use(middleware.Auth(d.Auth))
 	v1.POST("/servers", h.createServer)
+
+	v1.POST("/servers/:serverId/roles", roleH.CreateRole)
+	v1.GET("/servers/:serverId/roles", roleH.ListRoles)
+	v1.PATCH("/roles/:roleId", roleH.UpdateRolePermissions)
+	v1.DELETE("/roles/:roleId", roleH.DeleteRole)
+	v1.PUT("/servers/:serverId/default-role", roleH.SetDefaultRole)
+
+	v1.POST("/servers/:serverId/members/:userId/roles", memberRoleH.AssignRole)
+	v1.DELETE("/servers/:serverId/members/:userId/roles/:roleId", memberRoleH.RemoveRole)
+	v1.GET("/servers/:serverId/members/:userId/roles", memberRoleH.ListMemberRoles)
 
 	invitation.NewHandler(d.Invitations).Register(v1)
 

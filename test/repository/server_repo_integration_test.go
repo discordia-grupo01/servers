@@ -33,16 +33,31 @@ func newRepo(t *testing.T) (*repository.ServerRepository, *pgxpool.Pool) {
 		t.Fatalf("NewPool: %v", err)
 	}
 	t.Cleanup(pool.Close)
+	t.Cleanup(func() { dropAllTestTables(ctx, pool) })
 
-	schema, err := os.ReadFile("../../migrations/0001_init.sql")
-	if err != nil {
-		t.Fatalf("read migration: %v", err)
-	}
-	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS server_members, channels, servers CASCADE`)
-	if _, err := pool.Exec(ctx, string(schema)); err != nil {
-		t.Fatalf("apply schema: %v", err)
+	dropAllTestTables(ctx, pool)
+	for _, path := range []string{
+		"../../migrations/0001_init.sql",
+		"../../migrations/0003_roles.sql",
+		"../../migrations/0004_member_roles.sql",
+		"../../migrations/0005_default_role.sql",
+	} {
+		schema, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read migration %s: %v", path, err)
+		}
+		if _, err := pool.Exec(ctx, string(schema)); err != nil {
+			t.Fatalf("apply schema %s: %v", path, err)
+		}
 	}
 	return repository.NewServerRepository(pool), pool
+}
+
+// dropAllTestTables wipes every table any of this repo's integration test
+// packages might have created, so a test run leaves the database exactly as
+// clean as it found it -- both before it starts and after it finishes.
+func dropAllTestTables(ctx context.Context, pool *pgxpool.Pool) {
+	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS member_roles, roles, server_bans, invitations, server_members, channels, servers CASCADE`)
 }
 
 func serverFixture(name, owner string) (model.Server, []model.Channel) {

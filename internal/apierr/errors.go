@@ -1,0 +1,107 @@
+// Package apierr formats domain errors as the service's standard HTTP error
+// body. It lives outside internal/handler (and its role_handler /
+// member_role_handler subpackages) so any of them can depend on it without
+// creating an import cycle back into internal/handler.
+package apierr
+
+import (
+	"errors"
+	"log"
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+
+	"github.com/discordia-grupo01/servers/internal/model"
+)
+
+type errorBody struct {
+	Error errorDetail `json:"error"`
+}
+
+type errorDetail struct {
+	Code    int            `json:"code"`
+	Message string         `json:"message"`
+	Details map[string]any `json:"details"`
+}
+
+// RespondError writes the standard {"error":{"code","message","details"}}
+// body. code is always the same number as the HTTP status.
+func RespondError(c *gin.Context, status int, message string, details map[string]any) {
+	if details == nil {
+		details = map[string]any{}
+	}
+	c.JSON(status, errorBody{Error: errorDetail{Code: status, Message: message, Details: details}})
+}
+
+// FieldErr builds a {"field","reason"} details map for validation errors.
+func FieldErr(field, reason string) map[string]any {
+	return map[string]any{"field": field, "reason": reason}
+}
+
+// ParseUUIDParam parses the named gin path parameter as a UUID, writing a
+// standard 400 response and returning ok=false on failure.
+func ParseUUIDParam(c *gin.Context, name string) (uuid.UUID, bool) {
+	id, err := uuid.Parse(c.Param(name))
+	if err != nil {
+		RespondError(c, http.StatusBadRequest, "invalid "+name, FieldErr(name, "invalid_uuid"))
+		return uuid.UUID{}, false
+	}
+	return id, true
+}
+
+// WriteDomainError maps a domain error (from internal/model) to its HTTP
+// response. Unrecognized errors are logged and returned as a generic 500 so
+// driver/internal details never leak to the client.
+func WriteDomainError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, model.ErrNameRequired):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("name", "name_required"))
+	case errors.Is(err, model.ErrNameTooShort):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("name", "name_too_short"))
+	case errors.Is(err, model.ErrNameTooLong):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("name", "name_too_long"))
+	case errors.Is(err, model.ErrNameInvalidChars):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("name", "name_invalid_chars"))
+	case errors.Is(err, model.ErrNameTaken):
+		RespondError(c, http.StatusConflict, err.Error(), FieldErr("name", "name_taken"))
+	case errors.Is(err, model.ErrIconTooLarge):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("icon", "icon_too_large"))
+	case errors.Is(err, model.ErrIconUnsupportedType):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("icon", "icon_unsupported_type"))
+	case errors.Is(err, model.ErrUnauthorized):
+		RespondError(c, http.StatusUnauthorized, err.Error(), nil)
+
+	case errors.Is(err, model.ErrForbiddenNotOwner):
+		RespondError(c, http.StatusForbidden, err.Error(), nil)
+	case errors.Is(err, model.ErrServerNotFound):
+		RespondError(c, http.StatusNotFound, err.Error(), nil)
+	case errors.Is(err, model.ErrRoleNotFound):
+		RespondError(c, http.StatusNotFound, err.Error(), nil)
+	case errors.Is(err, model.ErrRoleNameRequired):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("name", "name_required"))
+	case errors.Is(err, model.ErrRoleNameTooLong):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("name", "name_too_long"))
+	case errors.Is(err, model.ErrColorInvalid):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("color", "color_invalid_format"))
+	case errors.Is(err, model.ErrInvalidPermission):
+		details := map[string]any{"field": "permissions"}
+		var ipe *model.InvalidPermissionError
+		if errors.As(err, &ipe) {
+			details["invalid_value"] = ipe.Value
+		}
+		RespondError(c, http.StatusBadRequest, err.Error(), details)
+	case errors.Is(err, model.ErrRoleServerMismatch):
+		RespondError(c, http.StatusBadRequest, err.Error(), nil)
+	case errors.Is(err, model.ErrRoleIsServerDefault):
+		RespondError(c, http.StatusConflict, err.Error(), nil)
+	case errors.Is(err, model.ErrMemberNotFound):
+		RespondError(c, http.StatusNotFound, err.Error(), nil)
+	case errors.Is(err, model.ErrMemberRoleNotFound):
+		RespondError(c, http.StatusNotFound, err.Error(), nil)
+
+	default:
+		log.Printf("unmapped internal error: %v", err)
+		RespondError(c, http.StatusInternalServerError, "internal service error", nil)
+	}
+}

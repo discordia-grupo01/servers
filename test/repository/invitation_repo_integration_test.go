@@ -33,9 +33,13 @@ func newInviteRepo(t *testing.T) (*repository.InvitationRepository, *pgxpool.Poo
 		t.Fatalf("NewPool: %v", err)
 	}
 	t.Cleanup(pool.Close)
+	t.Cleanup(func() { dropAllTestTables(ctx, pool) })
 
-	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS server_bans, invitations, server_members, channels, servers CASCADE`)
-	for _, f := range []string{"0001_init.sql", "0002_invitations.sql"} {
+	dropAllTestTables(ctx, pool)
+	for _, f := range []string{
+		"0001_init.sql", "0002_invitations.sql",
+		"0003_roles.sql", "0004_member_roles.sql", "0005_default_role.sql",
+	} {
 		schema, err := os.ReadFile("../../migrations/" + f)
 		if err != nil {
 			t.Fatalf("read migration %s: %v", f, err)
@@ -249,6 +253,73 @@ func TestInviteRepo_Revoke(t *testing.T) {
 	}
 	if _, err := repo.RedeemInvitation(ctx, inv.Code, "nope", time.Now().UTC()); !errors.Is(err, model.ErrInvitationExhausted) {
 		t.Fatalf("err = %v, want ErrInvitationExhausted after revoke", err)
+	}
+}
+
+func TestInviteRepo_RedeemAssignsDefaultRole(t *testing.T) {
+	repo, pool := newInviteRepo(t)
+	ctx := context.Background()
+	owner := "owner-" + uuid.NewString()
+	serverID := seedServer(t, pool, owner)
+
+	roleID := uuid.New()
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO roles (id, server_id, name, color, permissions) VALUES ($1,$2,'member','#112233',0)`,
+		roleID, serverID,
+	); err != nil {
+		t.Fatalf("seed role: %v", err)
+	}
+	if _, err := pool.Exec(ctx,
+		`UPDATE servers SET default_role_id = $1 WHERE id = $2`, roleID, serverID,
+	); err != nil {
+		t.Fatalf("set default role: %v", err)
+	}
+
+	inv := newInvitation(serverID, owner)
+	if err := repo.CreateInvitation(ctx, inv); err != nil {
+		t.Fatalf("CreateInvitation: %v", err)
+	}
+
+	if _, err := repo.RedeemInvitation(ctx, inv.Code, "newcomer", time.Now().UTC()); err != nil {
+		t.Fatalf("RedeemInvitation: %v", err)
+	}
+
+	var hasRole bool
+	if err := pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM member_roles WHERE server_id = $1 AND user_id = $2 AND role_id = $3)`,
+		serverID, "newcomer", roleID,
+	).Scan(&hasRole); err != nil {
+		t.Fatalf("check member_roles: %v", err)
+	}
+	if !hasRole {
+		t.Error("newcomer was not assigned the server's default role")
+	}
+}
+
+func TestInviteRepo_RedeemWithoutDefaultRoleAssignsNothing(t *testing.T) {
+	repo, pool := newInviteRepo(t)
+	ctx := context.Background()
+	owner := "owner-" + uuid.NewString()
+	serverID := seedServer(t, pool, owner)
+
+	inv := newInvitation(serverID, owner)
+	if err := repo.CreateInvitation(ctx, inv); err != nil {
+		t.Fatalf("CreateInvitation: %v", err)
+	}
+
+	if _, err := repo.RedeemInvitation(ctx, inv.Code, "newcomer", time.Now().UTC()); err != nil {
+		t.Fatalf("RedeemInvitation: %v", err)
+	}
+
+	var count int
+	if err := pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM member_roles WHERE server_id = $1 AND user_id = $2`,
+		serverID, "newcomer",
+	).Scan(&count); err != nil {
+		t.Fatalf("count member_roles: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("member_roles count = %d, want 0 (no default role configured)", count)
 	}
 }
 

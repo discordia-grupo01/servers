@@ -95,6 +95,21 @@ components:
               additionalProperties: true
               description: Structured context; {} when there is nothing to add.
               example: { field: name, reason: name_too_long }
+    Role:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        server_id: { type: string, format: uuid }
+        name: { type: string, example: Moderator }
+        color: { type: string, example: "#FF00AA", description: Hex color, #RRGGBB. }
+        permissions:
+          type: array
+          items:
+            type: string
+            enum: [VIEW_CHANNELS, SEND_MESSAGES, MANAGE_CHANNELS, MANAGE_ROLES, KICK_MEMBERS, BAN_MEMBERS, MANAGE_SERVER]
+          example: [SEND_MESSAGES, MANAGE_CHANNELS]
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
 
 security:
   - bearerAuth: []
@@ -166,7 +181,73 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
 
-  /v1/servers/{id}/invites:
+  /v1/servers/{serverId}/roles:
+    post:
+      summary: Create a role
+      description: Only the server owner can create roles. Permissions start empty.
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, color]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 100 }
+                color: { type: string, example: "#FF00AA" }
+      responses:
+        "201":
+          description: Role created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Role" }
+        "400":
+          description: Invalid name or color.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not the server owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Server not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    get:
+      summary: List a server's roles
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: List of roles
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Role" }
+        "404":
+          description: Server not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/servers/{serverId}/invites:
     post:
       summary: Generate an invitation
       description: >
@@ -174,7 +255,7 @@ paths:
         after creation (fixed server-side, not client-configurable). "max_uses"
         is optional: omit it for unlimited uses.
       parameters:
-        - name: id
+        - name: serverId
           in: path
           required: true
           schema: { type: string, format: uuid }
@@ -216,6 +297,214 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
 
+  /v1/roles/{roleId}:
+    patch:
+      summary: Update a role's permissions (and optionally its name/color)
+      description: >
+        Only the server owner (of the role's server) can edit it. `permissions`
+        omitted means "leave the current permissions untouched"; an empty array
+        clears them. `name`/`color` are optional too.
+      parameters:
+        - name: roleId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                permissions:
+                  type: array
+                  items: { type: string }
+                  example: [SEND_MESSAGES, MANAGE_CHANNELS]
+                name: { type: string }
+                color: { type: string }
+      responses:
+        "200":
+          description: Role updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Role" }
+        "400":
+          description: Invalid name, color, or an unknown permission name.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not the owner of the role's server.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Role not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    delete:
+      summary: Delete a role
+      description: >
+        Only the server owner (of the role's server) can delete it. Any
+        member assignment of this role is removed automatically (`member_roles`
+        cascades on the role's FK). Deleting the server's current default role
+        is rejected with 409 -- set a different default role first (via
+        `PUT /v1/servers/{serverId}/default-role`) so new members never join
+        with zero roles.
+      parameters:
+        - name: roleId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204":
+          description: Role deleted
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not the owner of the role's server.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Role not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: The role is the server's current default role.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/servers/{serverId}/members/{userId}/roles:
+    post:
+      summary: Assign a role to a member
+      description: >
+        Only the server owner can assign roles. The target user must already
+        be a member of the server, and the role must belong to it. Assigning
+        an already-assigned role is idempotent.
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role_id]
+              properties:
+                role_id: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Role assigned (or already assigned).
+        "400":
+          description: The role belongs to a different server, or the body is not valid JSON.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not the server owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Server, role, or target member not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    get:
+      summary: List a member's roles
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: List of roles assigned to the member
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Role" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Server not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/servers/{serverId}/members/{userId}/roles/{roleId}:
+    delete:
+      summary: Remove a role from a member
+      description: Only the server owner can remove roles. The role must belong to this server.
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: roleId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204":
+          description: Role removed
+        "400":
+          description: The role belongs to a different server.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not the server owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Server not found, or the member doesn't have this role.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
   /v1/invites/{code}:
     delete:
       summary: Revoke an invitation
@@ -241,6 +530,52 @@ paths:
               schema: { $ref: "#/components/schemas/Error" }
         "404":
           description: No invitation with that code.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/servers/{serverId}/default-role:
+    put:
+      summary: Set the server's default role for new members
+      description: >
+        Only the server owner can set this. The role must belong to this
+        server. The default role is what new members will get assigned when
+        they join (applying it on join is out of scope until the "join
+        server" flow exists).
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role_id]
+              properties:
+                role_id: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Default role set.
+        "400":
+          description: The role belongs to a different server.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not the server owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Server or role not found.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
