@@ -43,6 +43,7 @@ func newRepo(t *testing.T) (*member_repo.MemberRepository, *repository.ServerRep
 		"../../../migrations/0001_init.sql",
 		"../../../migrations/0003_roles.sql",
 		"../../../migrations/0004_member_roles.sql",
+		"../../../migrations/0005_default_role.sql",
 	} {
 		schema, err := os.ReadFile(file)
 		if err != nil {

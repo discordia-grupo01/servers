@@ -40,7 +40,7 @@ func TestRoleRepo_Delete_NotFound_ReturnsErrRoleNotFound(t *testing.T) {
 	}
 }
 
-func TestDeleteRole_WasDefaultRole_ClearsDefault(t *testing.T) {
+func TestRoleRepo_Delete_IsServerDefault_Rejected(t *testing.T) {
 	roles, servers, pool := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
@@ -55,16 +55,20 @@ func TestDeleteRole_WasDefaultRole_ClearsDefault(t *testing.T) {
 		t.Fatalf("SetDefaultRole: %v", err)
 	}
 
-	if err := roles.Delete(ctx, rl.ID); err != nil {
-		t.Fatalf("Delete: %v", err)
+	err := roles.Delete(ctx, rl.ID)
+	if !errors.Is(err, model.ErrRoleIsServerDefault) {
+		t.Fatalf("Delete err = %v, want ErrRoleIsServerDefault", err)
 	}
 
 	var defaultRoleID *uuid.UUID
 	if err := pool.QueryRow(ctx, `SELECT default_role_id FROM servers WHERE id = $1`, srv.ID).Scan(&defaultRoleID); err != nil {
 		t.Fatalf("select default_role_id: %v", err)
 	}
-	if defaultRoleID != nil {
-		t.Errorf("default_role_id = %v, want NULL", *defaultRoleID)
+	if defaultRoleID == nil || *defaultRoleID != rl.ID {
+		t.Errorf("default_role_id = %v, want %v (delete should be a no-op)", defaultRoleID, rl.ID)
+	}
+	if _, err := roles.GetByID(ctx, rl.ID); err != nil {
+		t.Errorf("role should still exist after a rejected delete: %v", err)
 	}
 }
 

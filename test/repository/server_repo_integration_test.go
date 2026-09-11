@@ -35,13 +35,20 @@ func newRepo(t *testing.T) (*repository.ServerRepository, *pgxpool.Pool) {
 	t.Cleanup(pool.Close)
 	t.Cleanup(func() { dropAllTestTables(ctx, pool) })
 
-	schema, err := os.ReadFile("../../migrations/0001_init.sql")
-	if err != nil {
-		t.Fatalf("read migration: %v", err)
-	}
 	dropAllTestTables(ctx, pool)
-	if _, err := pool.Exec(ctx, string(schema)); err != nil {
-		t.Fatalf("apply schema: %v", err)
+	for _, path := range []string{
+		"../../migrations/0001_init.sql",
+		"../../migrations/0003_roles.sql",
+		"../../migrations/0004_member_roles.sql",
+		"../../migrations/0005_default_role.sql",
+	} {
+		schema, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read migration %s: %v", path, err)
+		}
+		if _, err := pool.Exec(ctx, string(schema)); err != nil {
+			t.Fatalf("apply schema %s: %v", path, err)
+		}
 	}
 	return repository.NewServerRepository(pool), pool
 }

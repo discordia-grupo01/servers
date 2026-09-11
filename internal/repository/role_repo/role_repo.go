@@ -87,13 +87,33 @@ func (r *RoleRepository) Update(ctx context.Context, rl role.Role) error {
 	return nil
 }
 
+// Delete removes a role, unless it is currently its server's default role
+// (checked atomically in the same statement, so a concurrent
+// SetDefaultRole cannot race it into deleting the default anyway).
 func (r *RoleRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	tag, err := r.pool.Exec(ctx, `DELETE FROM roles WHERE id = $1`, id)
+	tag, err := r.pool.Exec(ctx, `
+		DELETE FROM roles
+		 WHERE id = $1
+		   AND NOT EXISTS (SELECT 1 FROM servers WHERE servers.default_role_id = roles.id)`,
+		id)
 	if err != nil {
 		return fmt.Errorf("delete role: %w", err)
 	}
-	if tag.RowsAffected() == 0 {
-		return model.ErrRoleNotFound
+	if tag.RowsAffected() > 0 {
+		return nil
 	}
-	return nil
+
+	var isDefault bool
+	err = r.pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM roles JOIN servers ON servers.id = roles.server_id
+			 WHERE roles.id = $1 AND servers.default_role_id = roles.id
+		)`, id).Scan(&isDefault)
+	if err != nil {
+		return fmt.Errorf("check role default: %w", err)
+	}
+	if isDefault {
+		return model.ErrRoleIsServerDefault
+	}
+	return model.ErrRoleNotFound
 }
