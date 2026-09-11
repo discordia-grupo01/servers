@@ -104,7 +104,10 @@ Ver [`openapi.yaml`](openapi.yaml).
 
 | Metodo | Ruta | Auth | Descripcion |
 |---|---|---|---|
-| POST | `/v1/servers` | si | Crear servidor (multipart: `name`, `icon?`). |
+| POST | `/v1/servers` | si | Crear servidor (multipart: `name`, `icon?`). Sin `icon`, se genera un ícono default de color random. |
+| GET | `/v1/servers` | si | Mis servidores (de los que soy owner o miembro), con sus canales. |
+| GET | `/v1/servers/{serverId}` | si | Un servidor puntual (nombre, canales, icon_url). Ej.: después de un `join`, para obtener los datos con solo el `server_id`. |
+| GET | `/v1/servers/{serverId}/icon` | si | Sirve el archivo del ícono (subido o el default generado). |
 | POST | `/v1/servers/:serverId/invites` | si | Generar invitación (JSON opcional: `max_uses?`; expira a los 7 días). |
 | DELETE | `/v1/invites/:code` | si | Revocar una invitación (idempotente). |
 | POST | `/v1/invites/:code/join` | si | Unirse a un servidor con una invitación. |
