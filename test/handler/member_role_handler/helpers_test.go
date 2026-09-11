@@ -28,6 +28,14 @@ func (fakeServerUseCases) CreateServer(context.Context, service.CreateServerPara
 	return model.Server{}, nil
 }
 
+func (fakeServerUseCases) ListMyServers(context.Context, string) ([]model.Server, error) {
+	return nil, nil
+}
+
+func (fakeServerUseCases) GetServer(context.Context, uuid.UUID) (model.Server, error) {
+	return model.Server{}, nil
+}
+
 type fakeRoleUseCases struct{}
 
 func (fakeRoleUseCases) CreateRole(context.Context, role_service.CreateRoleParams) (role.Role, error) {
