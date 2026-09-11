@@ -7,6 +7,7 @@ moderación). Historias cubiertas hasta ahora:
 - **Generar invitación** (link único, expira a los 7 días, con o sin límite de usos; revocable).
 - **Unirse a servidor vía invitación**.
 - **Abandonar servidor** 
+- **Transferir propiedad del servidor**
 - **Crear rol** (#21).
 - **Editar permisos de un rol** (#22).
 - **Asignar/quitar rol a un miembro** (#23).
@@ -108,6 +109,9 @@ Ver [`openapi.yaml`](openapi.yaml).
 | DELETE | `/v1/invites/:code` | si | Revocar una invitación (idempotente). |
 | POST | `/v1/invites/:code/join` | si | Unirse a un servidor con una invitación. |
 | DELETE | `/v1/servers/{serverId}/members/{userId}` | si (uno mismo) | Abandonar un servidor. `userId` debe ser el propio caller; el owner no puede abandonar así (409, primero tiene que transferir la propiedad o eliminar el servidor). |
+| POST | `/v1/servers/{serverId}/ownership-transfers` | si (owner) | Ofrecer la propiedad a otro miembro (`to_user_id`). Crea una transferencia pendiente; no cambia nada hasta que el destinatario responde. Rechaza si `to_user_id` no es miembro (400) o si ya hay una transferencia pendiente para ese server (409). |
+| POST | `/v1/servers/{serverId}/ownership-transfers/{transferId}/accept` | si (destinatario) | Aceptar: pasa a ser el nuevo owner y el anterior queda como miembro regular. |
+| POST | `/v1/servers/{serverId}/ownership-transfers/{transferId}/reject` | si (destinatario) | Rechazar: la propiedad no cambia. |
 | POST | `/v1/servers/{serverId}/roles` | si (owner) | Crear rol (`name`, `color`). |
 | GET | `/v1/servers/{serverId}/roles` | si | Listar roles de un server. |
 | PATCH | `/v1/roles/{roleId}` | si (owner) | Editar permisos/nombre/color de un rol. |

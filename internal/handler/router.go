@@ -9,6 +9,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/handler/invitation"
 	"github.com/discordia-grupo01/servers/internal/handler/member_role_handler"
 	"github.com/discordia-grupo01/servers/internal/handler/membership_handler"
+	"github.com/discordia-grupo01/servers/internal/handler/ownership_transfer_handler"
 	"github.com/discordia-grupo01/servers/internal/handler/role_handler"
 	"github.com/discordia-grupo01/servers/internal/middleware"
 )
@@ -18,13 +19,14 @@ type Pinger interface {
 }
 
 type Deps struct {
-	Servers     ServerUseCases
-	Roles       role_handler.RoleUseCases
-	MemberRoles member_role_handler.MemberRoleUseCases
-	Membership  membership_handler.UseCases
-	Invitations invitation.UseCases
-	Auth        middleware.AuthConfig
-	DB          Pinger
+	Servers            ServerUseCases
+	Roles              role_handler.RoleUseCases
+	MemberRoles        member_role_handler.MemberRoleUseCases
+	Membership         membership_handler.UseCases
+	OwnershipTransfers ownership_transfer_handler.UseCases
+	Invitations        invitation.UseCases
+	Auth               middleware.AuthConfig
+	DB                 Pinger
 }
 
 func NewRouter(d Deps) *gin.Engine {
@@ -32,6 +34,7 @@ func NewRouter(d Deps) *gin.Engine {
 	roleH := role_handler.New(d.Roles)
 	memberRoleH := member_role_handler.New(d.MemberRoles)
 	membershipH := membership_handler.New(d.Membership)
+	transferH := ownership_transfer_handler.New(d.OwnershipTransfers)
 
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery())
@@ -68,6 +71,10 @@ func NewRouter(d Deps) *gin.Engine {
 	v1.GET("/servers/:serverId/members/:userId/roles", memberRoleH.ListMemberRoles)
 
 	v1.DELETE("/servers/:serverId/members/:userId", membershipH.LeaveServer)
+
+	v1.POST("/servers/:serverId/ownership-transfers", transferH.Initiate)
+	v1.POST("/servers/:serverId/ownership-transfers/:transferId/accept", transferH.Accept)
+	v1.POST("/servers/:serverId/ownership-transfers/:transferId/reject", transferH.Reject)
 
 	invitation.NewHandler(d.Invitations).Register(v1)
 

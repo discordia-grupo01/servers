@@ -12,11 +12,13 @@ import (
 	"github.com/discordia-grupo01/servers/internal/middleware"
 	"github.com/discordia-grupo01/servers/internal/repository"
 	"github.com/discordia-grupo01/servers/internal/repository/member_repo"
+	"github.com/discordia-grupo01/servers/internal/repository/ownership_transfer_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/role_repo"
 	"github.com/discordia-grupo01/servers/internal/service"
 	"github.com/discordia-grupo01/servers/internal/service/invitation"
 	"github.com/discordia-grupo01/servers/internal/service/member_role_service"
 	"github.com/discordia-grupo01/servers/internal/service/membership_service"
+	"github.com/discordia-grupo01/servers/internal/service/ownership_transfer_service"
 	"github.com/discordia-grupo01/servers/internal/service/role_service"
 )
 
@@ -45,21 +47,24 @@ func main() {
 	serverRepo := repository.NewServerRepository(pool)
 	roleRepo := role_repo.NewRoleRepository(pool)
 	memberRepo := member_repo.NewMemberRepository(pool)
+	transferRepo := ownership_transfer_repo.NewRepository(pool)
 
 	svc := service.New(serverRepo, icons)
 	roleSvc := role_service.New(serverRepo, roleRepo)
 	memberRoleSvc := member_role_service.New(serverRepo, roleRepo, memberRepo)
 	membershipSvc := membership_service.New(serverRepo, memberRepo)
+	transferSvc := ownership_transfer_service.New(serverRepo, memberRepo, transferRepo)
 	invSvc := invitation.NewService(repository.NewInvitationRepository(pool))
 
 	router := handler.NewRouter(handler.Deps{
-		Servers:     svc,
-		Roles:       roleSvc,
-		MemberRoles: memberRoleSvc,
-		Membership:  membershipSvc,
-		Invitations: invSvc,
-		Auth:        middleware.AuthConfig{UserIDHeader: cfg.UserIDHeader},
-		DB:          pool,
+		Servers:            svc,
+		Roles:              roleSvc,
+		MemberRoles:        memberRoleSvc,
+		Membership:         membershipSvc,
+		OwnershipTransfers: transferSvc,
+		Invitations:        invSvc,
+		Auth:               middleware.AuthConfig{UserIDHeader: cfg.UserIDHeader},
+		DB:                 pool,
 	})
 
 	addr := cfg.Host + ":" + cfg.Port

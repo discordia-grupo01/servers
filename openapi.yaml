@@ -110,6 +110,20 @@ components:
           example: [SEND_MESSAGES, MANAGE_CHANNELS]
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
+    OwnershipTransfer:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        server_id: { type: string, format: uuid }
+        from_user_id: { type: string, description: user id of the server's owner at the time the transfer was created }
+        to_user_id: { type: string, description: user id of the member offered ownership }
+        status: { type: string, enum: [pending, accepted, rejected] }
+        created_at: { type: string, format: date-time }
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Set once the recipient accepts or rejects; null while pending.
 
 security:
   - bearerAuth: []
@@ -545,6 +559,159 @@ paths:
           description: >
             The caller is the server's owner and cannot leave directly.
             Transfer ownership or delete the server first.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/servers/{serverId}/ownership-transfers:
+    post:
+      summary: Transfer server ownership
+      description: >
+        The server's owner offers ownership to another member. Creates a
+        pending transfer that the recipient must accept or reject; nothing
+        changes until they respond. Only one pending transfer can exist per
+        server at a time.
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [to_user_id]
+              properties:
+                to_user_id: { type: string, description: user id of the member to transfer ownership to }
+      responses:
+        "201":
+          description: Pending transfer created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OwnershipTransfer" }
+        "400":
+          description: >
+            `to_user_id` is missing, belongs to the current owner, or is not
+            a member of this server (CA2).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not the server's owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Server not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: This server already has a pending ownership transfer.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/servers/{serverId}/ownership-transfers/{transferId}/accept:
+    post:
+      summary: Accept an ownership transfer
+      description: >
+        Only the transfer's recipient can accept it. On success, they become
+        the server's new owner and the previous owner becomes a regular
+        member (CA1).
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: transferId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Ownership transferred.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OwnershipTransfer" }
+        "400":
+          description: The transfer does not belong to this server.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not the transfer's recipient.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Transfer not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: >
+            The transfer is no longer pending (already resolved), or the
+            recipient is no longer a member of the server.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/servers/{serverId}/ownership-transfers/{transferId}/reject:
+    post:
+      summary: Reject an ownership transfer
+      description: >
+        Only the transfer's recipient can reject it. Ownership does not
+        change; the original owner keeps it (CA3).
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: transferId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Transfer rejected.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OwnershipTransfer" }
+        "400":
+          description: The transfer does not belong to this server.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not the transfer's recipient.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Transfer not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: The transfer is no longer pending (already resolved).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }

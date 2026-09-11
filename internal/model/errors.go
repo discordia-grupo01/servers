@@ -20,6 +20,15 @@ var (
 	ErrLeaveForbidden   = errors.New("you can only remove your own membership")
 	ErrOwnerCannotLeave = errors.New("the server owner cannot leave; transfer ownership or delete the server first")
 
+	ErrTransferTargetRequired          = errors.New("to_user_id must be provided")
+	ErrTransferTargetNotMember         = errors.New("the target user is not a member of this server")
+	ErrTransferTargetIsOwner           = errors.New("the target user is already the owner")
+	ErrOwnershipTransferNotFound       = errors.New("ownership transfer not found")
+	ErrOwnershipTransferServerMismatch = errors.New("ownership transfer does not belong to this server")
+	ErrOwnershipTransferWrongTarget    = errors.New("only the recipient of the transfer can respond to it")
+	ErrOwnershipTransferNotPending     = errors.New("ownership transfer is no longer pending")
+	ErrOwnershipTransferAlreadyPending = errors.New("this server already has a pending ownership transfer")
+
 	ErrRoleNotFound        = errors.New("role not found")
 	ErrRoleNameRequired    = errors.New("role name must be provided")
 	ErrRoleNameTooLong     = errors.New("role name is too long")

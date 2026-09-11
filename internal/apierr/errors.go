@@ -80,6 +80,23 @@ func WriteDomainError(c *gin.Context, err error) {
 		RespondError(c, http.StatusConflict, err.Error(), map[string]any{"reason": "owner_must_transfer_or_delete"})
 	case errors.Is(err, model.ErrServerNotFound):
 		RespondError(c, http.StatusNotFound, err.Error(), nil)
+
+	case errors.Is(err, model.ErrTransferTargetRequired):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("to_user_id", "required"))
+	case errors.Is(err, model.ErrTransferTargetNotMember):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("to_user_id", "not_a_member"))
+	case errors.Is(err, model.ErrTransferTargetIsOwner):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("to_user_id", "already_owner"))
+	case errors.Is(err, model.ErrOwnershipTransferNotFound):
+		RespondError(c, http.StatusNotFound, err.Error(), nil)
+	case errors.Is(err, model.ErrOwnershipTransferServerMismatch):
+		RespondError(c, http.StatusBadRequest, err.Error(), nil)
+	case errors.Is(err, model.ErrOwnershipTransferWrongTarget):
+		RespondError(c, http.StatusForbidden, err.Error(), nil)
+	case errors.Is(err, model.ErrOwnershipTransferNotPending):
+		RespondError(c, http.StatusConflict, err.Error(), map[string]any{"reason": "transfer_not_pending"})
+	case errors.Is(err, model.ErrOwnershipTransferAlreadyPending):
+		RespondError(c, http.StatusConflict, err.Error(), map[string]any{"reason": "transfer_already_pending"})
 	case errors.Is(err, model.ErrRoleNotFound):
 		RespondError(c, http.StatusNotFound, err.Error(), nil)
 	case errors.Is(err, model.ErrRoleNameRequired):
