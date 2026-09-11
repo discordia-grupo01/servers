@@ -16,6 +16,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/service"
 	"github.com/discordia-grupo01/servers/internal/service/invitation"
 	"github.com/discordia-grupo01/servers/internal/service/member_role_service"
+	"github.com/discordia-grupo01/servers/internal/service/membership_service"
 	"github.com/discordia-grupo01/servers/internal/service/role_service"
 )
 
@@ -48,12 +49,14 @@ func main() {
 	svc := service.New(serverRepo, icons)
 	roleSvc := role_service.New(serverRepo, roleRepo)
 	memberRoleSvc := member_role_service.New(serverRepo, roleRepo, memberRepo)
+	membershipSvc := membership_service.New(serverRepo, memberRepo)
 	invSvc := invitation.NewService(repository.NewInvitationRepository(pool))
 
 	router := handler.NewRouter(handler.Deps{
 		Servers:     svc,
 		Roles:       roleSvc,
 		MemberRoles: memberRoleSvc,
+		Membership:  membershipSvc,
 		Invitations: invSvc,
 		Auth:        middleware.AuthConfig{UserIDHeader: cfg.UserIDHeader},
 		DB:          pool,
