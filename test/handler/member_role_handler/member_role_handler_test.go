@@ -2,6 +2,7 @@ package member_role_handler_test
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -11,7 +12,8 @@ import (
 )
 
 func TestAssignRole_Returns200(t *testing.T) {
-	fake := &fakeMemberRoleUseCases{}
+	assigned := role.Role{ID: uuid.New(), Name: "Moderator"}
+	fake := &fakeMemberRoleUseCases{assignResult: assigned}
 	r := newRouter(t, fake)
 	serverID, userID, roleID := uuid.New(), "member-1", uuid.New()
 
@@ -25,6 +27,9 @@ func TestAssignRole_Returns200(t *testing.T) {
 	}
 	if fake.gotAssign.ActorUserID != testUser {
 		t.Errorf("ActorUserID = %q, want %q", fake.gotAssign.ActorUserID, testUser)
+	}
+	if !strings.Contains(w.Body.String(), assigned.ID.String()) {
+		t.Errorf("body = %s, want it to contain the assigned role %s", w.Body.String(), assigned.ID)
 	}
 }
 

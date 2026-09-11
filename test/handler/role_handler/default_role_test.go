@@ -9,14 +9,14 @@ import (
 	"github.com/discordia-grupo01/servers/internal/model"
 )
 
-func TestSetDefaultRole_Returns200(t *testing.T) {
+func TestSetDefaultRole_Returns204(t *testing.T) {
 	fake := &fakeRoleUseCases{}
 	r := newRouter(t, fake)
 	serverID, roleID := uuid.New(), uuid.New()
 
 	w := doJSON(t, r, http.MethodPut, "/v1/servers/"+serverID.String()+"/default-role", testUser,
 		map[string]string{"role_id": roleID.String()})
-	if w.Code != http.StatusOK {
+	if w.Code != http.StatusNoContent {
 		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
 	}
 	if fake.gotSetDefault.ServerID != serverID || fake.gotSetDefault.RoleID != roleID {

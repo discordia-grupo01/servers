@@ -53,8 +53,9 @@ func (fakeRoleUseCases) DeleteRole(context.Context, role_service.DeleteRoleParam
 }
 
 type fakeMemberRoleUseCases struct {
-	assignErr error
-	gotAssign member_role_service.AssignRoleParams
+	assignErr    error
+	assignResult role.Role
+	gotAssign    member_role_service.AssignRoleParams
 
 	removeErr error
 	gotRemove member_role_service.RemoveRoleParams
@@ -65,9 +66,12 @@ type fakeMemberRoleUseCases struct {
 	gotListUserID   string
 }
 
-func (f *fakeMemberRoleUseCases) AssignRole(_ context.Context, p member_role_service.AssignRoleParams) error {
+func (f *fakeMemberRoleUseCases) AssignRole(_ context.Context, p member_role_service.AssignRoleParams) (role.Role, error) {
 	f.gotAssign = p
-	return f.assignErr
+	if f.assignErr != nil {
+		return role.Role{}, f.assignErr
+	}
+	return f.assignResult, nil
 }
 
 func (f *fakeMemberRoleUseCases) RemoveRole(_ context.Context, p member_role_service.RemoveRoleParams) error {

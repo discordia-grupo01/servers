@@ -147,7 +147,7 @@ func (h *Handler) SetDefaultRole(c *gin.Context) {
 		apierr.WriteDomainError(c, err)
 		return
 	}
-	c.Status(http.StatusOK)
+	c.Status(http.StatusNoContent)
 }
 
 // DELETE /v1/roles/:roleId

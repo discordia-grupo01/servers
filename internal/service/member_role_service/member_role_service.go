@@ -59,32 +59,33 @@ type AssignRoleParams struct {
 	ActorUserID  string
 }
 
-func (s *MemberRoleService) AssignRole(ctx context.Context, p AssignRoleParams) error {
+func (s *MemberRoleService) AssignRole(ctx context.Context, p AssignRoleParams) (role.Role, error) {
 	srv, err := s.servers.GetByID(ctx, p.ServerID)
 	if err != nil {
-		return err
+		return role.Role{}, err
 	}
 	if err := service.RequireManageRoles(srv, p.ActorUserID); err != nil {
-		return err
+		return role.Role{}, err
 	}
 
-	if _, err := s.resolveRole(ctx, p.ServerID, p.RoleID); err != nil {
-		return err
+	rl, err := s.resolveRole(ctx, p.ServerID, p.RoleID)
+	if err != nil {
+		return role.Role{}, err
 	}
 
 	isMember, err := s.members.IsMember(ctx, p.ServerID, p.TargetUserID)
 	if err != nil {
-		return err
+		return role.Role{}, err
 	}
 	if !isMember {
-		return model.ErrMemberNotFound
+		return role.Role{}, model.ErrMemberNotFound
 	}
 
 	if err := s.members.AssignRole(ctx, p.ServerID, p.TargetUserID, p.RoleID); err != nil {
-		return err
+		return role.Role{}, err
 	}
 	// TODO(events): publicar "roles.member_role_assigned" en discordia.events cuando exista un consumidor real (ver Canales).
-	return nil
+	return rl, nil
 }
 
 type RemoveRoleParams struct {

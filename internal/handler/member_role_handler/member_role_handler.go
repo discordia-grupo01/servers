@@ -18,7 +18,7 @@ import (
 
 // MemberRoleUseCases is the slice of MemberRoleService this handler needs.
 type MemberRoleUseCases interface {
-	AssignRole(ctx context.Context, p member_role_service.AssignRoleParams) error
+	AssignRole(ctx context.Context, p member_role_service.AssignRoleParams) (role.Role, error)
 	RemoveRole(ctx context.Context, p member_role_service.RemoveRoleParams) error
 	ListMemberRoles(ctx context.Context, serverID uuid.UUID, userID string) ([]role.Role, error)
 }
@@ -54,7 +54,7 @@ func (h *Handler) AssignRole(c *gin.Context) {
 		return
 	}
 
-	err = h.uc.AssignRole(c.Request.Context(), member_role_service.AssignRoleParams{
+	rl, err := h.uc.AssignRole(c.Request.Context(), member_role_service.AssignRoleParams{
 		ServerID:     serverID,
 		TargetUserID: targetUserID,
 		RoleID:       roleID,
@@ -64,7 +64,7 @@ func (h *Handler) AssignRole(c *gin.Context) {
 		apierr.WriteDomainError(c, err)
 		return
 	}
-	c.Status(http.StatusOK)
+	c.JSON(http.StatusOK, roleview.ToResponse(rl))
 }
 
 // DELETE /v1/servers/:serverId/members/:userId/roles/:roleId
