@@ -58,6 +58,7 @@ func main() {
 
 	router := handler.NewRouter(handler.Deps{
 		Servers:            svc,
+		Icons:              icons,
 		Roles:              roleSvc,
 		MemberRoles:        memberRoleSvc,
 		Membership:         membershipSvc,

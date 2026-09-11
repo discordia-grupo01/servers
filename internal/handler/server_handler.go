@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 
 	"github.com/discordia-grupo01/servers/internal/apierr"
 	"github.com/discordia-grupo01/servers/internal/middleware"
@@ -24,10 +25,16 @@ const (
 
 type ServerUseCases interface {
 	CreateServer(ctx context.Context, p service.CreateServerParams) (model.Server, error)
+	ListMyServers(ctx context.Context, userID string) ([]model.Server, error)
+	GetServer(ctx context.Context, id uuid.UUID) (model.Server, error)
+}
+type IconStore interface {
+	FilePath(id string) (path string, ok bool)
 }
 
 type serverHandler struct {
-	uc ServerUseCases
+	uc    ServerUseCases
+	icons IconStore
 }
 
 type channelResponse struct {
@@ -93,6 +100,48 @@ func (h *serverHandler) createServer(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusCreated, toServerResponse(srv))
+}
+
+// GET /v1/servers
+func (h *serverHandler) listMyServers(c *gin.Context) {
+	servers, err := h.uc.ListMyServers(c.Request.Context(), middleware.UserID(c))
+	if err != nil {
+		apierr.WriteDomainError(c, err)
+		return
+	}
+
+	resp := make([]serverResponse, 0, len(servers))
+	for _, srv := range servers {
+		resp = append(resp, toServerResponse(srv))
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+// GET /v1/servers/:serverId
+func (h *serverHandler) getServer(c *gin.Context) {
+	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
+	if !ok {
+		return
+	}
+	srv, err := h.uc.GetServer(c.Request.Context(), serverID)
+	if err != nil {
+		apierr.WriteDomainError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, toServerResponse(srv))
+}
+
+// GET /v1/servers/:serverId/icon
+func (h *serverHandler) getIcon(c *gin.Context) {
+	if _, ok := apierr.ParseUUIDParam(c, "serverId"); !ok {
+		return
+	}
+	path, ok := h.icons.FilePath(c.Param("serverId"))
+	if !ok {
+		apierr.RespondError(c, http.StatusNotFound, "icon not found", nil)
+		return
+	}
+	c.File(path)
 }
 
 func readUpload(fh *multipart.FileHeader) ([]byte, error) {
