@@ -101,7 +101,7 @@ components:
         id: { type: string, format: uuid }
         server_id: { type: string, format: uuid }
         name: { type: string, example: Moderator }
-        color: { type: string, example: "#FF00AA", description: Hex color, #RRGGBB. }
+        color: { type: string, example: "#FF00AA", description: "Hex color, #RRGGBB." }
         permissions:
           type: array
           items:
@@ -501,6 +501,50 @@ paths:
               schema: { $ref: "#/components/schemas/Error" }
         "404":
           description: Server not found, or the member doesn't have this role.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/servers/{serverId}/members/{userId}:
+    delete:
+      summary: Leave a server
+      description: >
+        A member removes their own membership from a server. `userId` must be
+        the caller's own id -- this endpoint does not support removing another
+        member (kick), only leaving voluntarily. The server owner cannot leave
+        this way: they must transfer ownership or delete the server first.
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: userId
+          in: path
+          required: true
+          description: Must equal the authenticated caller's id.
+          schema: { type: string }
+      responses:
+        "204":
+          description: Membership removed. The caller no longer has access to the server's channels.
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: "`userId` does not match the authenticated caller."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Server not found, or the caller is not a member of it.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: >
+            The caller is the server's owner and cannot leave directly.
+            Transfer ownership or delete the server first.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }

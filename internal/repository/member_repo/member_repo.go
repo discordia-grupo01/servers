@@ -47,6 +47,17 @@ func (r *MemberRepository) AssignRole(ctx context.Context, serverID uuid.UUID, u
 	return nil
 }
 
+func (r *MemberRepository) RemoveMember(ctx context.Context, serverID uuid.UUID, userID string) (bool, error) {
+	tag, err := r.pool.Exec(ctx,
+		`DELETE FROM server_members WHERE server_id = $1 AND user_id = $2`,
+		serverID, userID,
+	)
+	if err != nil {
+		return false, fmt.Errorf("remove member: %w", err)
+	}
+	return tag.RowsAffected() > 0, nil
+}
+
 func (r *MemberRepository) RemoveRole(ctx context.Context, serverID uuid.UUID, userID string, roleID uuid.UUID) error {
 	tag, err := r.pool.Exec(ctx,
 		`DELETE FROM member_roles WHERE server_id = $1 AND user_id = $2 AND role_id = $3`,
