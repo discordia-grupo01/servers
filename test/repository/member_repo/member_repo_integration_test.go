@@ -203,6 +203,59 @@ func TestMemberRepo_AssignRole_ConcurrentAssignment_NoConflict(t *testing.T) {
 	}
 }
 
+func TestMemberRepo_RemoveMember_ThenIsMemberFalse(t *testing.T) {
+	members, servers, _, pool := newRepo(t)
+	ctx := context.Background()
+	srv, member := seedServerWithMember(ctx, t, servers, pool)
+
+	removed, err := members.RemoveMember(ctx, srv.ID, member)
+	if err != nil || !removed {
+		t.Fatalf("RemoveMember = %v, %v; want true, nil", removed, err)
+	}
+
+	isMember, err := members.IsMember(ctx, srv.ID, member)
+	if err != nil || isMember {
+		t.Errorf("IsMember after RemoveMember = %v, %v; want false, nil", isMember, err)
+	}
+}
+
+func TestMemberRepo_RemoveMember_NotAMember_ReturnsFalse(t *testing.T) {
+	members, servers, _, pool := newRepo(t)
+	ctx := context.Background()
+	srv, _ := seedServerWithMember(ctx, t, servers, pool)
+
+	removed, err := members.RemoveMember(ctx, srv.ID, "never-joined")
+	if err != nil || removed {
+		t.Errorf("RemoveMember(non-member) = %v, %v; want false, nil", removed, err)
+	}
+}
+
+func TestMemberRepo_RemoveMember_CascadesToMemberRoles(t *testing.T) {
+	members, servers, roles, pool := newRepo(t)
+	ctx := context.Background()
+	srv, member := seedServerWithMember(ctx, t, servers, pool)
+	rl := seedRole(ctx, t, roles, srv.ID, "Moderator")
+
+	if err := members.AssignRole(ctx, srv.ID, member, rl.ID); err != nil {
+		t.Fatalf("AssignRole: %v", err)
+	}
+
+	if _, err := members.RemoveMember(ctx, srv.ID, member); err != nil {
+		t.Fatalf("RemoveMember: %v", err)
+	}
+
+	var count int
+	if err := pool.QueryRow(ctx,
+		`SELECT count(*) FROM member_roles WHERE server_id = $1 AND user_id = $2`,
+		srv.ID, member,
+	).Scan(&count); err != nil {
+		t.Fatalf("count member_roles: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("member_roles rows left = %d, want 0 (should cascade on membership delete)", count)
+	}
+}
+
 // dropAllTestTables wipes every table any of this repo's integration test
 // packages might have created, so a test run leaves the database exactly as
 // clean as it found it -- both before it starts and after it finishes.
