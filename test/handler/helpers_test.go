@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 
 	"github.com/discordia-grupo01/servers/internal/handler"
 	"github.com/discordia-grupo01/servers/internal/iconstore"
@@ -24,6 +25,15 @@ type fakeRepo struct {
 	err     error
 	calls   int
 	created model.Server
+
+	listResult  []model.Server
+	listErr     error
+	listCalls   int
+	gotListUser string
+
+	getResult model.Server
+	getErr    error
+	getCalls  int
 }
 
 func (f *fakeRepo) CreateServer(_ context.Context, s model.Server, _ []model.Channel) error {
@@ -33,6 +43,23 @@ func (f *fakeRepo) CreateServer(_ context.Context, s model.Server, _ []model.Cha
 	}
 	f.created = s
 	return nil
+}
+
+func (f *fakeRepo) ListForUser(_ context.Context, userID string) ([]model.Server, error) {
+	f.listCalls++
+	f.gotListUser = userID
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	return f.listResult, nil
+}
+
+func (f *fakeRepo) GetByID(_ context.Context, _ uuid.UUID) (model.Server, error) {
+	f.getCalls++
+	if f.getErr != nil {
+		return model.Server{}, f.getErr
+	}
+	return f.getResult, nil
 }
 
 type okPinger struct{}
@@ -71,6 +98,7 @@ func newRouter(t *testing.T, maxIcon int64, repoErr error) (*gin.Engine, *fakeRe
 	}
 	r := handler.NewRouter(handler.Deps{
 		Servers: service.New(repo, icons),
+		Icons:   icons,
 		Auth:    middleware.AuthConfig{UserIDHeader: "X-User-Id"},
 		DB:      okPinger{},
 	})
@@ -103,6 +131,17 @@ func postGet(t *testing.T, r http.Handler, path string) *httptest.ResponseRecord
 	t.Helper()
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
+	return w
+}
+
+func getAsUser(t *testing.T, r http.Handler, user, path string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	if user != "" {
+		req.Header.Set("X-User-Id", user)
+	}
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
 	return w
 }
 

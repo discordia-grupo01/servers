@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -59,6 +60,10 @@ func (r *ServerRepository) CreateServer(ctx context.Context, srv model.Server, c
 	})
 }
 
+// GetByID fetches a server together with its channels. Used both internally
+// (other feature services only care about OwnerID/DefaultRoleID, and just
+// ignore Channels) and by the GET /v1/servers/:serverId handler (which needs
+// the full representation).
 func (r *ServerRepository) GetByID(ctx context.Context, id uuid.UUID) (model.Server, error) {
 	row := r.pool.QueryRow(ctx, `
 		SELECT id, name, name_key, icon_url, owner_id, created_at, default_role_id
@@ -71,7 +76,94 @@ func (r *ServerRepository) GetByID(ctx context.Context, id uuid.UUID) (model.Ser
 		}
 		return model.Server{}, fmt.Errorf("select server: %w", err)
 	}
+
+	channels, err := r.channelsByServerID(ctx, id)
+	if err != nil {
+		return model.Server{}, err
+	}
+	s.Channels = channels
 	return s, nil
+}
+
+func (r *ServerRepository) channelsByServerID(ctx context.Context, serverID uuid.UUID) ([]model.Channel, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, server_id, name, kind, position, created_at
+		  FROM channels WHERE server_id = $1 ORDER BY position`, serverID)
+	if err != nil {
+		return nil, fmt.Errorf("list channels: %w", err)
+	}
+	defer rows.Close()
+
+	channels := make([]model.Channel, 0)
+	for rows.Next() {
+		var ch model.Channel
+		var kind string
+		if err := rows.Scan(&ch.ID, &ch.ServerID, &ch.Name, &kind, &ch.Position, &ch.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan channel: %w", err)
+		}
+		ch.Kind = model.ChannelKind(kind)
+		channels = append(channels, ch)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list channels: %w", err)
+	}
+	return channels, nil
+}
+
+func (r *ServerRepository) ListForUser(ctx context.Context, userID string) ([]model.Server, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT s.id, s.name, s.name_key, s.icon_url, s.owner_id, s.created_at,
+		       c.id, c.name, c.kind, c.position, c.created_at
+		  FROM servers s
+		  JOIN server_members m ON m.server_id = s.id
+		  LEFT JOIN channels c ON c.server_id = s.id
+		 WHERE m.user_id = $1
+		 ORDER BY m.joined_at DESC, c.position`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("list servers for user: %w", err)
+	}
+	defer rows.Close()
+
+	order := make([]uuid.UUID, 0)
+	byID := make(map[uuid.UUID]*model.Server)
+
+	for rows.Next() {
+		var s model.Server
+		var chID *uuid.UUID
+		var chName, chKind *string
+		var chPosition *int
+		var chCreatedAt *time.Time
+
+		if err := rows.Scan(
+			&s.ID, &s.Name, &s.NameKey, &s.IconURL, &s.OwnerID, &s.CreatedAt,
+			&chID, &chName, &chKind, &chPosition, &chCreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan server row: %w", err)
+		}
+
+		srv, ok := byID[s.ID]
+		if !ok {
+			s.Channels = []model.Channel{}
+			byID[s.ID] = &s
+			srv = byID[s.ID]
+			order = append(order, s.ID)
+		}
+		if chID != nil {
+			srv.Channels = append(srv.Channels, model.Channel{
+				ID: *chID, ServerID: srv.ID, Name: *chName,
+				Kind: model.ChannelKind(*chKind), Position: *chPosition, CreatedAt: *chCreatedAt,
+			})
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list servers for user: %w", err)
+	}
+
+	servers := make([]model.Server, 0, len(order))
+	for _, id := range order {
+		servers = append(servers, *byID[id])
+	}
+	return servers, nil
 }
 
 func (r *ServerRepository) SetDefaultRole(ctx context.Context, serverID, roleID uuid.UUID) error {

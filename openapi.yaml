@@ -71,7 +71,11 @@ components:
         icon_url:
           type: string
           nullable: true
-          description: Relative URL to fetch the icon, or null if there is none.
+          description: >
+            Relative URL to GET the icon (serves the image bytes directly).
+            Never null in practice: a server always has an icon, either the
+            one its owner uploaded or a random solid-color default generated
+            at creation time.
         owner_id: { type: string, description: user id of the creator }
         created_at: { type: string, format: date-time }
         channels:
@@ -170,7 +174,10 @@ paths:
                 icon:
                   type: string
                   format: binary
-                  description: Optional. PNG, JPEG or WEBP, up to 2 MB.
+                  description: >
+                    Optional. PNG, JPEG or WEBP, up to 2 MB. If omitted, a
+                    random solid-color icon is generated so icon_url is never
+                    null.
       responses:
         "201":
           description: Server created
@@ -191,6 +198,95 @@ paths:
               schema: { $ref: "#/components/schemas/Error" }
         "409":
           description: The authenticated user already has a server with that name.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    get:
+      summary: List my servers
+      description: >
+        Lists every server the authenticated user is a member of (owned or
+        joined), most recently joined first. Each entry includes its channels,
+        same shape as the create-server response.
+      responses:
+        "200":
+          description: The caller's servers (possibly empty).
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Server" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/servers/{serverId}:
+    get:
+      summary: Get a server
+      description: >
+        Fetches one server (name, icon_url, owner, channels) by id. Typical
+        use: right after joining via an invitation, the client only has
+        server_id -- this is how it gets the rest of the server's data.
+        Like GET /v1/servers/{serverId}/roles, this only checks that the
+        server exists; it doesn't (yet) require the caller to be a member.
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: The server.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Server" }
+        "400":
+          description: Invalid serverId.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Server not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/servers/{serverId}/icon:
+    get:
+      summary: Get a server's icon
+      description: >
+        Serves the icon file itself (image bytes), whether it was uploaded or
+        auto-generated. This is what icon_url points to.
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: The icon image.
+          content:
+            image/png: { schema: { type: string, format: binary } }
+            image/jpeg: { schema: { type: string, format: binary } }
+            image/webp: { schema: { type: string, format: binary } }
+        "400":
+          description: Invalid serverId.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: No icon file for that id (server doesn't exist, or was never given one).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }

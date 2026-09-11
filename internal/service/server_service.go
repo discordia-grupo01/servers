@@ -15,11 +15,14 @@ import (
 
 type Repo interface {
 	CreateServer(ctx context.Context, srv model.Server, channels []model.Channel) error
+	ListForUser(ctx context.Context, userID string) ([]model.Server, error)
+	GetByID(ctx context.Context, id uuid.UUID) (model.Server, error)
 }
 
 type IconStore interface {
 	Save(id string, data []byte) (url string, err error)
 	Delete(id string) error
+	GenerateDefault() (data []byte, err error)
 }
 
 type Service struct {
@@ -73,23 +76,37 @@ func (s *Service) CreateServer(ctx context.Context, p CreateServerParams) (model
 		},
 	}
 
-	iconSaved := false
-	if len(p.Icon) > 0 {
-		url, err := s.icons.Save(id.String(), p.Icon)
+	iconData := p.Icon
+	if len(iconData) == 0 {
+		generated, err := s.icons.GenerateDefault()
 		if err != nil {
 			return model.Server{}, err
 		}
-		srv.IconURL = &url
-		iconSaved = true
+		iconData = generated
 	}
 
+	url, err := s.icons.Save(id.String(), iconData)
+	if err != nil {
+		return model.Server{}, err
+	}
+	srv.IconURL = &url
+
 	if err := s.repo.CreateServer(ctx, srv, channels); err != nil {
-		if iconSaved {
-			_ = s.icons.Delete(id.String())
-		}
+		_ = s.icons.Delete(id.String())
 		return model.Server{}, err
 	}
 
 	srv.Channels = channels
 	return srv, nil
+}
+
+func (s *Service) ListMyServers(ctx context.Context, userID string) ([]model.Server, error) {
+	if userID == "" {
+		return nil, model.ErrUnauthorized
+	}
+	return s.repo.ListForUser(ctx, userID)
+}
+
+func (s *Service) GetServer(ctx context.Context, id uuid.UUID) (model.Server, error) {
+	return s.repo.GetByID(ctx, id)
 }

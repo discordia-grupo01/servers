@@ -43,6 +43,7 @@ type Store interface {
 	Save(id string, data []byte) (url string, err error)
 	Delete(id string) error
 	FilePath(id string) (path string, ok bool)
+	GenerateDefault() (data []byte, err error)
 }
 
 type LocalStore struct {

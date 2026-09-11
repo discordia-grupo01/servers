@@ -20,6 +20,7 @@ type Pinger interface {
 
 type Deps struct {
 	Servers            ServerUseCases
+	Icons              IconStore
 	Roles              role_handler.RoleUseCases
 	MemberRoles        member_role_handler.MemberRoleUseCases
 	Membership         membership_handler.UseCases
@@ -30,7 +31,7 @@ type Deps struct {
 }
 
 func NewRouter(d Deps) *gin.Engine {
-	h := &serverHandler{uc: d.Servers}
+	h := &serverHandler{uc: d.Servers, icons: d.Icons}
 	roleH := role_handler.New(d.Roles)
 	memberRoleH := member_role_handler.New(d.MemberRoles)
 	membershipH := membership_handler.New(d.Membership)
@@ -59,6 +60,9 @@ func NewRouter(d Deps) *gin.Engine {
 	v1 := r.Group("/v1")
 	v1.Use(middleware.Auth(d.Auth))
 	v1.POST("/servers", h.createServer)
+	v1.GET("/servers", h.listMyServers)
+	v1.GET("/servers/:serverId", h.getServer)
+	v1.GET("/servers/:serverId/icon", h.getIcon)
 
 	v1.POST("/servers/:serverId/roles", roleH.CreateRole)
 	v1.GET("/servers/:serverId/roles", roleH.ListRoles)

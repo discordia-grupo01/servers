@@ -101,6 +101,40 @@ func TestRepo_CreateServer_PersistsServerChannelsAndOwnerMembership(t *testing.T
 	}
 }
 
+func TestRepo_GetByID_ReturnsServerWithItsChannels(t *testing.T) {
+	repo, _ := newRepo(t)
+	ctx := context.Background()
+	srv, chans := serverFixture("Get By ID", "owner-"+uuid.NewString())
+	if err := repo.CreateServer(ctx, srv, chans); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	got, err := repo.GetByID(ctx, srv.ID)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if got.Name != srv.Name || got.OwnerID != srv.OwnerID {
+		t.Errorf("got = %+v", got)
+	}
+	if len(got.Channels) != 2 {
+		t.Fatalf("channels = %d, want 2", len(got.Channels))
+	}
+	kinds := map[model.ChannelKind]bool{}
+	for _, ch := range got.Channels {
+		kinds[ch.Kind] = true
+	}
+	if !kinds[model.ChannelText] || !kinds[model.ChannelVoice] {
+		t.Errorf("channel kinds = %v, want text+voice", kinds)
+	}
+}
+
+func TestRepo_GetByID_UnknownID_ReturnsNotFound(t *testing.T) {
+	repo, _ := newRepo(t)
+	if _, err := repo.GetByID(context.Background(), uuid.New()); !errors.Is(err, model.ErrServerNotFound) {
+		t.Errorf("err = %v, want ErrServerNotFound", err)
+	}
+}
+
 func TestRepo_CreateServer_DuplicateIDFails(t *testing.T) {
 	repo, _ := newRepo(t)
 	ctx := context.Background()
@@ -144,6 +178,97 @@ func TestRepo_CreateServer_SameNameKeyDifferentOwnerIsAllowed(t *testing.T) {
 	b.NameKey = a.NameKey
 	if err := repo.CreateServer(ctx, b, bCh); err != nil {
 		t.Errorf("same name_key / different owner should be allowed: %v", err)
+	}
+}
+
+func TestRepo_ListForUser_ReturnsOwnedServersWithChannels(t *testing.T) {
+	repo, _ := newRepo(t)
+	ctx := context.Background()
+	owner := "owner-" + uuid.NewString()
+
+	a, aCh := serverFixture("Server A", owner)
+	if err := repo.CreateServer(ctx, a, aCh); err != nil {
+		t.Fatalf("create A: %v", err)
+	}
+	b, bCh := serverFixture("Server B", owner)
+	if err := repo.CreateServer(ctx, b, bCh); err != nil {
+		t.Fatalf("create B: %v", err)
+	}
+
+	got, err := repo.ListForUser(ctx, owner)
+	if err != nil {
+		t.Fatalf("ListForUser: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %d servers, want 2", len(got))
+	}
+	for _, s := range got {
+		if len(s.Channels) != 2 {
+			t.Errorf("server %s has %d channels, want 2", s.Name, len(s.Channels))
+		}
+	}
+}
+
+func TestRepo_ListForUser_OnlyReturnsServersTheUserBelongsTo(t *testing.T) {
+	repo, _ := newRepo(t)
+	ctx := context.Background()
+
+	mine, mineCh := serverFixture("Mine", "owner-"+uuid.NewString())
+	if err := repo.CreateServer(ctx, mine, mineCh); err != nil {
+		t.Fatalf("create mine: %v", err)
+	}
+	other, otherCh := serverFixture("Not Mine", "someone-else-"+uuid.NewString())
+	if err := repo.CreateServer(ctx, other, otherCh); err != nil {
+		t.Fatalf("create other: %v", err)
+	}
+
+	got, err := repo.ListForUser(ctx, mine.OwnerID)
+	if err != nil {
+		t.Fatalf("ListForUser: %v", err)
+	}
+	if len(got) != 1 || got[0].ID != mine.ID {
+		t.Errorf("got = %+v, want only %v", got, mine.ID)
+	}
+}
+
+func TestRepo_ListForUser_IncludesServersJoinedNotOwned(t *testing.T) {
+	repo, pool := newRepo(t)
+	ctx := context.Background()
+
+	srv, ch := serverFixture("Joined Server", "owner-"+uuid.NewString())
+	if err := repo.CreateServer(ctx, srv, ch); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	member := "member-" + uuid.NewString()
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO server_members (server_id, user_id, is_owner, joined_at) VALUES ($1, $2, FALSE, now())`,
+		srv.ID, member,
+	); err != nil {
+		t.Fatalf("seed membership: %v", err)
+	}
+
+	got, err := repo.ListForUser(ctx, member)
+	if err != nil {
+		t.Fatalf("ListForUser: %v", err)
+	}
+	if len(got) != 1 || got[0].ID != srv.ID {
+		t.Errorf("got = %+v, want only %v", got, srv.ID)
+	}
+}
+
+func TestRepo_ListForUser_NoMemberships_ReturnsEmptyNotNil(t *testing.T) {
+	repo, _ := newRepo(t)
+
+	got, err := repo.ListForUser(context.Background(), "nobody-"+uuid.NewString())
+	if err != nil {
+		t.Fatalf("ListForUser: %v", err)
+	}
+	if got == nil {
+		t.Error("got nil, want an empty (non-nil) slice")
+	}
+	if len(got) != 0 {
+		t.Errorf("got %d servers, want 0", len(got))
 	}
 }
 
