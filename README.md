@@ -41,6 +41,8 @@ Con `docker compose up` se levanta también el servicio (`api`) contra la base.
 | DATABASE_NAME | **(obligatoria)** | Nombre de la base. |
 | DATABASE_USER | **(obligatoria)** | Usuario de conexion. |
 | DATABASE_PASSWORD | **(obligatoria)** | Password de conexion. |
+| DATABASE_SSLMODE | disable | `disable` en local; `require` cuando la BDD es Supabase (exige TLS). |
+| DATABASE_SCHEMA | - (vacio) | Vacio en local. En Supabase, el schema dedicado de este servicio dentro del proyecto compartido (ver seccion "Supabase" mas abajo). |
 | USER_ID_HEADER | X-User-Id | Header con el user id que inyecta Kong tras validar el JWT. |
 | ICON_DIR | ./data/icons | Directorio donde se guardan los iconos subidos. |
 | ICON_MAX_BYTES | 2097152 | Tamano maximo (bytes) de un icono. |
@@ -49,7 +51,7 @@ Las `DATABASE_*` no tienen default: si falta alguna, el servicio no arranca (no 
 
 ## Estructura de carpetas
 ```
-go-template/
+servers/
 ├── cmd/
 │   └── api/
 │       └── main.go          entrypoint: arma el router y levanta el server
@@ -78,6 +80,7 @@ go-template/
 - `make test` - corre los tests con cobertura.
 - `make build` - compila el binario en `bin/api`.
 - `make db-reset` - recrea la base desde cero (borra el volumen).
+- `make migrate` - aplica `migrations/*.sql` en orden contra la BDD que indique `.env` (local o Supabase). Sin tracking de "ya aplicadas": pensado para correr una vez contra un schema vacio (igual que el `docker-entrypoint-initdb.d` que ya usa `docker-compose.yml` para el Postgres local).
 
 ## Tests
 ```bash
@@ -98,6 +101,24 @@ Por lo mismo, correrlos contra `discordia_servicio` la deja completamente
 vacía (sin tablas) al finalizar; si vas a seguir probando el servicio a mano
 después, hace falta recrear las tablas (`docker compose down -v && docker
 compose up -d db`, o reaplicar `migrations/*.sql` a mano).
+
+## Supabase (produccion)
+El proyecto de Supabase es **compartido entre todos los servicios de Discordia** (un solo proyecto, un schema por servicio). Pasos:
+1. Una sola vez por proyecto de Supabase: crear el schema de este servicio. Se puede hacer sin SQL desde **Database > Schemas > New schema** (nombre `servers`), o corriendo en el SQL Editor:
+   ```sql
+   CREATE SCHEMA IF NOT EXISTS servers;
+   ```
+2. Completar en tu `.env` los datos de conexion de Supabase, tomados del boton **Connect** del proyecto, pestaña **Session pooler** (no "Direct connection": ese host solo resuelve por IPv6 y muchas redes no tienen esa salida; tampoco "Transaction pooler", que no sostiene el `search_path` por conexion):
+   ```
+   DATABASE_HOST=aws-0-<region>.pooler.supabase.com
+   DATABASE_PORT=5432
+   DATABASE_NAME=postgres
+   DATABASE_USER=postgres.<project-ref>
+   DATABASE_PASSWORD=<password del proyecto>
+   DATABASE_SSLMODE=require
+   DATABASE_SCHEMA=servers
+   ```
+3. Correr `make migrate` y despues `make run`. Confirmar con `GET /readyz` (200).
 
 ## Endpoints
 Ver [`openapi.yaml`](openapi.yaml).
