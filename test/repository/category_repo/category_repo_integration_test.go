@@ -38,8 +38,8 @@ func newRepo(t *testing.T) (*category_repo.CategoryRepository, *repository.Serve
 
 	dropAllTestTables(ctx, pool)
 	for _, file := range []string{
-		"../../../migrations/0001_init.sql",
-		"../../../migrations/0007_categories.sql",
+		"../../../migrations/0001_init.up.sql",
+		"../../../migrations/0007_categories.up.sql",
 	} {
 		schema, err := os.ReadFile(file)
 		if err != nil {

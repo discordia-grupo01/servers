@@ -37,8 +37,8 @@ func newInviteRepo(t *testing.T) (*repository.InvitationRepository, *pgxpool.Poo
 
 	dropAllTestTables(ctx, pool)
 	for _, f := range []string{
-		"0001_init.sql", "0002_invitations.sql",
-		"0003_roles.sql", "0004_member_roles.sql", "0005_default_role.sql",
+		"0001_init.up.sql", "0002_invitations.up.sql",
+		"0003_roles.up.sql", "0004_member_roles.up.sql", "0005_default_role.up.sql",
 	} {
 		schema, err := os.ReadFile("../../migrations/" + f)
 		if err != nil {

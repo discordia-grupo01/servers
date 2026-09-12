@@ -83,7 +83,7 @@ servers/
 - `make test` - corre los tests con cobertura.
 - `make build` - compila el binario en `bin/api`.
 - `make db-reset` - recrea la base desde cero (borra el volumen).
-- `make migrate` - aplica `migrations/*.sql` en orden contra la BDD que indique `.env` (local o Supabase). Sin tracking de "ya aplicadas": pensado para correr una vez contra un schema vacio (igual que el `docker-entrypoint-initdb.d` que ya usa `docker-compose.yml` para el Postgres local).
+- `make migrate` - aplica `migrations/*.up.sql` en orden contra la BDD que indique `.env` (local o Supabase), vía `golang-migrate`. Trackea en la propia BDD cuales ya se aplicaron: correrlo de nuevo despues de la primera vez es seguro, solo aplica las migraciones nuevas.
 
 ## Tests
 ```bash
@@ -104,7 +104,7 @@ terminar** — si Go los corre en paralelo (el default), se pisan entre sí.
 Por lo mismo, correrlos contra `discordia_servicio` la deja completamente
 vacía (sin tablas) al finalizar; si vas a seguir probando el servicio a mano
 después, hace falta recrear las tablas (`docker compose down -v && docker
-compose up -d db`, o reaplicar `migrations/*.sql` a mano).
+compose up -d db`, o `make migrate` de nuevo).
 
 ## Supabase (produccion)
 El proyecto de Supabase es **compartido entre todos los servicios de Discordia** (un solo proyecto, un schema por servicio). Pasos:
