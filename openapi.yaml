@@ -25,8 +25,25 @@ components:
       type: object
       properties:
         id: { type: string, format: uuid }
+        server_id: { type: string, format: uuid }
         name: { type: string, example: general }
         kind: { type: string, enum: [text, voice] }
+        position: { type: integer, example: 0 }
+        category_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Null means the channel is not in any category ("sin categoria").
+        topic:
+          type: string
+          nullable: true
+          example: Anuncios importantes del servidor
+    Category:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        server_id: { type: string, format: uuid }
+        name: { type: string, example: Texto }
         position: { type: integer, example: 0 }
     Invitation:
       type: object
@@ -81,6 +98,9 @@ components:
         channels:
           type: array
           items: { $ref: "#/components/schemas/Channel" }
+        categories:
+          type: array
+          items: { $ref: "#/components/schemas/Category" }
     Error:
       type: object
       properties:
@@ -287,6 +307,310 @@ paths:
               schema: { $ref: "#/components/schemas/Error" }
         "404":
           description: No icon file for that id (server doesn't exist, or was never given one).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/servers/{serverId}/channels:
+    post:
+      summary: Create a channel
+      description: >
+        Only the server owner can create channels. The name must be unique
+        within its category (or within the "sin categoria" bucket, when
+        category_id is omitted).
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, kind]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 100 }
+                kind: { type: string, enum: [text, voice] }
+                category_id: { type: string, format: uuid, nullable: true }
+      responses:
+        "201":
+          description: Channel created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Channel" }
+        "400":
+          description: Empty/too long name, invalid kind, name already taken in that category, or category_id belongs to a different server.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not the server owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Server or category not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/channels/{channelId}:
+    patch:
+      summary: Edit a channel's name and/or topic
+      description: Fields omitted from the body are left unchanged.
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, minLength: 1, maxLength: 100 }
+                topic: { type: string, nullable: true }
+      responses:
+        "200":
+          description: Channel updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Channel" }
+        "400":
+          description: Empty/too long name, or name already taken in that category.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not the server owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Channel not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    delete:
+      summary: Delete a channel
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204":
+          description: Channel deleted.
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not the server owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Channel not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/channels/{channelId}/category:
+    patch:
+      summary: Move a channel to a category (or out of one)
+      description: category_id null moves the channel to "sin categoria".
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                category_id: { type: string, format: uuid, nullable: true }
+      responses:
+        "200":
+          description: Channel moved
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Channel" }
+        "400":
+          description: A channel with that name already exists in the destination category, or category_id belongs to a different server.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not the server owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Channel or category not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/servers/{serverId}/channels/reorder:
+    patch:
+      summary: Reorder the channels of a category
+      description: >
+        channel_ids must be exactly the current set of channels in that
+        category (or in "sin categoria", when category_id is omitted) -- not
+        a subset, not extra ids. Their position is set to match their index
+        in the array.
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [channel_ids]
+              properties:
+                category_id: { type: string, format: uuid, nullable: true }
+                channel_ids:
+                  type: array
+                  items: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Channels reordered.
+        "400":
+          description: channel_ids does not match exactly the channels currently in that category.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not the server owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Server or category not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/servers/{serverId}/categories:
+    post:
+      summary: Create a category
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 100 }
+      responses:
+        "201":
+          description: Category created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Category" }
+        "400":
+          description: Empty or too long name.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not the server owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Server not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/servers/{serverId}/categories/reorder:
+    patch:
+      summary: Reorder a server's categories
+      description: >
+        category_ids must be exactly the current set of categories for the
+        server -- not a subset, not extra ids. Their position is set to
+        match their index in the array.
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [category_ids]
+              properties:
+                category_ids:
+                  type: array
+                  items: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Categories reordered.
+        "400":
+          description: category_ids does not match exactly the categories currently in this server.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not the server owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Server not found.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
