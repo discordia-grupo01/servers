@@ -13,6 +13,8 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/discordia-grupo01/servers/internal/apierr"
+	"github.com/discordia-grupo01/servers/internal/handler/categoryview"
+	"github.com/discordia-grupo01/servers/internal/handler/channelview"
 	"github.com/discordia-grupo01/servers/internal/middleware"
 	"github.com/discordia-grupo01/servers/internal/model"
 	"github.com/discordia-grupo01/servers/internal/service"
@@ -37,32 +39,28 @@ type serverHandler struct {
 	icons IconStore
 }
 
-type channelResponse struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Kind     string `json:"kind"`
-	Position int    `json:"position"`
-}
-
 type serverResponse struct {
-	ID        string            `json:"id"`
-	Name      string            `json:"name"`
-	IconURL   *string           `json:"icon_url"`
-	OwnerID   string            `json:"owner_id"`
-	CreatedAt time.Time         `json:"created_at"`
-	Channels  []channelResponse `json:"channels"`
+	ID         string                  `json:"id"`
+	Name       string                  `json:"name"`
+	IconURL    *string                 `json:"icon_url"`
+	OwnerID    string                  `json:"owner_id"`
+	CreatedAt  time.Time               `json:"created_at"`
+	Channels   []channelview.Response  `json:"channels"`
+	Categories []categoryview.Response `json:"categories"`
 }
 
 func toServerResponse(s model.Server) serverResponse {
-	chs := make([]channelResponse, 0, len(s.Channels))
+	chs := make([]channelview.Response, 0, len(s.Channels))
 	for _, ch := range s.Channels {
-		chs = append(chs, channelResponse{
-			ID: ch.ID.String(), Name: ch.Name, Kind: string(ch.Kind), Position: ch.Position,
-		})
+		chs = append(chs, channelview.ToResponse(ch))
+	}
+	cats := make([]categoryview.Response, 0, len(s.Categories))
+	for _, cat := range s.Categories {
+		cats = append(cats, categoryview.ToResponse(cat))
 	}
 	return serverResponse{
 		ID: s.ID.String(), Name: s.Name, IconURL: s.IconURL, OwnerID: s.OwnerID,
-		CreatedAt: s.CreatedAt, Channels: chs,
+		CreatedAt: s.CreatedAt, Channels: chs, Categories: cats,
 	}
 }
 

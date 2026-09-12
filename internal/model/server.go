@@ -36,6 +36,7 @@ type Server struct {
 	OwnerID       string
 	CreatedAt     time.Time
 	Channels      []Channel
+	Categories    []Category
 	DefaultRoleID *uuid.UUID
 }
 
