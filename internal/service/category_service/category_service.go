@@ -1,4 +1,5 @@
-// Package category_service contains the business logic for creating categories.
+// Package category_service contains the business logic for creating and
+// reordering categories.
 package category_service
 
 import (
@@ -21,6 +22,8 @@ type Servers interface {
 // Repo is the slice of CategoryRepository this service needs.
 type Repo interface {
 	Create(ctx context.Context, cat model.Category) error
+	ListByServer(ctx context.Context, serverID uuid.UUID) ([]model.Category, error)
+	ReorderPositions(ctx context.Context, orderedIDs []uuid.UUID) error
 }
 
 type CategoryService struct {
@@ -66,4 +69,54 @@ func (s *CategoryService) CreateCategory(ctx context.Context, p CreateCategoryPa
 	}
 	// TODO(events): publicar "channels.category_created" en discordia.events cuando exista un consumidor real.
 	return cat, nil
+}
+
+type ReorderCategoriesParams struct {
+	ServerID    uuid.UUID
+	UserID      string
+	CategoryIDs []uuid.UUID
+}
+
+// ReorderCategories sets the position of every category in CategoryIDs to
+// match its index in that slice. CategoryIDs must be exactly the current set
+// of categories for ServerID -- not a subset, not extra ids -- same
+// safeguard as channel_service.ReorderChannels.
+func (s *CategoryService) ReorderCategories(ctx context.Context, p ReorderCategoriesParams) error {
+	srv, err := s.servers.GetByID(ctx, p.ServerID)
+	if err != nil {
+		return err
+	}
+	if err := service.RequireManageChannels(srv, p.UserID); err != nil {
+		return err
+	}
+
+	current, err := s.repo.ListByServer(ctx, p.ServerID)
+	if err != nil {
+		return err
+	}
+	if !sameCategorySet(current, p.CategoryIDs) {
+		return model.ErrCategoryReorderInvalid
+	}
+
+	if err := s.repo.ReorderPositions(ctx, p.CategoryIDs); err != nil {
+		return err
+	}
+	// TODO(events): publicar "channels.categories_reordered" en discordia.events cuando exista un consumidor real.
+	return nil
+}
+
+func sameCategorySet(current []model.Category, ids []uuid.UUID) bool {
+	if len(current) != len(ids) {
+		return false
+	}
+	set := make(map[uuid.UUID]bool, len(current))
+	for _, cat := range current {
+		set[cat.ID] = true
+	}
+	for _, id := range ids {
+		if !set[id] {
+			return false
+		}
+	}
+	return true
 }

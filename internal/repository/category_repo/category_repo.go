@@ -70,3 +70,17 @@ func (r *CategoryRepository) ListByServer(ctx context.Context, serverID uuid.UUI
 	}
 	return categories, nil
 }
+
+// ReorderPositions sets each category's position to its index in orderedIDs,
+// atomically. Callers must have already validated that orderedIDs is exactly
+// the current set of categories for the server.
+func (r *CategoryRepository) ReorderPositions(ctx context.Context, orderedIDs []uuid.UUID) error {
+	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+		for i, id := range orderedIDs {
+			if _, err := tx.Exec(ctx, `UPDATE categories SET position = $1 WHERE id = $2`, i, id); err != nil {
+				return fmt.Errorf("update category position: %w", err)
+			}
+		}
+		return nil
+	})
+}

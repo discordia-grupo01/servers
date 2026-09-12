@@ -89,6 +89,7 @@ func NewRouter(d Deps) *gin.Engine {
 	v1.PATCH("/servers/:serverId/channels/reorder", channelH.Reorder)
 
 	v1.POST("/servers/:serverId/categories", categoryH.CreateCategory)
+	v1.PATCH("/servers/:serverId/categories/reorder", categoryH.Reorder)
 
 	v1.POST("/servers/:serverId/ownership-transfers", transferH.Initiate)
 	v1.POST("/servers/:serverId/ownership-transfers/:transferId/accept", transferH.Accept)

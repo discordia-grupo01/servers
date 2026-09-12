@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 
 	"github.com/discordia-grupo01/servers/internal/apierr"
 	"github.com/discordia-grupo01/servers/internal/handler/categoryview"
@@ -17,6 +18,7 @@ import (
 // CategoryUseCases is the slice of CategoryService this handler needs.
 type CategoryUseCases interface {
 	CreateCategory(ctx context.Context, p category_service.CreateCategoryParams) (model.Category, error)
+	ReorderCategories(ctx context.Context, p category_service.ReorderCategoriesParams) error
 }
 
 type Handler struct {
@@ -54,4 +56,43 @@ func (h *Handler) CreateCategory(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusCreated, categoryview.ToResponse(cat))
+}
+
+type reorderCategoriesRequest struct {
+	CategoryIDs []string `json:"category_ids"`
+}
+
+// PATCH /v1/servers/:serverId/categories/reorder
+func (h *Handler) Reorder(c *gin.Context) {
+	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
+	if !ok {
+		return
+	}
+
+	var req reorderCategoriesRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		apierr.RespondError(c, http.StatusBadRequest, "invalid request body", map[string]any{"reason": "invalid_json"})
+		return
+	}
+
+	categoryIDs := make([]uuid.UUID, 0, len(req.CategoryIDs))
+	for _, raw := range req.CategoryIDs {
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			apierr.RespondError(c, http.StatusBadRequest, "invalid category id in category_ids", apierr.FieldErr("category_ids", "invalid_uuid"))
+			return
+		}
+		categoryIDs = append(categoryIDs, id)
+	}
+
+	err := h.uc.ReorderCategories(c.Request.Context(), category_service.ReorderCategoriesParams{
+		ServerID:    serverID,
+		UserID:      middleware.UserID(c),
+		CategoryIDs: categoryIDs,
+	})
+	if err != nil {
+		apierr.WriteDomainError(c, err)
+		return
+	}
+	c.Status(http.StatusOK)
 }

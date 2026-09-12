@@ -65,7 +65,8 @@ var (
 	ErrCategoryNameTooLong    = errors.New("category name is too long")
 	ErrCategoryServerMismatch = errors.New("category does not belong to this server")
 
-	ErrChannelReorderInvalid = errors.New("the channel list must match exactly the channels currently in that category")
+	ErrChannelReorderInvalid  = errors.New("the channel list must match exactly the channels currently in that category")
+	ErrCategoryReorderInvalid = errors.New("the category list must match exactly the categories currently in this server")
 )
 
 // InvalidPermissionError wraps ErrInvalidPermission with the offending
