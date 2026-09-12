@@ -40,6 +40,16 @@ func TestCreateCategory_EmptyName_ErrNameRequired(t *testing.T) {
 	}
 }
 
+func TestCreateCategory_ControlCharInName_ErrNameInvalidChars(t *testing.T) {
+	svc := newService(&fakeServers{server: ownerServer()}, &fakeCategories{})
+	_, err := svc.CreateCategory(context.Background(), category_service.CreateCategoryParams{
+		ServerID: uuid.New(), Name: "bad\x00name", UserID: testOwner,
+	})
+	if !errors.Is(err, model.ErrCategoryNameInvalidChars) {
+		t.Errorf("err = %v, want ErrCategoryNameInvalidChars", err)
+	}
+}
+
 func TestCreateCategory_NotOwner_ErrForbidden(t *testing.T) {
 	svc := newService(&fakeServers{server: ownerServer()}, &fakeCategories{})
 	_, err := svc.CreateCategory(context.Background(), category_service.CreateCategoryParams{

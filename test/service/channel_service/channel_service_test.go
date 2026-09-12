@@ -40,6 +40,16 @@ func TestCreateChannel_EmptyName_ErrNameRequired(t *testing.T) {
 	}
 }
 
+func TestCreateChannel_ControlCharInName_ErrNameInvalidChars(t *testing.T) {
+	svc := newService(&fakeServers{server: ownerServer()}, &fakeCategories{}, &fakeChannels{})
+	_, err := svc.CreateChannel(context.Background(), channel_service.CreateChannelParams{
+		ServerID: uuid.New(), Name: "bad\x00name", Kind: "text", UserID: testOwner,
+	})
+	if !errors.Is(err, model.ErrChannelNameInvalidChars) {
+		t.Errorf("err = %v, want ErrChannelNameInvalidChars", err)
+	}
+}
+
 func TestCreateChannel_InvalidKind_ErrKindInvalid(t *testing.T) {
 	svc := newService(&fakeServers{server: ownerServer()}, &fakeCategories{}, &fakeChannels{})
 	_, err := svc.CreateChannel(context.Background(), channel_service.CreateChannelParams{

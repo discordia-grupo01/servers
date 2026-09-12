@@ -6,6 +6,7 @@ import (
 	"context"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
@@ -53,6 +54,9 @@ func (s *CategoryService) CreateCategory(ctx context.Context, p CreateCategoryPa
 	name := strings.TrimSpace(p.Name)
 	if name == "" {
 		return model.Category{}, model.ErrCategoryNameRequired
+	}
+	if strings.ContainsFunc(name, unicode.IsControl) {
+		return model.Category{}, model.ErrCategoryNameInvalidChars
 	}
 	if utf8.RuneCountInString(name) > model.CategoryNameMaxLen {
 		return model.Category{}, model.ErrCategoryNameTooLong

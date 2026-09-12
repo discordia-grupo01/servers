@@ -6,6 +6,7 @@ import (
 	"context"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
@@ -64,6 +65,9 @@ func validateChannelName(name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return "", model.ErrChannelNameRequired
+	}
+	if strings.ContainsFunc(name, unicode.IsControl) {
+		return "", model.ErrChannelNameInvalidChars
 	}
 	if utf8.RuneCountInString(name) > model.ChannelNameMaxLen {
 		return "", model.ErrChannelNameTooLong
