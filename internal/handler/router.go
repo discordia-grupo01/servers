@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/discordia-grupo01/servers/internal/apierr"
 	"github.com/discordia-grupo01/servers/internal/handler/category_handler"
 	"github.com/discordia-grupo01/servers/internal/handler/channel_handler"
 	"github.com/discordia-grupo01/servers/internal/handler/invitation"
@@ -46,6 +47,13 @@ func NewRouter(d Deps) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery())
 	r.MaxMultipartMemory = maxIconUploadBytes
+	r.HandleMethodNotAllowed = true
+	r.NoRoute(func(c *gin.Context) {
+		apierr.RespondError(c, http.StatusNotFound, "route not found", nil)
+	})
+	r.NoMethod(func(c *gin.Context) {
+		apierr.RespondError(c, http.StatusMethodNotAllowed, "method not allowed", nil)
+	})
 
 	r.GET("/livez", func(c *gin.Context) { c.String(http.StatusOK, "ok") })
 
