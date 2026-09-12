@@ -58,8 +58,8 @@ func TestLocalStore_GenerateDefault_SaveableAndServable(t *testing.T) {
 	if _, err := st.Save("srv-default", data); err != nil {
 		t.Fatalf("Save(generated default): %v", err)
 	}
-	p, ok := st.FilePath("srv-default")
-	if !ok || p == "" {
-		t.Error("the generated default icon was not saved")
+	got, _, err := st.Get("srv-default")
+	if err != nil || len(got) == 0 {
+		t.Errorf("the generated default icon was not saved: err=%v", err)
 	}
 }

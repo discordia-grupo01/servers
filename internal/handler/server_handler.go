@@ -31,7 +31,7 @@ type ServerUseCases interface {
 	GetServer(ctx context.Context, id uuid.UUID) (model.Server, error)
 }
 type IconStore interface {
-	FilePath(id string) (path string, ok bool)
+	Get(id string) (data []byte, contentType string, err error)
 }
 
 type serverHandler struct {
@@ -134,12 +134,16 @@ func (h *serverHandler) getIcon(c *gin.Context) {
 	if _, ok := apierr.ParseUUIDParam(c, "serverId"); !ok {
 		return
 	}
-	path, ok := h.icons.FilePath(c.Param("serverId"))
-	if !ok {
-		apierr.RespondError(c, http.StatusNotFound, "icon not found", nil)
+	data, contentType, err := h.icons.Get(c.Param("serverId"))
+	if err != nil {
+		if errors.Is(err, model.ErrIconNotFound) {
+			apierr.RespondError(c, http.StatusNotFound, "icon not found", nil)
+			return
+		}
+		apierr.RespondError(c, http.StatusInternalServerError, "could not read icon", nil)
 		return
 	}
-	c.File(path)
+	c.Data(http.StatusOK, contentType, data)
 }
 
 func readUpload(fh *multipart.FileHeader) ([]byte, error) {

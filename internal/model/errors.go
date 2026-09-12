@@ -11,6 +11,7 @@ var (
 
 	ErrIconTooLarge        = errors.New("icon file is too large")
 	ErrIconUnsupportedType = errors.New("icon file type is not supported")
+	ErrIconNotFound        = errors.New("icon not found")
 
 	ErrUnauthorized = errors.New("authentication required")
 

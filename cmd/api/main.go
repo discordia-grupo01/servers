@@ -43,9 +43,19 @@ func main() {
 	}
 	defer pool.Close()
 
-	icons, err := iconstore.NewLocalStore(cfg.IconDir, cfg.IconMaxBytes)
-	if err != nil {
-		log.Fatalf("iconstore: %v", err)
+	var icons iconstore.Store
+	switch {
+	case cfg.UseSupabaseStorage():
+		icons = iconstore.NewSupabaseStore(
+			cfg.SupabaseStorageURL, cfg.SupabaseStorageBucket, cfg.SupabaseServiceKey, cfg.IconMaxBytes,
+		)
+	case cfg.IsProduction():
+		log.Fatalf("iconstore: SUPABASE_STORAGE_URL, SUPABASE_STORAGE_BUCKET and SUPABASE_SERVICE_KEY are required in production")
+	default:
+		icons, err = iconstore.NewLocalStore(cfg.IconDir, cfg.IconMaxBytes)
+		if err != nil {
+			log.Fatalf("iconstore: %v", err)
+		}
 	}
 
 	serverRepo := repository.NewServerRepository(pool)
