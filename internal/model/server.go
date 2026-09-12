@@ -11,6 +11,11 @@ const (
 	ServerNameMaxLen = 100
 )
 
+const (
+	ChannelNameMinLen = 1
+	ChannelNameMaxLen = 100
+)
+
 type ChannelKind string
 
 const (
@@ -35,10 +40,12 @@ type Server struct {
 }
 
 type Channel struct {
-	ID        uuid.UUID
-	ServerID  uuid.UUID
-	Name      string
-	Kind      ChannelKind
-	Position  int
-	CreatedAt time.Time
+	ID         uuid.UUID
+	ServerID   uuid.UUID
+	Name       string
+	Kind       ChannelKind
+	Position   int
+	CategoryID *uuid.UUID
+	Topic      *string
+	CreatedAt  time.Time
 }
