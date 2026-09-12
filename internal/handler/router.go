@@ -6,6 +6,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/discordia-grupo01/servers/internal/handler/category_handler"
+	"github.com/discordia-grupo01/servers/internal/handler/channel_handler"
 	"github.com/discordia-grupo01/servers/internal/handler/invitation"
 	"github.com/discordia-grupo01/servers/internal/handler/member_role_handler"
 	"github.com/discordia-grupo01/servers/internal/handler/membership_handler"
@@ -26,6 +28,8 @@ type Deps struct {
 	Membership         membership_handler.UseCases
 	OwnershipTransfers ownership_transfer_handler.UseCases
 	Invitations        invitation.UseCases
+	Channels           channel_handler.ChannelUseCases
+	Categories         category_handler.CategoryUseCases
 	Auth               middleware.AuthConfig
 	DB                 Pinger
 }
@@ -36,6 +40,8 @@ func NewRouter(d Deps) *gin.Engine {
 	memberRoleH := member_role_handler.New(d.MemberRoles)
 	membershipH := membership_handler.New(d.Membership)
 	transferH := ownership_transfer_handler.New(d.OwnershipTransfers)
+	channelH := channel_handler.New(d.Channels)
+	categoryH := category_handler.New(d.Categories)
 
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery())
@@ -75,6 +81,14 @@ func NewRouter(d Deps) *gin.Engine {
 	v1.GET("/servers/:serverId/members/:userId/roles", memberRoleH.ListMemberRoles)
 
 	v1.DELETE("/servers/:serverId/members/:userId", membershipH.LeaveServer)
+
+	v1.POST("/servers/:serverId/channels", channelH.CreateChannel)
+	v1.PATCH("/channels/:channelId", channelH.UpdateChannel)
+	v1.DELETE("/channels/:channelId", channelH.DeleteChannel)
+	v1.PATCH("/channels/:channelId/category", channelH.MoveToCategory)
+	v1.PATCH("/servers/:serverId/channels/reorder", channelH.Reorder)
+
+	v1.POST("/servers/:serverId/categories", categoryH.CreateCategory)
 
 	v1.POST("/servers/:serverId/ownership-transfers", transferH.Initiate)
 	v1.POST("/servers/:serverId/ownership-transfers/:transferId/accept", transferH.Accept)
