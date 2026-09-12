@@ -40,10 +40,10 @@ func newRepo(t *testing.T) (*member_repo.MemberRepository, *repository.ServerRep
 
 	dropAllTestTables(ctx, pool)
 	for _, file := range []string{
-		"../../../migrations/0001_init.sql",
-		"../../../migrations/0003_roles.sql",
-		"../../../migrations/0004_member_roles.sql",
-		"../../../migrations/0005_default_role.sql",
+		"../../../migrations/0001_init.up.sql",
+		"../../../migrations/0003_roles.up.sql",
+		"../../../migrations/0004_member_roles.up.sql",
+		"../../../migrations/0005_default_role.up.sql",
 	} {
 		schema, err := os.ReadFile(file)
 		if err != nil {

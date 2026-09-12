@@ -38,8 +38,8 @@ func newRepo(t *testing.T) (*ownership_transfer_repo.Repository, *repository.Ser
 
 	dropAllTestTables(ctx, pool)
 	for _, file := range []string{
-		"../../../migrations/0001_init.sql",
-		"../../../migrations/0006_ownership_transfers.sql",
+		"../../../migrations/0001_init.up.sql",
+		"../../../migrations/0006_ownership_transfers.up.sql",
 	} {
 		schema, err := os.ReadFile(file)
 		if err != nil {

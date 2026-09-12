@@ -37,11 +37,11 @@ func newRepo(t *testing.T) (*repository.ServerRepository, *pgxpool.Pool) {
 
 	dropAllTestTables(ctx, pool)
 	for _, path := range []string{
-		"../../migrations/0001_init.sql",
-		"../../migrations/0003_roles.sql",
-		"../../migrations/0004_member_roles.sql",
-		"../../migrations/0005_default_role.sql",
-		"../../migrations/0007_categories.sql",
+		"../../migrations/0001_init.up.sql",
+		"../../migrations/0003_roles.up.sql",
+		"../../migrations/0004_member_roles.up.sql",
+		"../../migrations/0005_default_role.up.sql",
+		"../../migrations/0007_categories.up.sql",
 	} {
 		schema, err := os.ReadFile(path)
 		if err != nil {
