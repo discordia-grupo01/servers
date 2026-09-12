@@ -13,6 +13,9 @@ moderación). Historias cubiertas hasta ahora:
 - **Asignar/quitar rol a un miembro** (#23).
 - **Definir rol por defecto para nuevos miembros** (#24).
 - **Eliminar rol** (optativa).
+- **Crear/editar/eliminar canal**.
+- **Organizar canales en categorías** (crear categoría, mover un canal a una categoría o sacarlo).
+- **Reordenar canales dentro de una categoría, y categorías entre sí** (optativa).
 
 ## Stack
 - Lenguaje: Go
@@ -41,6 +44,8 @@ Con `docker compose up` se levanta también el servicio (`api`) contra la base.
 | DATABASE_NAME | **(obligatoria)** | Nombre de la base. |
 | DATABASE_USER | **(obligatoria)** | Usuario de conexion. |
 | DATABASE_PASSWORD | **(obligatoria)** | Password de conexion. |
+| DATABASE_SSLMODE | disable | `disable` en local; `require` cuando la BDD es Supabase (exige TLS). |
+| DATABASE_SCHEMA | - (vacio) | Vacio en local. En Supabase, el schema dedicado de este servicio dentro del proyecto compartido (ver seccion "Supabase" mas abajo). |
 | USER_ID_HEADER | X-User-Id | Header con el user id que inyecta Kong tras validar el JWT. |
 | ICON_DIR | ./data/icons | Directorio donde se guardan los iconos subidos. |
 | ICON_MAX_BYTES | 2097152 | Tamano maximo (bytes) de un icono. |
@@ -49,7 +54,7 @@ Las `DATABASE_*` no tienen default: si falta alguna, el servicio no arranca (no 
 
 ## Estructura de carpetas
 ```
-go-template/
+servers/
 ├── cmd/
 │   └── api/
 │       └── main.go          entrypoint: arma el router y levanta el server
@@ -78,6 +83,7 @@ go-template/
 - `make test` - corre los tests con cobertura.
 - `make build` - compila el binario en `bin/api`.
 - `make db-reset` - recrea la base desde cero (borra el volumen).
+- `make migrate` - aplica `migrations/*.sql` en orden contra la BDD que indique `.env` (local o Supabase). Sin tracking de "ya aplicadas": pensado para correr una vez contra un schema vacio (igual que el `docker-entrypoint-initdb.d` que ya usa `docker-compose.yml` para el Postgres local).
 
 ## Tests
 ```bash
@@ -91,7 +97,8 @@ DATABASE_HOST=localhost DATABASE_PORT=5432 DATABASE_NAME=discordia_servicio \
   DATABASE_USER=discordia DATABASE_PASSWORD=discordia go test ./... -p 1
 ```
 `-p 1` es necesario: hay más de un paquete de integración (`test/repository`,
-`test/repository/role_repo`, `test/repository/member_repo`) y todos hacen
+`test/repository/role_repo`, `test/repository/member_repo`,
+`test/repository/channel_repo`, `test/repository/category_repo`, etc.) y todos hacen
 `DROP TABLE`/recrean el schema contra la misma base al empezar **y al
 terminar** — si Go los corre en paralelo (el default), se pisan entre sí.
 Por lo mismo, correrlos contra `discordia_servicio` la deja completamente
@@ -99,14 +106,32 @@ vacía (sin tablas) al finalizar; si vas a seguir probando el servicio a mano
 después, hace falta recrear las tablas (`docker compose down -v && docker
 compose up -d db`, o reaplicar `migrations/*.sql` a mano).
 
+## Supabase (produccion)
+El proyecto de Supabase es **compartido entre todos los servicios de Discordia** (un solo proyecto, un schema por servicio). Pasos:
+1. Una sola vez por proyecto de Supabase: crear el schema de este servicio. Se puede hacer sin SQL desde **Database > Schemas > New schema** (nombre `servers`), o corriendo en el SQL Editor:
+   ```sql
+   CREATE SCHEMA IF NOT EXISTS servers;
+   ```
+2. Completar en tu `.env` los datos de conexion de Supabase, tomados del boton **Connect** del proyecto, pestaña **Session pooler** (no "Direct connection": ese host solo resuelve por IPv6 y muchas redes no tienen esa salida; tampoco "Transaction pooler", que no sostiene el `search_path` por conexion):
+   ```
+   DATABASE_HOST=aws-0-<region>.pooler.supabase.com
+   DATABASE_PORT=5432
+   DATABASE_NAME=postgres
+   DATABASE_USER=postgres.<project-ref>
+   DATABASE_PASSWORD=<password del proyecto>
+   DATABASE_SSLMODE=require
+   DATABASE_SCHEMA=servers
+   ```
+3. Correr `make migrate` y despues `make run`. Confirmar con `GET /readyz` (200).
+
 ## Endpoints
 Ver [`openapi.yaml`](openapi.yaml).
 
 | Metodo | Ruta | Auth | Descripcion |
 |---|---|---|---|
 | POST | `/v1/servers` | si | Crear servidor (multipart: `name`, `icon?`). Sin `icon`, se genera un ícono default de color random. |
-| GET | `/v1/servers` | si | Mis servidores (de los que soy owner o miembro), con sus canales. |
-| GET | `/v1/servers/{serverId}` | si | Un servidor puntual (nombre, canales, icon_url). Ej.: después de un `join`, para obtener los datos con solo el `server_id`. |
+| GET | `/v1/servers` | si | Mis servidores (de los que soy owner o miembro), con sus canales y categorias. |
+| GET | `/v1/servers/{serverId}` | si | Un servidor puntual (nombre, canales, categorias, icon_url). Ej.: después de un `join`, para obtener los datos con solo el `server_id`. Cada canal trae su `category_id` (`null` si esta "sin categoria"). |
 | GET | `/v1/servers/{serverId}/icon` | si | Sirve el archivo del ícono (subido o el default generado). |
 | POST | `/v1/servers/:serverId/invites` | si | Generar invitación (JSON opcional: `max_uses?`; expira a los 7 días). |
 | DELETE | `/v1/invites/:code` | si | Revocar una invitación (idempotente). |
@@ -123,6 +148,13 @@ Ver [`openapi.yaml`](openapi.yaml).
 | GET | `/v1/servers/{serverId}/members/{userId}/roles` | si | Listar los roles de un miembro. |
 | PUT | `/v1/servers/{serverId}/default-role` | si (owner) | Definir el rol por defecto del server. |
 | DELETE | `/v1/roles/{roleId}` | si (owner) | Eliminar un rol (optativa). Limpia asignaciones; rechaza con 409 si el rol es el default actual del server (hay que asignar otro default primero). |
+| POST | `/v1/servers/{serverId}/channels` | si (owner) | Crear canal de texto o voz (`name`, `kind`, `category_id?`). 400 si el nombre esta vacio o ya existe otro canal con ese nombre en la misma categoria (o en el "sin categoria", segun corresponda). |
+| PATCH | `/v1/channels/{channelId}` | si (owner) | Editar nombre y/o topic de un canal. |
+| DELETE | `/v1/channels/{channelId}` | si (owner) | Eliminar un canal. |
+| POST | `/v1/servers/{serverId}/categories` | si (owner) | Crear categoria (`name`). |
+| PATCH | `/v1/channels/{channelId}/category` | si (owner) | Mover un canal a una categoria (`category_id`), o sacarlo a "sin categoria" (`category_id: null`). |
+| PATCH | `/v1/servers/{serverId}/channels/reorder` | si (owner) | Reordenar los canales de una categoria (`category_id?`, `channel_ids`: el orden completo y exacto de esa categoria). 400 si la lista no coincide exactamente con los canales actuales de esa categoria. |
+| PATCH | `/v1/servers/{serverId}/categories/reorder` | si (owner) | Reordenar las categorias del server (`category_ids`: el orden completo y exacto). 400 si la lista no coincide exactamente. |
 | GET | `/livez` `/readyz` | no | Health checks. |
 
 ## Health checks

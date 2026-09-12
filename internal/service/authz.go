@@ -17,3 +17,14 @@ func RequireManageRoles(srv model.Server, userID string) error {
 	}
 	return nil
 }
+
+// RequireManageChannels checks whether userID is allowed to manage channels
+// and categories in srv. Same "owner only" scope as RequireManageRoles today
+// (see its doc comment) even though MANAGE_CHANNELS already exists in the
+// permission catalog -- no RequireManageX function uses the bitmask yet.
+func RequireManageChannels(srv model.Server, userID string) error {
+	if srv.OwnerID != userID {
+		return model.ErrForbiddenNotOwner
+	}
+	return nil
+}

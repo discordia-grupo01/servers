@@ -17,6 +17,8 @@ type Config struct {
 	DatabaseName     string
 	DatabaseUser     string
 	DatabasePassword string
+	DatabaseSSLMode  string
+	DatabaseSchema   string
 
 	UserIDHeader string
 
@@ -35,6 +37,8 @@ func Load() (Config, error) {
 		DatabaseName:     os.Getenv("DATABASE_NAME"),
 		DatabaseUser:     os.Getenv("DATABASE_USER"),
 		DatabasePassword: os.Getenv("DATABASE_PASSWORD"),
+		DatabaseSSLMode:  getenv("DATABASE_SSLMODE", "disable"),
+		DatabaseSchema:   os.Getenv("DATABASE_SCHEMA"),
 
 		UserIDHeader: getenv("USER_ID_HEADER", "X-User-Id"),
 
@@ -62,10 +66,17 @@ func Load() (Config, error) {
 }
 
 func (c Config) PostgresDSN() string {
-	return fmt.Sprintf(
-		"host=%s port=%s dbname=%s user=%s password=%s sslmode=disable",
-		c.DatabaseHost, c.DatabasePort, c.DatabaseName, c.DatabaseUser, c.DatabasePassword,
+	dsn := fmt.Sprintf(
+		"host=%s port=%s dbname=%s user=%s password=%s sslmode=%s",
+		c.DatabaseHost, c.DatabasePort, c.DatabaseName, c.DatabaseUser, c.DatabasePassword, c.DatabaseSSLMode,
 	)
+	if c.DatabaseSchema != "" {
+		// Fija el search_path de la sesion al schema del servicio (ej. "servers"
+		// en el proyecto de Supabase compartido). Las queries del repo no
+		// cambian: siguen usando nombres de tabla sin schema.
+		dsn += fmt.Sprintf(" options='-c search_path=%s'", c.DatabaseSchema)
+	}
+	return dsn
 }
 
 func (c Config) IsProduction() bool { return c.Environment == "production" }
