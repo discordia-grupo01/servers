@@ -47,8 +47,11 @@ Con `docker compose up` se levanta también el servicio (`api`) contra la base.
 | DATABASE_SSLMODE | disable | `disable` en local; `require` cuando la BDD es Supabase (exige TLS). |
 | DATABASE_SCHEMA | - (vacio) | Vacio en local. En Supabase, el schema dedicado de este servicio dentro del proyecto compartido (ver seccion "Supabase" mas abajo). |
 | USER_ID_HEADER | X-User-Id | Header con el user id que inyecta Kong tras validar el JWT. |
-| ICON_DIR | ./data/icons | Directorio donde se guardan los iconos subidos. |
+| ICON_DIR | ./data/icons | Directorio donde se guardan los iconos subidos (si no se usa Supabase Storage, ver debajo). |
 | ICON_MAX_BYTES | 2097152 | Tamano maximo (bytes) de un icono. |
+| SUPABASE_STORAGE_URL | - (vacio) | URL del proyecto de Supabase (`https://xxxx.supabase.co`). Si esta + `SUPABASE_STORAGE_BUCKET` + `SUPABASE_SERVICE_KEY`, los iconos van a ese bucket en vez de a `ICON_DIR` (ver seccion "Supabase Storage" mas abajo). |
+| SUPABASE_STORAGE_BUCKET | - (vacio) | Nombre del bucket de Storage. |
+| SUPABASE_SERVICE_KEY | - (vacio) | `service_role` key del proyecto (Project Settings > API) -- nunca la `anon` key, esta se salta las políticas RLS del bucket. |
 
 Las `DATABASE_*` no tienen default: si falta alguna, el servicio no arranca (no se usa una credencial adivinada). Los valores reales van en el `.env`; `.env.example` trae los del Postgres local.
 

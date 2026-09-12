@@ -24,6 +24,10 @@ type Config struct {
 
 	IconDir      string
 	IconMaxBytes int64
+
+	SupabaseStorageURL    string
+	SupabaseStorageBucket string
+	SupabaseServiceKey    string
 }
 
 func Load() (Config, error) {
@@ -44,6 +48,10 @@ func Load() (Config, error) {
 
 		IconDir:      getenv("ICON_DIR", "./data/icons"),
 		IconMaxBytes: getenvInt64("ICON_MAX_BYTES", 2*1024*1024),
+
+		SupabaseStorageURL:    os.Getenv("SUPABASE_STORAGE_URL"),
+		SupabaseStorageBucket: os.Getenv("SUPABASE_STORAGE_BUCKET"),
+		SupabaseServiceKey:    os.Getenv("SUPABASE_SERVICE_KEY"),
 	}
 
 	var missing []string
@@ -71,15 +79,16 @@ func (c Config) PostgresDSN() string {
 		c.DatabaseHost, c.DatabasePort, c.DatabaseName, c.DatabaseUser, c.DatabasePassword, c.DatabaseSSLMode,
 	)
 	if c.DatabaseSchema != "" {
-		// Fija el search_path de la sesion al schema del servicio (ej. "servers"
-		// en el proyecto de Supabase compartido). Las queries del repo no
-		// cambian: siguen usando nombres de tabla sin schema.
 		dsn += fmt.Sprintf(" options='-c search_path=%s'", c.DatabaseSchema)
 	}
 	return dsn
 }
 
 func (c Config) IsProduction() bool { return c.Environment == "production" }
+
+func (c Config) UseSupabaseStorage() bool {
+	return c.SupabaseStorageURL != "" && c.SupabaseStorageBucket != "" && c.SupabaseServiceKey != ""
+}
 
 func getenv(key, def string) string {
 	if v := os.Getenv(key); v != "" {
