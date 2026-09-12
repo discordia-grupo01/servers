@@ -9,6 +9,7 @@ import (
 
 type UseCases interface {
 	InitiateTransfer(ctx context.Context, p ownership_transfer_service.InitiateParams) (model.OwnershipTransfer, error)
+	GetPendingTransfer(ctx context.Context, p ownership_transfer_service.GetPendingParams) (model.OwnershipTransfer, error)
 	AcceptTransfer(ctx context.Context, p ownership_transfer_service.RespondParams) (model.OwnershipTransfer, error)
 	RejectTransfer(ctx context.Context, p ownership_transfer_service.RespondParams) (model.OwnershipTransfer, error)
 }

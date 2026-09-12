@@ -245,3 +245,68 @@ func TestRejectTransfer_WrongTarget_Forbidden(t *testing.T) {
 		t.Errorf("err = %v, want ErrOwnershipTransferWrongTarget", err)
 	}
 }
+
+func TestGetPendingTransfer_Success(t *testing.T) {
+	srv := ownerServer()
+	pending := pendingTransfer(srv.ID)
+	transfers := &fakeTransfers{pendingResult: pending}
+	svc := newService(&fakeServers{server: srv}, &fakeMembers{isMember: true}, transfers)
+
+	got, err := svc.GetPendingTransfer(context.Background(), ownership_transfer_service.GetPendingParams{
+		ServerID: srv.ID, ActorUserID: testMember,
+	})
+	if err != nil {
+		t.Fatalf("GetPendingTransfer() error = %v, want nil", err)
+	}
+	if transfers.pendingCalls != 1 {
+		t.Fatalf("GetPendingByServer calls = %d, want 1", transfers.pendingCalls)
+	}
+	if got.ID != pending.ID {
+		t.Errorf("got id %v, want %v", got.ID, pending.ID)
+	}
+}
+
+func TestGetPendingTransfer_NotAMember_Forbidden(t *testing.T) {
+	srv := ownerServer()
+	svc := newService(&fakeServers{server: srv}, &fakeMembers{isMember: false}, &fakeTransfers{})
+
+	_, err := svc.GetPendingTransfer(context.Background(), ownership_transfer_service.GetPendingParams{
+		ServerID: srv.ID, ActorUserID: "outsider",
+	})
+	if !errors.Is(err, model.ErrForbiddenNotMember) {
+		t.Errorf("err = %v, want ErrForbiddenNotMember", err)
+	}
+}
+
+func TestGetPendingTransfer_None_NotFound(t *testing.T) {
+	srv := ownerServer()
+	transfers := &fakeTransfers{pendingErr: model.ErrOwnershipTransferNotFound}
+	svc := newService(&fakeServers{server: srv}, &fakeMembers{isMember: true}, transfers)
+
+	_, err := svc.GetPendingTransfer(context.Background(), ownership_transfer_service.GetPendingParams{
+		ServerID: srv.ID, ActorUserID: testOwner,
+	})
+	if !errors.Is(err, model.ErrOwnershipTransferNotFound) {
+		t.Errorf("err = %v, want ErrOwnershipTransferNotFound", err)
+	}
+}
+
+func TestGetPendingTransfer_Unauthenticated(t *testing.T) {
+	svc := newService(&fakeServers{}, &fakeMembers{}, &fakeTransfers{})
+
+	_, err := svc.GetPendingTransfer(context.Background(), ownership_transfer_service.GetPendingParams{ServerID: uuid.New()})
+	if !errors.Is(err, model.ErrUnauthorized) {
+		t.Errorf("err = %v, want ErrUnauthorized", err)
+	}
+}
+
+func TestGetPendingTransfer_ServerNotFound(t *testing.T) {
+	svc := newService(&fakeServers{getErr: model.ErrServerNotFound}, &fakeMembers{}, &fakeTransfers{})
+
+	_, err := svc.GetPendingTransfer(context.Background(), ownership_transfer_service.GetPendingParams{
+		ServerID: uuid.New(), ActorUserID: testMember,
+	})
+	if !errors.Is(err, model.ErrServerNotFound) {
+		t.Errorf("err = %v, want ErrServerNotFound", err)
+	}
+}

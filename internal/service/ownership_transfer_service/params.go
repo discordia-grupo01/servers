@@ -13,3 +13,8 @@ type RespondParams struct {
 	TransferID  uuid.UUID
 	ActorUserID string
 }
+
+type GetPendingParams struct {
+	ServerID    uuid.UUID
+	ActorUserID string
+}

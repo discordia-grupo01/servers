@@ -68,6 +68,23 @@ func (r *Repository) GetByID(ctx context.Context, id uuid.UUID) (model.Ownership
 	return t, nil
 }
 
+// GetPendingByServer returns the server's pending ownership transfer, if
+// any. The unique partial index on (server_id) WHERE status = 'pending'
+// guarantees there is at most one.
+func (r *Repository) GetPendingByServer(ctx context.Context, serverID uuid.UUID) (model.OwnershipTransfer, error) {
+	t, err := scanTransfer(r.pool.QueryRow(ctx, `
+		SELECT id, server_id, from_user_id, to_user_id, status, created_at, resolved_at
+		  FROM ownership_transfers WHERE server_id = $1 AND status = 'pending'`, serverID,
+	))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return model.OwnershipTransfer{}, model.ErrOwnershipTransferNotFound
+		}
+		return model.OwnershipTransfer{}, fmt.Errorf("select pending ownership transfer: %w", err)
+	}
+	return t, nil
+}
+
 func (r *Repository) Reject(ctx context.Context, id uuid.UUID, resolvedAt time.Time) (model.OwnershipTransfer, error) {
 	t, err := scanTransfer(r.pool.QueryRow(ctx, `
 		UPDATE ownership_transfers SET status = 'rejected', resolved_at = $2

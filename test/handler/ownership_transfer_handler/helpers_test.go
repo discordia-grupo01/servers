@@ -24,6 +24,11 @@ type fakeUseCases struct {
 	gotInitiate    ownership_transfer_service.InitiateParams
 	initiateCalls  int
 
+	pendingErr    error
+	pendingResult model.OwnershipTransfer
+	gotPending    ownership_transfer_service.GetPendingParams
+	pendingCalls  int
+
 	acceptErr    error
 	acceptResult model.OwnershipTransfer
 	gotAccept    ownership_transfer_service.RespondParams
@@ -42,6 +47,15 @@ func (f *fakeUseCases) InitiateTransfer(_ context.Context, p ownership_transfer_
 		return model.OwnershipTransfer{}, f.initiateErr
 	}
 	return f.initiateResult, nil
+}
+
+func (f *fakeUseCases) GetPendingTransfer(_ context.Context, p ownership_transfer_service.GetPendingParams) (model.OwnershipTransfer, error) {
+	f.pendingCalls++
+	f.gotPending = p
+	if f.pendingErr != nil {
+		return model.OwnershipTransfer{}, f.pendingErr
+	}
+	return f.pendingResult, nil
 }
 
 func (f *fakeUseCases) AcceptTransfer(_ context.Context, p ownership_transfer_service.RespondParams) (model.OwnershipTransfer, error) {

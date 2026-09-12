@@ -133,6 +133,55 @@ func TestOwnershipTransferRepo_GetByID_NotFound(t *testing.T) {
 	}
 }
 
+func TestOwnershipTransferRepo_GetPendingByServer_ReturnsIt(t *testing.T) {
+	repo, servers, pool := newRepo(t)
+	ctx := context.Background()
+	srv, member := seedServerWithMember(ctx, t, servers, pool)
+
+	want := pendingTransfer(srv, member)
+	if err := repo.Create(ctx, want); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	got, err := repo.GetPendingByServer(ctx, srv.ID)
+	if err != nil {
+		t.Fatalf("GetPendingByServer: %v", err)
+	}
+	if got.ID != want.ID {
+		t.Errorf("got id %v, want %v", got.ID, want.ID)
+	}
+}
+
+func TestOwnershipTransferRepo_GetPendingByServer_None_NotFound(t *testing.T) {
+	repo, servers, pool := newRepo(t)
+	ctx := context.Background()
+	srv, _ := seedServerWithMember(ctx, t, servers, pool)
+
+	_, err := repo.GetPendingByServer(ctx, srv.ID)
+	if !errors.Is(err, model.ErrOwnershipTransferNotFound) {
+		t.Errorf("err = %v, want ErrOwnershipTransferNotFound", err)
+	}
+}
+
+func TestOwnershipTransferRepo_GetPendingByServer_IgnoresResolved(t *testing.T) {
+	repo, servers, pool := newRepo(t)
+	ctx := context.Background()
+	srv, member := seedServerWithMember(ctx, t, servers, pool)
+
+	resolved := pendingTransfer(srv, member)
+	if err := repo.Create(ctx, resolved); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if _, err := repo.Reject(ctx, resolved.ID, time.Now().UTC()); err != nil {
+		t.Fatalf("Reject: %v", err)
+	}
+
+	_, err := repo.GetPendingByServer(ctx, srv.ID)
+	if !errors.Is(err, model.ErrOwnershipTransferNotFound) {
+		t.Errorf("err = %v, want ErrOwnershipTransferNotFound (resolved transfers are not pending)", err)
+	}
+}
+
 func TestOwnershipTransferRepo_Create_SecondPending_AlreadyPending(t *testing.T) {
 	repo, servers, pool := newRepo(t)
 	ctx := context.Background()

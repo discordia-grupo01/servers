@@ -21,6 +21,10 @@ func rejectPath(serverID, transferID string) string {
 	return "/v1/servers/" + serverID + "/ownership-transfers/" + transferID + "/reject"
 }
 
+func pendingPath(serverID string) string {
+	return "/v1/servers/" + serverID + "/ownership-transfers/pending"
+}
+
 func TestInitiate_NoAuth_401(t *testing.T) {
 	uc := &fakeUseCases{}
 	r := newRouter(t, uc)
@@ -187,5 +191,70 @@ func TestReject_NotPending_409(t *testing.T) {
 	w := doJSON(t, r, http.MethodPost, rejectPath(uuid.New().String(), uuid.New().String()), testUser, nil)
 	if w.Code != http.StatusConflict {
 		t.Errorf("status = %d, want 409", w.Code)
+	}
+}
+
+func TestGetPending_NoAuth_401(t *testing.T) {
+	uc := &fakeUseCases{}
+	r := newRouter(t, uc)
+
+	w := doJSON(t, r, http.MethodGet, pendingPath(uuid.New().String()), "", nil)
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want 401", w.Code)
+	}
+	if uc.pendingCalls != 0 {
+		t.Error("use case must not be called without a caller id")
+	}
+}
+
+func TestGetPending_InvalidServerID_400(t *testing.T) {
+	uc := &fakeUseCases{}
+	r := newRouter(t, uc)
+
+	w := doJSON(t, r, http.MethodGet, pendingPath("not-a-uuid"), testUser, nil)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", w.Code)
+	}
+}
+
+func TestGetPending_Success_200(t *testing.T) {
+	serverID := uuid.New()
+	pending := model.OwnershipTransfer{
+		ID: uuid.New(), ServerID: serverID, FromUserID: "owner-1", ToUserID: testUser,
+		Status: model.OwnershipTransferPending,
+	}
+	uc := &fakeUseCases{pendingResult: pending}
+	r := newRouter(t, uc)
+
+	w := doJSON(t, r, http.MethodGet, pendingPath(serverID.String()), testUser, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200, body=%s", w.Code, w.Body.String())
+	}
+	if uc.gotPending.ServerID != serverID || uc.gotPending.ActorUserID != testUser {
+		t.Errorf("params = %+v, want ServerID=%v ActorUserID=%q", uc.gotPending, serverID, testUser)
+	}
+	tr := decodeTransfer(t, w)
+	if tr.Status != "pending" || tr.ToUserID != testUser {
+		t.Errorf("body = %+v, want status=pending to_user_id=%q", tr, testUser)
+	}
+}
+
+func TestGetPending_None_404(t *testing.T) {
+	uc := &fakeUseCases{pendingErr: model.ErrOwnershipTransferNotFound}
+	r := newRouter(t, uc)
+
+	w := doJSON(t, r, http.MethodGet, pendingPath(uuid.New().String()), testUser, nil)
+	if w.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", w.Code)
+	}
+}
+
+func TestGetPending_NotAMember_403(t *testing.T) {
+	uc := &fakeUseCases{pendingErr: model.ErrForbiddenNotMember}
+	r := newRouter(t, uc)
+
+	w := doJSON(t, r, http.MethodGet, pendingPath(uuid.New().String()), testUser, nil)
+	if w.Code != http.StatusForbidden {
+		t.Errorf("status = %d, want 403", w.Code)
 	}
 }

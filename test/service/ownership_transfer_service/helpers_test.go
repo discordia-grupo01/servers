@@ -47,6 +47,10 @@ type fakeTransfers struct {
 	getResult model.OwnershipTransfer
 	getErr    error
 
+	pendingResult model.OwnershipTransfer
+	pendingErr    error
+	pendingCalls  int
+
 	acceptResult model.OwnershipTransfer
 	acceptErr    error
 	acceptCalls  int
@@ -67,6 +71,14 @@ func (f *fakeTransfers) GetByID(context.Context, uuid.UUID) (model.OwnershipTran
 		return model.OwnershipTransfer{}, f.getErr
 	}
 	return f.getResult, nil
+}
+
+func (f *fakeTransfers) GetPendingByServer(context.Context, uuid.UUID) (model.OwnershipTransfer, error) {
+	f.pendingCalls++
+	if f.pendingErr != nil {
+		return model.OwnershipTransfer{}, f.pendingErr
+	}
+	return f.pendingResult, nil
 }
 
 func (f *fakeTransfers) Accept(context.Context, uuid.UUID, time.Time) (model.OwnershipTransfer, error) {

@@ -74,6 +74,8 @@ func WriteDomainError(c *gin.Context, err error) {
 
 	case errors.Is(err, model.ErrForbiddenNotOwner):
 		RespondError(c, http.StatusForbidden, err.Error(), nil)
+	case errors.Is(err, model.ErrForbiddenNotMember):
+		RespondError(c, http.StatusForbidden, err.Error(), nil)
 	case errors.Is(err, model.ErrLeaveForbidden):
 		RespondError(c, http.StatusForbidden, err.Error(), nil)
 	case errors.Is(err, model.ErrOwnerCannotLeave):

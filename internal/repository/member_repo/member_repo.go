@@ -47,6 +47,44 @@ func (r *MemberRepository) AssignRole(ctx context.Context, serverID uuid.UUID, u
 	return nil
 }
 
+// ListMembers returns one page of a server's members ordered by join date
+// (oldest first, user_id as a tie-breaker), along with the total member
+// count so the caller can render pagination.
+func (r *MemberRepository) ListMembers(ctx context.Context, serverID uuid.UUID, limit, offset int) ([]model.Member, int, error) {
+	var total int
+	if err := r.pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM server_members WHERE server_id = $1`, serverID,
+	).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count members: %w", err)
+	}
+
+	rows, err := r.pool.Query(ctx, `
+		SELECT user_id, is_owner, joined_at
+		  FROM server_members
+		 WHERE server_id = $1
+		 ORDER BY joined_at ASC, user_id ASC
+		 LIMIT $2 OFFSET $3`,
+		serverID, limit, offset,
+	)
+	if err != nil {
+		return nil, 0, fmt.Errorf("list members: %w", err)
+	}
+	defer rows.Close()
+
+	members := make([]model.Member, 0)
+	for rows.Next() {
+		var m model.Member
+		if err := rows.Scan(&m.UserID, &m.IsOwner, &m.JoinedAt); err != nil {
+			return nil, 0, fmt.Errorf("scan member: %w", err)
+		}
+		members = append(members, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("list members: %w", err)
+	}
+	return members, total, nil
+}
+
 func (r *MemberRepository) RemoveMember(ctx context.Context, serverID uuid.UUID, userID string) (bool, error) {
 	tag, err := r.pool.Exec(ctx,
 		`DELETE FROM server_members WHERE server_id = $1 AND user_id = $2`,

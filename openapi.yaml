@@ -128,6 +128,21 @@ components:
           format: date-time
           nullable: true
           description: Set once the recipient accepts or rejects; null while pending.
+    Member:
+      type: object
+      properties:
+        user_id: { type: string }
+        is_owner: { type: boolean }
+        joined_at: { type: string, format: date-time }
+    MemberList:
+      type: object
+      properties:
+        members:
+          type: array
+          items: { $ref: "#/components/schemas/Member" }
+        total: { type: integer, description: Total member count across all pages. }
+        limit: { type: integer }
+        offset: { type: integer }
 
 security:
   - bearerAuth: []
@@ -618,6 +633,55 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
 
+  /v1/servers/{serverId}/members:
+    get:
+      summary: List server members
+      description: >
+        Paginated list of a server's members. The caller must already be a
+        member of the server. Used, among other things, to let the owner
+        pick an ownership-transfer target.
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: limit
+          in: query
+          required: false
+          description: Page size. Defaults to 20, capped at 100.
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: offset
+          in: query
+          required: false
+          description: Number of members to skip. Defaults to 0.
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        "200":
+          description: One page of members, oldest join first.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MemberList" }
+        "400":
+          description: "`limit` or `offset` is not a non-negative integer."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not a member of this server.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Server not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
   /v1/servers/{serverId}/members/{userId}:
     delete:
       summary: Leave a server
@@ -714,6 +778,41 @@ paths:
               schema: { $ref: "#/components/schemas/Error" }
         "409":
           description: This server already has a pending ownership transfer.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/servers/{serverId}/ownership-transfers/pending:
+    get:
+      summary: Get a server's pending ownership transfer
+      description: >
+        Returns the server's pending ownership transfer, if any. Only
+        members of the server (the owner who created it, or the member it
+        was offered to) can see it. There is at most one pending transfer
+        per server.
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: The pending transfer.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OwnershipTransfer" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not a member of this server.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Server not found, or it has no pending transfer.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }

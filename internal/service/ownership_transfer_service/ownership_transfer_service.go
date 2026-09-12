@@ -64,6 +64,29 @@ func (s *Service) InitiateTransfer(ctx context.Context, p InitiateParams) (model
 	return t, nil
 }
 
+// GetPendingTransfer returns a server's pending ownership transfer, if any.
+// Only members of the server (the owner initiating it, or the member it was
+// sent to) can see it.
+func (s *Service) GetPendingTransfer(ctx context.Context, p GetPendingParams) (model.OwnershipTransfer, error) {
+	if p.ActorUserID == "" {
+		return model.OwnershipTransfer{}, model.ErrUnauthorized
+	}
+
+	if _, err := s.servers.GetByID(ctx, p.ServerID); err != nil {
+		return model.OwnershipTransfer{}, err
+	}
+
+	isMember, err := s.members.IsMember(ctx, p.ServerID, p.ActorUserID)
+	if err != nil {
+		return model.OwnershipTransfer{}, err
+	}
+	if !isMember {
+		return model.OwnershipTransfer{}, model.ErrForbiddenNotMember
+	}
+
+	return s.transfers.GetPendingByServer(ctx, p.ServerID)
+}
+
 func (s *Service) AcceptTransfer(ctx context.Context, p RespondParams) (model.OwnershipTransfer, error) {
 	if _, err := s.resolveRespondable(ctx, p); err != nil {
 		return model.OwnershipTransfer{}, err
