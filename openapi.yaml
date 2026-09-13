@@ -89,10 +89,17 @@ components:
           type: string
           nullable: true
           description: >
-            Relative URL to GET the icon (serves the image bytes directly).
-            Never null in practice: a server always has an icon, either the
-            one its owner uploaded or a random solid-color default generated
-            at creation time.
+            Publicly accessible URL to the icon (a Supabase Storage public
+            object URL in production; a same-API proxy path in local/dev
+            setups without Supabase configured). Never null in practice: a
+            server always has an icon, either the one its owner uploaded or a
+            random solid-color default generated at creation time.
+        banner_url:
+          type: string
+          nullable: true
+          description: >
+            Publicly accessible URL to the banner, same URL scheme as
+            icon_url. Null until the owner uploads one.
         owner_id: { type: string, description: user id of the creator }
         created_at: { type: string, format: date-time }
         channels:
@@ -210,9 +217,9 @@ paths:
                   type: string
                   format: binary
                   description: >
-                    Optional. PNG, JPEG or WEBP, up to 2 MB. If omitted, a
-                    random solid-color icon is generated so icon_url is never
-                    null.
+                    Optional. PNG, JPEG or WEBP, up to 5 MB (configurable via
+                    ICON_MAX_BYTES). If omitted, a random solid-color icon is
+                    generated so icon_url is never null.
       responses:
         "201":
           description: Server created
@@ -291,13 +298,84 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+    patch:
+      summary: Edit a server's general settings
+      description: >
+        Updates name, icon and/or banner. Only the server's owner may call
+        this. Every field is optional: send only what you want to change
+        (e.g. just `name`, or just `icon`). Send `remove_banner=true` to
+        clear an existing banner without uploading a new one.
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  minLength: 2
+                  maxLength: 100
+                  description: Same validation rules as at creation.
+                icon:
+                  type: string
+                  format: binary
+                  description: Optional. PNG, JPEG or WEBP, up to 5 MB. Replaces the current icon.
+                banner:
+                  type: string
+                  format: binary
+                  description: Optional. PNG, JPEG or WEBP, up to 5 MB. Replaces the current banner.
+                remove_banner:
+                  type: string
+                  description: Set to "true" to clear the banner. Ignored if `banner` is also sent.
+      responses:
+        "200":
+          description: Server updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Server" }
+        "400":
+          description: >
+            Invalid name, or invalid icon/banner (unsupported format or size).
+            Nothing is persisted (CA3).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not the server's owner (CA2).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Server not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: Another of the owner's servers already has that name.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
 
   /v1/servers/{serverId}/icon:
     get:
       summary: Get a server's icon
       description: >
         Serves the icon file itself (image bytes), whether it was uploaded or
-        auto-generated. This is what icon_url points to.
+        auto-generated. This is what icon_url points to. Public: no
+        authentication required, since any client with just the URL should be
+        able to render it (in production this is a direct Supabase Storage
+        public URL instead, bypassing this endpoint entirely).
       parameters:
         - name: serverId
           in: path
@@ -315,13 +393,38 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
-        "401":
-          description: Missing authentication credential
+        "404":
+          description: No icon file for that id (server doesn't exist, or was never given one).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/servers/{serverId}/banner:
+    get:
+      summary: Get a server's banner
+      description: >
+        Serves the banner file itself (image bytes). This is what banner_url
+        points to. Public: no authentication required, same reasoning as
+        GET /v1/servers/{serverId}/icon.
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: The banner image.
+          content:
+            image/png: { schema: { type: string, format: binary } }
+            image/jpeg: { schema: { type: string, format: binary } }
+            image/webp: { schema: { type: string, format: binary } }
+        "400":
+          description: Invalid serverId.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
         "404":
-          description: No icon file for that id (server doesn't exist, or was never given one).
+          description: No banner set for that server.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }

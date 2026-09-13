@@ -42,6 +42,7 @@ func newRepo(t *testing.T) (*repository.ServerRepository, *pgxpool.Pool) {
 		"../../migrations/0004_member_roles.up.sql",
 		"../../migrations/0005_default_role.up.sql",
 		"../../migrations/0007_categories.up.sql",
+		"../../migrations/0009_server_banner.up.sql",
 	} {
 		schema, err := os.ReadFile(path)
 		if err != nil {
@@ -255,6 +256,88 @@ func TestRepo_ListForUser_IncludesServersJoinedNotOwned(t *testing.T) {
 	}
 	if len(got) != 1 || got[0].ID != srv.ID {
 		t.Errorf("got = %+v, want only %v", got, srv.ID)
+	}
+}
+
+func TestRepo_UpdateServer_ChangesNameIconAndBanner(t *testing.T) {
+	repo, _ := newRepo(t)
+	ctx := context.Background()
+	srv, chans := serverFixture("Before Update", "owner-"+uuid.NewString())
+	if err := repo.CreateServer(ctx, srv, chans); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	iconURL, bannerURL := "/v1/servers/"+srv.ID.String()+"/icon", "/v1/servers/"+srv.ID.String()+"/banner"
+	if err := repo.UpdateServer(ctx, srv.ID, "After Update", "after update", &iconURL, &bannerURL); err != nil {
+		t.Fatalf("UpdateServer: %v", err)
+	}
+
+	got, err := repo.GetByID(ctx, srv.ID)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if got.Name != "After Update" || got.NameKey != "after update" {
+		t.Errorf("name/name_key = %q/%q", got.Name, got.NameKey)
+	}
+	if got.IconURL == nil || *got.IconURL != iconURL {
+		t.Errorf("icon_url = %v, want %q", got.IconURL, iconURL)
+	}
+	if got.BannerURL == nil || *got.BannerURL != bannerURL {
+		t.Errorf("banner_url = %v, want %q", got.BannerURL, bannerURL)
+	}
+}
+
+func TestRepo_UpdateServer_BannerNil_ClearsIt(t *testing.T) {
+	repo, _ := newRepo(t)
+	ctx := context.Background()
+	srv, chans := serverFixture("Has Banner", "owner-"+uuid.NewString())
+	if err := repo.CreateServer(ctx, srv, chans); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	bannerURL := "/v1/servers/" + srv.ID.String() + "/banner"
+	if err := repo.UpdateServer(ctx, srv.ID, srv.Name, srv.NameKey, srv.IconURL, &bannerURL); err != nil {
+		t.Fatalf("set banner: %v", err)
+	}
+
+	if err := repo.UpdateServer(ctx, srv.ID, srv.Name, srv.NameKey, srv.IconURL, nil); err != nil {
+		t.Fatalf("clear banner: %v", err)
+	}
+
+	got, err := repo.GetByID(ctx, srv.ID)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if got.BannerURL != nil {
+		t.Errorf("banner_url = %v, want nil", got.BannerURL)
+	}
+}
+
+func TestRepo_UpdateServer_UnknownID_ReturnsNotFound(t *testing.T) {
+	repo, _ := newRepo(t)
+	name := "Name"
+	err := repo.UpdateServer(context.Background(), uuid.New(), name, name, nil, nil)
+	if !errors.Is(err, model.ErrServerNotFound) {
+		t.Errorf("err = %v, want ErrServerNotFound", err)
+	}
+}
+
+func TestRepo_UpdateServer_NameKeyCollisionWithAnotherOwnedServer_ReturnsNameTaken(t *testing.T) {
+	repo, _ := newRepo(t)
+	ctx := context.Background()
+	owner := "owner-" + uuid.NewString()
+
+	a, aCh := serverFixture("Server A", owner)
+	if err := repo.CreateServer(ctx, a, aCh); err != nil {
+		t.Fatalf("create A: %v", err)
+	}
+	b, bCh := serverFixture("Server B", owner)
+	if err := repo.CreateServer(ctx, b, bCh); err != nil {
+		t.Fatalf("create B: %v", err)
+	}
+
+	err := repo.UpdateServer(ctx, b.ID, "Server A", a.NameKey, b.IconURL, nil)
+	if !errors.Is(err, model.ErrNameTaken) {
+		t.Errorf("err = %v, want ErrNameTaken", err)
 	}
 }
 

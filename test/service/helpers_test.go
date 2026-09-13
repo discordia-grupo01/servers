@@ -26,6 +26,9 @@ type fakeRepoHelper struct {
 	getResult model.Server
 	getErr    error
 	getCalls  int
+
+	updateErr   error
+	updateCalls int
 }
 
 func (f *fakeRepoHelper) CreateServer(_ context.Context, s model.Server, ch []model.Channel) error {
@@ -52,6 +55,11 @@ func (f *fakeRepoHelper) GetByID(_ context.Context, _ uuid.UUID) (model.Server, 
 		return model.Server{}, f.getErr
 	}
 	return f.getResult, nil
+}
+
+func (f *fakeRepoHelper) UpdateServer(_ context.Context, _ uuid.UUID, _, _ string, _, _ *string) error {
+	f.updateCalls++
+	return f.updateErr
 }
 
 type fakeIconsHelper struct {

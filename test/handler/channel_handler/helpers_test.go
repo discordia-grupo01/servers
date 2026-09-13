@@ -34,6 +34,10 @@ func (fakeServerUseCases) GetServer(context.Context, uuid.UUID) (model.Server, e
 	return model.Server{}, nil
 }
 
+func (fakeServerUseCases) UpdateServer(context.Context, service.UpdateServerParams) (model.Server, error) {
+	return model.Server{}, nil
+}
+
 type fakeChannelUseCases struct {
 	createErr error
 	created   model.Channel
