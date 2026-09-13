@@ -28,3 +28,10 @@ func RequireManageChannels(srv model.Server, userID string) error {
 	}
 	return nil
 }
+
+func RequireManageServer(srv model.Server, userID string) error {
+	if srv.OwnerID != userID {
+		return model.ErrForbiddenNotOwner
+	}
+	return nil
+}

@@ -61,8 +61,8 @@ func TestSupabaseStore_SaveThenGet_RoundTrips(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Save: %v", err)
 	}
-	if url != "/v1/servers/srv1/icon" {
-		t.Errorf("url = %q", url)
+	if want := srv.URL + "/storage/v1/object/public/icons/srv1"; url != want {
+		t.Errorf("url = %q, want %q", url, want)
 	}
 
 	data, contentType, err := st.Get("srv1")

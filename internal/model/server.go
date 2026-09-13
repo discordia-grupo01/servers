@@ -33,6 +33,7 @@ type Server struct {
 	Name          string
 	NameKey       string // No se si es muy necesario pero es para el tema de la mayucula, minusculas y tilde
 	IconURL       *string
+	BannerURL     *string
 	OwnerID       string
 	CreatedAt     time.Time
 	Channels      []Channel

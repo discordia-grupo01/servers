@@ -71,12 +71,16 @@ func NewRouter(d Deps) *gin.Engine {
 
 	r.GET("/", func(c *gin.Context) { c.String(http.StatusOK, "discordia-servers up") })
 
+	v1Public := r.Group("/v1")
+	v1Public.GET("/servers/:serverId/icon", h.getIcon)
+	v1Public.GET("/servers/:serverId/banner", h.getBanner)
+
 	v1 := r.Group("/v1")
 	v1.Use(middleware.Auth(d.Auth))
 	v1.POST("/servers", h.createServer)
 	v1.GET("/servers", h.listMyServers)
 	v1.GET("/servers/:serverId", h.getServer)
-	v1.GET("/servers/:serverId/icon", h.getIcon)
+	v1.PATCH("/servers/:serverId", h.updateServer)
 
 	v1.POST("/servers/:serverId/roles", roleH.CreateRole)
 	v1.GET("/servers/:serverId/roles", roleH.ListRoles)

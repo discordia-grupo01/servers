@@ -34,6 +34,9 @@ type fakeRepo struct {
 	getResult model.Server
 	getErr    error
 	getCalls  int
+
+	updateErr   error
+	updateCalls int
 }
 
 func (f *fakeRepo) CreateServer(_ context.Context, s model.Server, _ []model.Channel) error {
@@ -62,16 +65,22 @@ func (f *fakeRepo) GetByID(_ context.Context, _ uuid.UUID) (model.Server, error)
 	return f.getResult, nil
 }
 
+func (f *fakeRepo) UpdateServer(_ context.Context, _ uuid.UUID, _, _ string, _, _ *string) error {
+	f.updateCalls++
+	return f.updateErr
+}
+
 type okPinger struct{}
 
 func (okPinger) Ping(context.Context) error { return nil }
 
 type serverJSON struct {
-	ID       string  `json:"id"`
-	Name     string  `json:"name"`
-	IconURL  *string `json:"icon_url"`
-	OwnerID  string  `json:"owner_id"`
-	Channels []struct {
+	ID        string  `json:"id"`
+	Name      string  `json:"name"`
+	IconURL   *string `json:"icon_url"`
+	BannerURL *string `json:"banner_url"`
+	OwnerID   string  `json:"owner_id"`
+	Channels  []struct {
 		Name     string `json:"name"`
 		Kind     string `json:"kind"`
 		Position int    `json:"position"`

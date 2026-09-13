@@ -24,7 +24,7 @@ func TestLoad_OK(t *testing.T) {
 	if c.Environment != "development" || c.Port != "8080" || c.Host != "0.0.0.0" {
 		t.Errorf("operational defaults wrong: %+v", c)
 	}
-	if c.UserIDHeader != "X-User-Id" || c.IconMaxBytes != 2*1024*1024 {
+	if c.UserIDHeader != "X-User-Id" || c.IconMaxBytes != 5*1024*1024 {
 		t.Errorf("config = %+v", c)
 	}
 	dsn := c.PostgresDSN()
@@ -64,7 +64,7 @@ func TestLoad_InvalidIconMaxBytesFallsBackToDefault(t *testing.T) {
 	setDB(t)
 	t.Setenv("ICON_MAX_BYTES", "abc")
 	c, _ := config.Load()
-	if c.IconMaxBytes != 2*1024*1024 {
+	if c.IconMaxBytes != 5*1024*1024 {
 		t.Errorf("IconMaxBytes = %d", c.IconMaxBytes)
 	}
 }

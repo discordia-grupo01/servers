@@ -66,11 +66,11 @@ func (r *ServerRepository) CreateServer(ctx context.Context, srv model.Server, c
 // the full representation).
 func (r *ServerRepository) GetByID(ctx context.Context, id uuid.UUID) (model.Server, error) {
 	row := r.pool.QueryRow(ctx, `
-		SELECT id, name, name_key, icon_url, owner_id, created_at, default_role_id
+		SELECT id, name, name_key, icon_url, banner_url, owner_id, created_at, default_role_id
 		  FROM servers WHERE id = $1`, id)
 
 	var s model.Server
-	if err := row.Scan(&s.ID, &s.Name, &s.NameKey, &s.IconURL, &s.OwnerID, &s.CreatedAt, &s.DefaultRoleID); err != nil {
+	if err := row.Scan(&s.ID, &s.Name, &s.NameKey, &s.IconURL, &s.BannerURL, &s.OwnerID, &s.CreatedAt, &s.DefaultRoleID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return model.Server{}, model.ErrServerNotFound
 		}
@@ -144,7 +144,7 @@ func (r *ServerRepository) categoriesByServerIDs(ctx context.Context, serverIDs 
 
 func (r *ServerRepository) ListForUser(ctx context.Context, userID string) ([]model.Server, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT s.id, s.name, s.name_key, s.icon_url, s.owner_id, s.created_at,
+		SELECT s.id, s.name, s.name_key, s.icon_url, s.banner_url, s.owner_id, s.created_at,
 		       c.id, c.name, c.kind, c.position, c.category_id, c.topic, c.created_at
 		  FROM servers s
 		  JOIN server_members m ON m.server_id = s.id
@@ -169,7 +169,7 @@ func (r *ServerRepository) ListForUser(ctx context.Context, userID string) ([]mo
 		var chCreatedAt *time.Time
 
 		if err := rows.Scan(
-			&s.ID, &s.Name, &s.NameKey, &s.IconURL, &s.OwnerID, &s.CreatedAt,
+			&s.ID, &s.Name, &s.NameKey, &s.IconURL, &s.BannerURL, &s.OwnerID, &s.CreatedAt,
 			&chID, &chName, &chKind, &chPosition, &chCategoryID, &chTopic, &chCreatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scan server row: %w", err)
@@ -206,6 +206,25 @@ func (r *ServerRepository) ListForUser(ctx context.Context, userID string) ([]mo
 		servers = append(servers, srv)
 	}
 	return servers, nil
+}
+
+func (r *ServerRepository) UpdateServer(ctx context.Context, id uuid.UUID, name, nameKey string, iconURL, bannerURL *string) error {
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE servers SET name = $1, name_key = $2, icon_url = $3, banner_url = $4
+		 WHERE id = $5`,
+		name, nameKey, iconURL, bannerURL, id,
+	)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgUniqueViolation && pgErr.ConstraintName == "uq_servers_owner_name_key" {
+			return model.ErrNameTaken
+		}
+		return fmt.Errorf("update server: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return model.ErrServerNotFound
+	}
+	return nil
 }
 
 func (r *ServerRepository) SetDefaultRole(ctx context.Context, serverID, roleID uuid.UUID) error {

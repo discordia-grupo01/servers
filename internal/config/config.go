@@ -47,7 +47,7 @@ func Load() (Config, error) {
 		UserIDHeader: getenv("USER_ID_HEADER", "X-User-Id"),
 
 		IconDir:      getenv("ICON_DIR", "./data/icons"),
-		IconMaxBytes: getenvInt64("ICON_MAX_BYTES", 2*1024*1024),
+		IconMaxBytes: getenvInt64("ICON_MAX_BYTES", 5*1024*1024),
 
 		SupabaseStorageURL:    os.Getenv("SUPABASE_STORAGE_URL"),
 		SupabaseStorageBucket: os.Getenv("SUPABASE_STORAGE_BUCKET"),
