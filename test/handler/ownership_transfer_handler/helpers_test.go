@@ -38,6 +38,11 @@ type fakeUseCases struct {
 	rejectResult model.OwnershipTransfer
 	gotReject    ownership_transfer_service.RespondParams
 	rejectCalls  int
+
+	cancelErr    error
+	cancelResult model.OwnershipTransfer
+	gotCancel    ownership_transfer_service.RespondParams
+	cancelCalls  int
 }
 
 func (f *fakeUseCases) InitiateTransfer(_ context.Context, p ownership_transfer_service.InitiateParams) (model.OwnershipTransfer, error) {
@@ -74,6 +79,15 @@ func (f *fakeUseCases) RejectTransfer(_ context.Context, p ownership_transfer_se
 		return model.OwnershipTransfer{}, f.rejectErr
 	}
 	return f.rejectResult, nil
+}
+
+func (f *fakeUseCases) CancelTransfer(_ context.Context, p ownership_transfer_service.RespondParams) (model.OwnershipTransfer, error) {
+	f.cancelCalls++
+	f.gotCancel = p
+	if f.cancelErr != nil {
+		return model.OwnershipTransfer{}, f.cancelErr
+	}
+	return f.cancelResult, nil
 }
 
 type okPinger struct{}

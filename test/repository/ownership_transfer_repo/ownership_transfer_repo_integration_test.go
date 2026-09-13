@@ -40,6 +40,7 @@ func newRepo(t *testing.T) (*ownership_transfer_repo.Repository, *repository.Ser
 	for _, file := range []string{
 		"../../../migrations/0001_init.up.sql",
 		"../../../migrations/0006_ownership_transfers.up.sql",
+		"../../../migrations/0008_ownership_transfer_cancelled_status.up.sql",
 	} {
 		schema, err := os.ReadFile(file)
 		if err != nil {
@@ -258,6 +259,69 @@ func TestOwnershipTransferRepo_Reject_NotPending_ReturnsErr(t *testing.T) {
 	_, err := repo.Reject(ctx, transfer.ID, time.Now().UTC())
 	if !errors.Is(err, model.ErrOwnershipTransferNotPending) {
 		t.Errorf("err = %v, want ErrOwnershipTransferNotPending", err)
+	}
+}
+
+// Cancelling withdraws a pending transfer without touching ownership, and
+// frees the server up to start a new one right away.
+func TestOwnershipTransferRepo_Cancel_LeavesOwnershipUnchanged(t *testing.T) {
+	repo, servers, pool := newRepo(t)
+	ctx := context.Background()
+	srv, member := seedServerWithMember(ctx, t, servers, pool)
+	transfer := pendingTransfer(srv, member)
+	if err := repo.Create(ctx, transfer); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	got, err := repo.Cancel(ctx, transfer.ID, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("Cancel: %v", err)
+	}
+	if got.Status != model.OwnershipTransferCancelled || got.ResolvedAt == nil {
+		t.Errorf("got = %+v, want status=cancelled with resolved_at set", got)
+	}
+
+	if serverOwnerID(ctx, t, pool, srv.ID) != srv.OwnerID {
+		t.Error("servers.owner_id must not change on cancel")
+	}
+	if !isOwnerFlag(ctx, t, pool, srv.ID, srv.OwnerID) {
+		t.Error("original owner must still have is_owner=TRUE after cancel")
+	}
+}
+
+func TestOwnershipTransferRepo_Cancel_NotPending_ReturnsErr(t *testing.T) {
+	repo, servers, pool := newRepo(t)
+	ctx := context.Background()
+	srv, member := seedServerWithMember(ctx, t, servers, pool)
+	transfer := pendingTransfer(srv, member)
+	if err := repo.Create(ctx, transfer); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if _, err := repo.Cancel(ctx, transfer.ID, time.Now().UTC()); err != nil {
+		t.Fatalf("first Cancel: %v", err)
+	}
+
+	_, err := repo.Cancel(ctx, transfer.ID, time.Now().UTC())
+	if !errors.Is(err, model.ErrOwnershipTransferNotPending) {
+		t.Errorf("err = %v, want ErrOwnershipTransferNotPending", err)
+	}
+}
+
+func TestOwnershipTransferRepo_Create_AfterCancelled_AllowsNewPending(t *testing.T) {
+	repo, servers, pool := newRepo(t)
+	ctx := context.Background()
+	srv, member := seedServerWithMember(ctx, t, servers, pool)
+
+	first := pendingTransfer(srv, member)
+	if err := repo.Create(ctx, first); err != nil {
+		t.Fatalf("first Create: %v", err)
+	}
+	if _, err := repo.Cancel(ctx, first.ID, time.Now().UTC()); err != nil {
+		t.Fatalf("Cancel: %v", err)
+	}
+
+	if err := repo.Create(ctx, pendingTransfer(srv, member)); err != nil {
+		t.Errorf("second Create after the first was cancelled should succeed, got: %v", err)
 	}
 }
 

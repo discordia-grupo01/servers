@@ -100,6 +100,17 @@ func (h *Handler) Reject(c *gin.Context) {
 	c.JSON(http.StatusOK, toResponse(t))
 }
 
+// POST /v1/servers/:serverId/ownership-transfers/:transferId/cancel
+func (h *Handler) Cancel(c *gin.Context) {
+	t, ok := h.respond(c, func(uc UseCases, ctx context.Context, p ownership_transfer_service.RespondParams) (model.OwnershipTransfer, error) {
+		return uc.CancelTransfer(ctx, p)
+	})
+	if !ok {
+		return
+	}
+	c.JSON(http.StatusOK, toResponse(t))
+}
+
 func (h *Handler) respond(
 	c *gin.Context,
 	call func(UseCases, context.Context, ownership_transfer_service.RespondParams) (model.OwnershipTransfer, error),

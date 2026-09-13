@@ -25,6 +25,10 @@ func pendingPath(serverID string) string {
 	return "/v1/servers/" + serverID + "/ownership-transfers/pending"
 }
 
+func cancelPath(serverID, transferID string) string {
+	return "/v1/servers/" + serverID + "/ownership-transfers/" + transferID + "/cancel"
+}
+
 func TestInitiate_NoAuth_401(t *testing.T) {
 	uc := &fakeUseCases{}
 	r := newRouter(t, uc)
@@ -191,6 +195,70 @@ func TestReject_NotPending_409(t *testing.T) {
 	w := doJSON(t, r, http.MethodPost, rejectPath(uuid.New().String(), uuid.New().String()), testUser, nil)
 	if w.Code != http.StatusConflict {
 		t.Errorf("status = %d, want 409", w.Code)
+	}
+}
+
+func TestCancel_Success_200(t *testing.T) {
+	serverID, transferID := uuid.New(), uuid.New()
+	uc := &fakeUseCases{cancelResult: model.OwnershipTransfer{
+		ID: transferID, ServerID: serverID, FromUserID: testUser, ToUserID: "member-1",
+		Status: model.OwnershipTransferCancelled,
+	}}
+	r := newRouter(t, uc)
+
+	w := doJSON(t, r, http.MethodPost, cancelPath(serverID.String(), transferID.String()), testUser, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200, body=%s", w.Code, w.Body.String())
+	}
+	if uc.gotCancel.ActorUserID != testUser {
+		t.Errorf("ActorUserID = %q, want %q", uc.gotCancel.ActorUserID, testUser)
+	}
+	tr := decodeTransfer(t, w)
+	if tr.Status != "cancelled" {
+		t.Errorf("status in body = %q, want cancelled", tr.Status)
+	}
+}
+
+func TestCancel_NotInitiator_403(t *testing.T) {
+	uc := &fakeUseCases{cancelErr: model.ErrOwnershipTransferNotInitiator}
+	r := newRouter(t, uc)
+
+	w := doJSON(t, r, http.MethodPost, cancelPath(uuid.New().String(), uuid.New().String()), testUser, nil)
+	if w.Code != http.StatusForbidden {
+		t.Errorf("status = %d, want 403", w.Code)
+	}
+}
+
+func TestCancel_NotFound_404(t *testing.T) {
+	uc := &fakeUseCases{cancelErr: model.ErrOwnershipTransferNotFound}
+	r := newRouter(t, uc)
+
+	w := doJSON(t, r, http.MethodPost, cancelPath(uuid.New().String(), uuid.New().String()), testUser, nil)
+	if w.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", w.Code)
+	}
+}
+
+func TestCancel_NotPending_409(t *testing.T) {
+	uc := &fakeUseCases{cancelErr: model.ErrOwnershipTransferNotPending}
+	r := newRouter(t, uc)
+
+	w := doJSON(t, r, http.MethodPost, cancelPath(uuid.New().String(), uuid.New().String()), testUser, nil)
+	if w.Code != http.StatusConflict {
+		t.Errorf("status = %d, want 409", w.Code)
+	}
+}
+
+func TestCancel_InvalidTransferID_400(t *testing.T) {
+	uc := &fakeUseCases{}
+	r := newRouter(t, uc)
+
+	w := doJSON(t, r, http.MethodPost, cancelPath(uuid.New().String(), "not-a-uuid"), testUser, nil)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", w.Code)
+	}
+	if uc.cancelCalls != 0 {
+		t.Error("use case must not be called with an invalid transferId")
 	}
 }
 

@@ -104,6 +104,7 @@ func NewRouter(d Deps) *gin.Engine {
 	v1.GET("/servers/:serverId/ownership-transfers/pending", transferH.GetPending)
 	v1.POST("/servers/:serverId/ownership-transfers/:transferId/accept", transferH.Accept)
 	v1.POST("/servers/:serverId/ownership-transfers/:transferId/reject", transferH.Reject)
+	v1.POST("/servers/:serverId/ownership-transfers/:transferId/cancel", transferH.Cancel)
 
 	invitation.NewHandler(d.Invitations).Register(v1)
 

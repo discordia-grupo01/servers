@@ -58,6 +58,10 @@ type fakeTransfers struct {
 	rejectResult model.OwnershipTransfer
 	rejectErr    error
 	rejectCalls  int
+
+	cancelResult model.OwnershipTransfer
+	cancelErr    error
+	cancelCalls  int
 }
 
 func (f *fakeTransfers) Create(_ context.Context, t model.OwnershipTransfer) error {
@@ -95,6 +99,14 @@ func (f *fakeTransfers) Reject(context.Context, uuid.UUID, time.Time) (model.Own
 		return model.OwnershipTransfer{}, f.rejectErr
 	}
 	return f.rejectResult, nil
+}
+
+func (f *fakeTransfers) Cancel(context.Context, uuid.UUID, time.Time) (model.OwnershipTransfer, error) {
+	f.cancelCalls++
+	if f.cancelErr != nil {
+		return model.OwnershipTransfer{}, f.cancelErr
+	}
+	return f.cancelResult, nil
 }
 
 func ownerServer() model.Server {

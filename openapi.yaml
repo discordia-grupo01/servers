@@ -141,13 +141,13 @@ components:
         server_id: { type: string, format: uuid }
         from_user_id: { type: string, description: user id of the server's owner at the time the transfer was created }
         to_user_id: { type: string, description: user id of the member offered ownership }
-        status: { type: string, enum: [pending, accepted, rejected] }
+        status: { type: string, enum: [pending, accepted, rejected, cancelled] }
         created_at: { type: string, format: date-time }
         resolved_at:
           type: string
           format: date-time
           nullable: true
-          description: Set once the recipient accepts or rejects; null while pending.
+          description: Set once the transfer is accepted, rejected, or cancelled; null while pending.
     Member:
       type: object
       properties:
@@ -1224,6 +1224,54 @@ paths:
               schema: { $ref: "#/components/schemas/Error" }
         "403":
           description: The authenticated user is not the transfer's recipient.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Transfer not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: The transfer is no longer pending (already resolved).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/servers/{serverId}/ownership-transfers/{transferId}/cancel:
+    post:
+      summary: Cancel a pending ownership transfer
+      description: >
+        Only the owner who initiated the transfer can cancel it. Withdraws
+        the pending transfer without changing ownership, freeing the server
+        up to start a new one (e.g. to send it to a different member).
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: transferId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Transfer cancelled.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OwnershipTransfer" }
+        "400":
+          description: The transfer does not belong to this server.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not the transfer's initiator.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }

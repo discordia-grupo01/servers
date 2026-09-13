@@ -28,6 +28,7 @@ var (
 	ErrOwnershipTransferNotFound       = errors.New("ownership transfer not found")
 	ErrOwnershipTransferServerMismatch = errors.New("ownership transfer does not belong to this server")
 	ErrOwnershipTransferWrongTarget    = errors.New("only the recipient of the transfer can respond to it")
+	ErrOwnershipTransferNotInitiator   = errors.New("only the owner who initiated the transfer can cancel it")
 	ErrOwnershipTransferNotPending     = errors.New("ownership transfer is no longer pending")
 	ErrOwnershipTransferAlreadyPending = errors.New("this server already has a pending ownership transfer")
 

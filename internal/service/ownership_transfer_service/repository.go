@@ -20,4 +20,5 @@ type Transfers interface {
 	GetPendingByServer(ctx context.Context, serverID uuid.UUID) (model.OwnershipTransfer, error)
 	Accept(ctx context.Context, id uuid.UUID, resolvedAt time.Time) (model.OwnershipTransfer, error)
 	Reject(ctx context.Context, id uuid.UUID, resolvedAt time.Time) (model.OwnershipTransfer, error)
+	Cancel(ctx context.Context, id uuid.UUID, resolvedAt time.Time) (model.OwnershipTransfer, error)
 }

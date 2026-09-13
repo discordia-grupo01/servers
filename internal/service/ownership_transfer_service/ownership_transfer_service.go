@@ -109,6 +109,27 @@ func (s *Service) RejectTransfer(ctx context.Context, p RespondParams) (model.Ow
 	return t, nil
 }
 
+func (s *Service) CancelTransfer(ctx context.Context, p RespondParams) (model.OwnershipTransfer, error) {
+	if p.ActorUserID == "" {
+		return model.OwnershipTransfer{}, model.ErrUnauthorized
+	}
+	t, err := s.transfers.GetByID(ctx, p.TransferID)
+	if err != nil {
+		return model.OwnershipTransfer{}, err
+	}
+	if t.ServerID != p.ServerID {
+		return model.OwnershipTransfer{}, model.ErrOwnershipTransferServerMismatch
+	}
+	if t.FromUserID != p.ActorUserID {
+		return model.OwnershipTransfer{}, model.ErrOwnershipTransferNotInitiator
+	}
+	if !t.IsPending() {
+		return model.OwnershipTransfer{}, model.ErrOwnershipTransferNotPending
+	}
+
+	return s.transfers.Cancel(ctx, p.TransferID, s.now())
+}
+
 func (s *Service) resolveRespondable(ctx context.Context, p RespondParams) (model.OwnershipTransfer, error) {
 	if p.ActorUserID == "" {
 		return model.OwnershipTransfer{}, model.ErrUnauthorized

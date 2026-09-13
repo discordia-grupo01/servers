@@ -101,6 +101,22 @@ func (r *Repository) Reject(ctx context.Context, id uuid.UUID, resolvedAt time.T
 	return t, nil
 }
 
+func (r *Repository) Cancel(ctx context.Context, id uuid.UUID, resolvedAt time.Time) (model.OwnershipTransfer, error) {
+	t, err := scanTransfer(r.pool.QueryRow(ctx, `
+		UPDATE ownership_transfers SET status = 'cancelled', resolved_at = $2
+		 WHERE id = $1 AND status = 'pending'
+		RETURNING id, server_id, from_user_id, to_user_id, status, created_at, resolved_at`,
+		id, resolvedAt,
+	))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return model.OwnershipTransfer{}, model.ErrOwnershipTransferNotPending
+		}
+		return model.OwnershipTransfer{}, fmt.Errorf("cancel ownership transfer: %w", err)
+	}
+	return t, nil
+}
+
 func (r *Repository) Accept(ctx context.Context, id uuid.UUID, resolvedAt time.Time) (model.OwnershipTransfer, error) {
 	var t model.OwnershipTransfer
 	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {

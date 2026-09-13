@@ -95,6 +95,8 @@ func WriteDomainError(c *gin.Context, err error) {
 		RespondError(c, http.StatusBadRequest, err.Error(), nil)
 	case errors.Is(err, model.ErrOwnershipTransferWrongTarget):
 		RespondError(c, http.StatusForbidden, err.Error(), nil)
+	case errors.Is(err, model.ErrOwnershipTransferNotInitiator):
+		RespondError(c, http.StatusForbidden, err.Error(), nil)
 	case errors.Is(err, model.ErrOwnershipTransferNotPending):
 		RespondError(c, http.StatusConflict, err.Error(), map[string]any{"reason": "transfer_not_pending"})
 	case errors.Is(err, model.ErrOwnershipTransferAlreadyPending):

@@ -12,4 +12,5 @@ type UseCases interface {
 	GetPendingTransfer(ctx context.Context, p ownership_transfer_service.GetPendingParams) (model.OwnershipTransfer, error)
 	AcceptTransfer(ctx context.Context, p ownership_transfer_service.RespondParams) (model.OwnershipTransfer, error)
 	RejectTransfer(ctx context.Context, p ownership_transfer_service.RespondParams) (model.OwnershipTransfer, error)
+	CancelTransfer(ctx context.Context, p ownership_transfer_service.RespondParams) (model.OwnershipTransfer, error)
 }
