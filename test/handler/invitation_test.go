@@ -1,6 +1,7 @@
 package handler_test
 
 import (
+	"encoding/json"
 	"net/http"
 	"testing"
 
@@ -114,6 +115,65 @@ func TestGenerateHTTP_MapsDomainErrors(t *testing.T) {
 				t.Errorf("reason = %v, want %q", e.Error.Details["reason"], tc.reason)
 			}
 		})
+	}
+}
+
+func TestListHTTP_Returns200WithInvitations(t *testing.T) {
+	sid := uuid.NewString()
+	inv := &fakeInvites{listOut: []model.Invitation{
+		{Code: "aaa", ServerID: uuid.MustParse(sid), CreatedBy: testUser},
+		{Code: "bbb", ServerID: uuid.MustParse(sid), CreatedBy: testUser},
+	}}
+	r := newInviteRouter(t, inv)
+
+	w := doReq(t, r, http.MethodGet, invPath(sid), testUser, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
+	}
+	var body []invitationJSON
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("bad body %q: %v", w.Body.String(), err)
+	}
+	if len(body) != 2 {
+		t.Fatalf("got %d invitations, want 2", len(body))
+	}
+	if inv.listParams.ServerID != sid || inv.listParams.UserID != testUser {
+		t.Errorf("params = %+v", inv.listParams)
+	}
+}
+
+func TestListHTTP_Empty_ReturnsEmptyArrayNotNull(t *testing.T) {
+	r := newInviteRouter(t, &fakeInvites{listOut: []model.Invitation{}})
+	w := doReq(t, r, http.MethodGet, invPath(uuid.NewString()), testUser, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
+	}
+	if body := w.Body.String(); body != "[]" {
+		t.Errorf("body = %q, want []", body)
+	}
+}
+
+func TestListHTTP_NonMember_Returns403(t *testing.T) {
+	r := newInviteRouter(t, &fakeInvites{listErr: model.ErrInvitePermissionDenied})
+	w := doReq(t, r, http.MethodGet, invPath(uuid.NewString()), testUser, nil)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("code=%d", w.Code)
+	}
+}
+
+func TestListHTTP_UnknownServer_Returns404(t *testing.T) {
+	r := newInviteRouter(t, &fakeInvites{listErr: model.ErrInviteServerNotFound})
+	w := doReq(t, r, http.MethodGet, invPath(uuid.NewString()), testUser, nil)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("code=%d", w.Code)
+	}
+}
+
+func TestListHTTP_MissingIdentity_Returns401(t *testing.T) {
+	r := newInviteRouter(t, &fakeInvites{})
+	w := doReq(t, r, http.MethodGet, invPath(uuid.NewString()), "", nil)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("code=%d", w.Code)
 	}
 }
 

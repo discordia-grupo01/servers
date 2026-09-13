@@ -93,6 +93,35 @@ func (r *InvitationRepository) InvitationByCode(ctx context.Context, code string
 	return inv, nil
 }
 
+func (r *InvitationRepository) ListByServer(ctx context.Context, serverID uuid.UUID) ([]model.Invitation, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, code, server_id, created_by, max_uses, uses, expires_at, revoked_at, created_at
+		  FROM invitations
+		 WHERE server_id = $1
+		 ORDER BY created_at DESC`, serverID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list invitations: %w", err)
+	}
+	defer rows.Close()
+
+	invitations := make([]model.Invitation, 0)
+	for rows.Next() {
+		var inv model.Invitation
+		if err := rows.Scan(
+			&inv.ID, &inv.Code, &inv.ServerID, &inv.CreatedBy,
+			&inv.MaxUses, &inv.Uses, &inv.ExpiresAt, &inv.RevokedAt, &inv.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan invitation: %w", err)
+		}
+		invitations = append(invitations, inv)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list invitations: %w", err)
+	}
+	return invitations, nil
+}
+
 func (r *InvitationRepository) RevokeInvitation(ctx context.Context, code string, revokedAt time.Time) error {
 	if _, err := r.pool.Exec(ctx, `
 		UPDATE invitations SET revoked_at = $2

@@ -33,6 +33,10 @@ type fakeInviteRepo struct {
 	byCode    map[string]model.Invitation
 	byCodeErr error
 
+	listResult []model.Invitation
+	listErr    error
+	listCalls  int
+
 	revokeErr   error
 	revokedCode string
 	revokedAt   time.Time
@@ -76,6 +80,14 @@ func (f *fakeInviteRepo) InvitationByCode(_ context.Context, code string) (model
 		return inv, nil
 	}
 	return model.Invitation{}, model.ErrInvitationNotFound
+}
+
+func (f *fakeInviteRepo) ListByServer(context.Context, uuid.UUID) ([]model.Invitation, error) {
+	f.listCalls++
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	return f.listResult, nil
 }
 
 func (f *fakeInviteRepo) RevokeInvitation(_ context.Context, code string, at time.Time) error {

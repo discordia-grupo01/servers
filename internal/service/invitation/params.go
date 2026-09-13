@@ -13,6 +13,11 @@ type RevokeParams struct {
 	UserID string
 }
 
+type ListParams struct {
+	ServerID string
+	UserID   string
+}
+
 type JoinParams struct {
 	Code   string
 	UserID string

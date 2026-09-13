@@ -23,6 +23,11 @@ type fakeInvites struct {
 	genParams invitation.GenerateParams
 	genOut    model.Invitation
 
+	listErr    error
+	listCalled bool
+	listParams invitation.ListParams
+	listOut    []model.Invitation
+
 	revErr    error
 	revCalled bool
 	revParams invitation.RevokeParams
@@ -46,6 +51,14 @@ func (f *fakeInvites) GenerateInvitation(_ context.Context, p invitation.Generat
 	out.CreatedBy = p.CreatedBy
 	out.MaxUses = p.MaxUses
 	return out, nil
+}
+
+func (f *fakeInvites) ListInvitations(_ context.Context, p invitation.ListParams) ([]model.Invitation, error) {
+	f.listCalled, f.listParams = true, p
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	return f.listOut, nil
 }
 
 func (f *fakeInvites) RevokeInvitation(_ context.Context, p invitation.RevokeParams) error {

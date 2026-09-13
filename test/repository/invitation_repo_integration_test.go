@@ -128,6 +128,104 @@ func TestInviteRepo_DuplicateCodeIsReported(t *testing.T) {
 	}
 }
 
+func TestInviteRepo_ListByServer_ReturnsAllRegardlessOfStatus(t *testing.T) {
+	repo, pool := newInviteRepo(t)
+	ctx := context.Background()
+	owner := "owner-" + uuid.NewString()
+	serverID := seedServer(t, pool, owner)
+
+	active := newInvitation(serverID, owner)
+	if err := repo.CreateInvitation(ctx, active); err != nil {
+		t.Fatalf("create active: %v", err)
+	}
+	revoked := newInvitation(serverID, owner)
+	if err := repo.CreateInvitation(ctx, revoked); err != nil {
+		t.Fatalf("create revoked: %v", err)
+	}
+	if err := repo.RevokeInvitation(ctx, revoked.Code, time.Now().UTC()); err != nil {
+		t.Fatalf("revoke: %v", err)
+	}
+
+	got, err := repo.ListByServer(ctx, serverID)
+	if err != nil {
+		t.Fatalf("ListByServer: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %d invitations, want 2", len(got))
+	}
+	codes := map[string]bool{got[0].Code: true, got[1].Code: true}
+	if !codes[active.Code] || !codes[revoked.Code] {
+		t.Errorf("codes = %v, want both %q and %q (revoked included)", codes, active.Code, revoked.Code)
+	}
+}
+
+func TestInviteRepo_ListByServer_MostRecentFirst(t *testing.T) {
+	repo, pool := newInviteRepo(t)
+	ctx := context.Background()
+	owner := "owner-" + uuid.NewString()
+	serverID := seedServer(t, pool, owner)
+
+	older := newInvitation(serverID, owner)
+	older.CreatedAt = time.Now().UTC().Add(-time.Hour)
+	if err := repo.CreateInvitation(ctx, older); err != nil {
+		t.Fatalf("create older: %v", err)
+	}
+	newer := newInvitation(serverID, owner)
+	newer.CreatedAt = time.Now().UTC()
+	if err := repo.CreateInvitation(ctx, newer); err != nil {
+		t.Fatalf("create newer: %v", err)
+	}
+
+	got, err := repo.ListByServer(ctx, serverID)
+	if err != nil {
+		t.Fatalf("ListByServer: %v", err)
+	}
+	if len(got) != 2 || got[0].Code != newer.Code || got[1].Code != older.Code {
+		t.Errorf("got = %+v, want [newer, older]", got)
+	}
+}
+
+func TestInviteRepo_ListByServer_OnlyThatServersInvitations(t *testing.T) {
+	repo, pool := newInviteRepo(t)
+	ctx := context.Background()
+
+	mine := seedServer(t, pool, "owner-"+uuid.NewString())
+	other := seedServer(t, pool, "owner-"+uuid.NewString())
+
+	inv := newInvitation(mine, "owner-mine")
+	if err := repo.CreateInvitation(ctx, inv); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	otherInv := newInvitation(other, "owner-other")
+	if err := repo.CreateInvitation(ctx, otherInv); err != nil {
+		t.Fatalf("create other: %v", err)
+	}
+
+	got, err := repo.ListByServer(ctx, mine)
+	if err != nil {
+		t.Fatalf("ListByServer: %v", err)
+	}
+	if len(got) != 1 || got[0].Code != inv.Code {
+		t.Errorf("got = %+v, want only %q", got, inv.Code)
+	}
+}
+
+func TestInviteRepo_ListByServer_NoInvitations_ReturnsEmptyNotNil(t *testing.T) {
+	repo, pool := newInviteRepo(t)
+	serverID := seedServer(t, pool, "owner-"+uuid.NewString())
+
+	got, err := repo.ListByServer(context.Background(), serverID)
+	if err != nil {
+		t.Fatalf("ListByServer: %v", err)
+	}
+	if got == nil {
+		t.Error("got nil, want an empty (non-nil) slice")
+	}
+	if len(got) != 0 {
+		t.Errorf("got %d invitations, want 0", len(got))
+	}
+}
+
 func TestInviteRepo_UnknownCode(t *testing.T) {
 	repo, _ := newInviteRepo(t)
 	if _, err := repo.InvitationByCode(context.Background(), "does-not-exist"); !errors.Is(err, model.ErrInvitationNotFound) {

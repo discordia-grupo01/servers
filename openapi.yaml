@@ -848,6 +848,41 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+    get:
+      summary: List a server's invitations
+      description: >
+        Any member can see every invitation ever created for the server --
+        active, revoked, or expired -- newest first. There's no filtering by
+        status server-side; the caller decides what to do with each one (e.g.
+        revoke an active one it no longer wants around).
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: The server's invitations (possibly empty).
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Invitation" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The caller is not a member of the server.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: The server does not exist.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
 
   /v1/roles/{roleId}:
     patch:

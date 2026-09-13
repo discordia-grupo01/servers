@@ -174,6 +174,62 @@ func TestGenerate_PropagatesRepositoryError(t *testing.T) {
 	}
 }
 
+func listParams(serverID string) invitation.ListParams {
+	return invitation.ListParams{ServerID: serverID, UserID: inviterID}
+}
+
+func TestList_ReturnsWhateverTheRepoGives(t *testing.T) {
+	serverID := uuid.NewString()
+	want := []model.Invitation{activeInvitation(uuid.New()), activeInvitation(uuid.New())}
+	repo := &fakeInviteRepo{exists: true, member: true, listResult: want}
+
+	got, err := newInviteService(repo).ListInvitations(context.Background(), listParams(serverID))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %d invitations, want %d", len(got), len(want))
+	}
+	if repo.listCalls != 1 {
+		t.Errorf("ListByServer calls = %d, want 1", repo.listCalls)
+	}
+}
+
+func TestList_RequiresIdentity(t *testing.T) {
+	p := listParams(uuid.NewString())
+	p.UserID = ""
+	_, err := newInviteService(memberRepo()).ListInvitations(context.Background(), p)
+	if !errors.Is(err, model.ErrUnauthorized) {
+		t.Fatalf("err = %v, want ErrUnauthorized", err)
+	}
+}
+
+func TestList_UnknownServer(t *testing.T) {
+	repo := &fakeInviteRepo{exists: false}
+	_, err := newInviteService(repo).ListInvitations(context.Background(), listParams(uuid.NewString()))
+	if !errors.Is(err, model.ErrInviteServerNotFound) {
+		t.Fatalf("err = %v, want ErrInviteServerNotFound", err)
+	}
+}
+
+func TestList_MalformedServerID(t *testing.T) {
+	_, err := newInviteService(memberRepo()).ListInvitations(context.Background(), listParams("not-a-uuid"))
+	if !errors.Is(err, model.ErrInviteServerNotFound) {
+		t.Fatalf("err = %v, want ErrInviteServerNotFound", err)
+	}
+}
+
+func TestList_NonMemberCannotList(t *testing.T) {
+	repo := &fakeInviteRepo{exists: true, member: false}
+	_, err := newInviteService(repo).ListInvitations(context.Background(), listParams(uuid.NewString()))
+	if !errors.Is(err, model.ErrInvitePermissionDenied) {
+		t.Fatalf("err = %v, want ErrInvitePermissionDenied", err)
+	}
+	if repo.listCalls != 0 {
+		t.Error("ListByServer must not be called for a non-member")
+	}
+}
+
 func revokeSetup(inv model.Invitation, member bool) *fakeInviteRepo {
 	return &fakeInviteRepo{
 		member: member,

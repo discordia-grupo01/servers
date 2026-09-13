@@ -24,6 +24,7 @@ func NewHandler(uc UseCases) *Handler {
 
 func (h *Handler) Register(r gin.IRoutes) {
 	r.POST("/servers/:serverId/invites", h.generate)
+	r.GET("/servers/:serverId/invites", h.list)
 	r.DELETE("/invites/:code", h.revoke)
 	r.POST("/invites/:code/join", h.join)
 }
@@ -61,6 +62,23 @@ func (h *Handler) generate(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusCreated, toResponse(inv))
+}
+
+func (h *Handler) list(c *gin.Context) {
+	invitations, err := h.uc.ListInvitations(c.Request.Context(), invitationsvc.ListParams{
+		ServerID: c.Param("serverId"),
+		UserID:   middleware.UserID(c),
+	})
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+
+	resp := make([]model.InvitationResponse, len(invitations))
+	for i, inv := range invitations {
+		resp[i] = toResponse(inv)
+	}
+	c.JSON(http.StatusOK, resp)
 }
 
 func (h *Handler) revoke(c *gin.Context) {

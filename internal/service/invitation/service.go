@@ -89,6 +89,35 @@ func (s *Service) GenerateInvitation(ctx context.Context, p GenerateParams) (mod
 	return model.Invitation{}, model.ErrInviteCodeUnavailable
 }
 
+func (s *Service) ListInvitations(ctx context.Context, p ListParams) ([]model.Invitation, error) {
+	if p.UserID == "" {
+		return nil, model.ErrUnauthorized
+	}
+
+	serverID, err := uuid.Parse(p.ServerID)
+	if err != nil {
+		return nil, model.ErrInviteServerNotFound
+	}
+
+	exists, err := s.repo.ServerExists(ctx, serverID)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, model.ErrInviteServerNotFound
+	}
+
+	member, err := s.repo.IsMember(ctx, serverID, p.UserID)
+	if err != nil {
+		return nil, err
+	}
+	if !member {
+		return nil, model.ErrInvitePermissionDenied
+	}
+
+	return s.repo.ListByServer(ctx, serverID)
+}
+
 func (s *Service) RevokeInvitation(ctx context.Context, p RevokeParams) error {
 	if p.UserID == "" {
 		return model.ErrUnauthorized

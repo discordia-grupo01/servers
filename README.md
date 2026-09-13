@@ -140,6 +140,7 @@ Ver [`openapi.yaml`](openapi.yaml).
 | GET | `/v1/servers/{serverId}/banner` | no (público) | Sirve el archivo del banner. 404 si el server no tiene uno. Mismo esquema de URL que el icono. |
 | GET | `/v1/servers/{serverId}/members` | si | Listar los miembros del server (paginado). |
 | POST | `/v1/servers/:serverId/invites` | si | Generar invitación (JSON opcional: `max_uses?`; expira a los 7 días). |
+| GET | `/v1/servers/:serverId/invites` | si (miembro) | Listar todas las invitaciones del server (activas, revocadas o vencidas), más nueva primero. Sin filtro por estado del lado del back. |
 | DELETE | `/v1/invites/:code` | si | Revocar una invitación (idempotente). |
 | POST | `/v1/invites/:code/join` | si | Unirse a un servidor con una invitación. |
 | DELETE | `/v1/servers/{serverId}/members/{userId}` | si (uno mismo) | Abandonar un servidor. `userId` debe ser el propio caller; el owner no puede abandonar así (409, primero tiene que transferir la propiedad o eliminar el servidor). |
