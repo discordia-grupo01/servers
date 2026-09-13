@@ -47,6 +47,10 @@ type fakeTransfers struct {
 	getResult model.OwnershipTransfer
 	getErr    error
 
+	pendingResult model.OwnershipTransfer
+	pendingErr    error
+	pendingCalls  int
+
 	acceptResult model.OwnershipTransfer
 	acceptErr    error
 	acceptCalls  int
@@ -54,6 +58,10 @@ type fakeTransfers struct {
 	rejectResult model.OwnershipTransfer
 	rejectErr    error
 	rejectCalls  int
+
+	cancelResult model.OwnershipTransfer
+	cancelErr    error
+	cancelCalls  int
 }
 
 func (f *fakeTransfers) Create(_ context.Context, t model.OwnershipTransfer) error {
@@ -67,6 +75,14 @@ func (f *fakeTransfers) GetByID(context.Context, uuid.UUID) (model.OwnershipTran
 		return model.OwnershipTransfer{}, f.getErr
 	}
 	return f.getResult, nil
+}
+
+func (f *fakeTransfers) GetPendingByServer(context.Context, uuid.UUID) (model.OwnershipTransfer, error) {
+	f.pendingCalls++
+	if f.pendingErr != nil {
+		return model.OwnershipTransfer{}, f.pendingErr
+	}
+	return f.pendingResult, nil
 }
 
 func (f *fakeTransfers) Accept(context.Context, uuid.UUID, time.Time) (model.OwnershipTransfer, error) {
@@ -83,6 +99,14 @@ func (f *fakeTransfers) Reject(context.Context, uuid.UUID, time.Time) (model.Own
 		return model.OwnershipTransfer{}, f.rejectErr
 	}
 	return f.rejectResult, nil
+}
+
+func (f *fakeTransfers) Cancel(context.Context, uuid.UUID, time.Time) (model.OwnershipTransfer, error) {
+	f.cancelCalls++
+	if f.cancelErr != nil {
+		return model.OwnershipTransfer{}, f.cancelErr
+	}
+	return f.cancelResult, nil
 }
 
 func ownerServer() model.Server {

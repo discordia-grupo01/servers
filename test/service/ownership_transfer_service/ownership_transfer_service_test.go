@@ -245,3 +245,159 @@ func TestRejectTransfer_WrongTarget_Forbidden(t *testing.T) {
 		t.Errorf("err = %v, want ErrOwnershipTransferWrongTarget", err)
 	}
 }
+
+// Cancelling lets the owner withdraw a pending transfer, e.g. to send it to
+// a different member.
+func TestCancelTransfer_Success(t *testing.T) {
+	serverID := uuid.New()
+	pending := pendingTransfer(serverID)
+	cancelled := pending
+	cancelled.Status = model.OwnershipTransferCancelled
+	transfers := &fakeTransfers{getResult: pending, cancelResult: cancelled}
+	svc := newService(&fakeServers{}, &fakeMembers{}, transfers)
+
+	got, err := svc.CancelTransfer(context.Background(), respondParams(serverID, pending.ID, testOwner))
+	if err != nil {
+		t.Fatalf("CancelTransfer() error = %v, want nil", err)
+	}
+	if transfers.cancelCalls != 1 {
+		t.Fatalf("Cancel calls = %d, want 1", transfers.cancelCalls)
+	}
+	if got.Status != model.OwnershipTransferCancelled {
+		t.Errorf("status = %q, want cancelled", got.Status)
+	}
+}
+
+func TestCancelTransfer_Unauthenticated(t *testing.T) {
+	svc := newService(&fakeServers{}, &fakeMembers{}, &fakeTransfers{})
+
+	_, err := svc.CancelTransfer(context.Background(), respondParams(uuid.New(), uuid.New(), ""))
+	if !errors.Is(err, model.ErrUnauthorized) {
+		t.Errorf("err = %v, want ErrUnauthorized", err)
+	}
+}
+
+func TestCancelTransfer_NotFound(t *testing.T) {
+	transfers := &fakeTransfers{getErr: model.ErrOwnershipTransferNotFound}
+	svc := newService(&fakeServers{}, &fakeMembers{}, transfers)
+
+	_, err := svc.CancelTransfer(context.Background(), respondParams(uuid.New(), uuid.New(), testOwner))
+	if !errors.Is(err, model.ErrOwnershipTransferNotFound) {
+		t.Errorf("err = %v, want ErrOwnershipTransferNotFound", err)
+	}
+	if transfers.cancelCalls != 0 {
+		t.Error("Cancel must not be called when the transfer doesn't exist")
+	}
+}
+
+func TestCancelTransfer_ServerMismatch(t *testing.T) {
+	pending := pendingTransfer(uuid.New())
+	transfers := &fakeTransfers{getResult: pending}
+	svc := newService(&fakeServers{}, &fakeMembers{}, transfers)
+
+	_, err := svc.CancelTransfer(context.Background(), respondParams(uuid.New(), pending.ID, testOwner))
+	if !errors.Is(err, model.ErrOwnershipTransferServerMismatch) {
+		t.Errorf("err = %v, want ErrOwnershipTransferServerMismatch", err)
+	}
+	if transfers.cancelCalls != 0 {
+		t.Error("Cancel must not be called on a server mismatch")
+	}
+}
+
+// Only the initiating owner can cancel; the recipient cannot cancel their
+// own incoming transfer this way (they should reject it instead).
+func TestCancelTransfer_NotInitiator_Forbidden(t *testing.T) {
+	serverID := uuid.New()
+	pending := pendingTransfer(serverID)
+	transfers := &fakeTransfers{getResult: pending}
+	svc := newService(&fakeServers{}, &fakeMembers{}, transfers)
+
+	_, err := svc.CancelTransfer(context.Background(), respondParams(serverID, pending.ID, testMember))
+	if !errors.Is(err, model.ErrOwnershipTransferNotInitiator) {
+		t.Errorf("err = %v, want ErrOwnershipTransferNotInitiator", err)
+	}
+	if transfers.cancelCalls != 0 {
+		t.Error("Cancel must not be called for the wrong actor")
+	}
+}
+
+func TestCancelTransfer_NotPending(t *testing.T) {
+	serverID := uuid.New()
+	resolved := pendingTransfer(serverID)
+	resolved.Status = model.OwnershipTransferAccepted
+	transfers := &fakeTransfers{getResult: resolved}
+	svc := newService(&fakeServers{}, &fakeMembers{}, transfers)
+
+	_, err := svc.CancelTransfer(context.Background(), respondParams(serverID, resolved.ID, testOwner))
+	if !errors.Is(err, model.ErrOwnershipTransferNotPending) {
+		t.Errorf("err = %v, want ErrOwnershipTransferNotPending", err)
+	}
+	if transfers.cancelCalls != 0 {
+		t.Error("Cancel must not be called on an already-resolved transfer")
+	}
+}
+
+func TestGetPendingTransfer_Success(t *testing.T) {
+	srv := ownerServer()
+	pending := pendingTransfer(srv.ID)
+	transfers := &fakeTransfers{pendingResult: pending}
+	svc := newService(&fakeServers{server: srv}, &fakeMembers{isMember: true}, transfers)
+
+	got, err := svc.GetPendingTransfer(context.Background(), ownership_transfer_service.GetPendingParams{
+		ServerID: srv.ID, ActorUserID: testMember,
+	})
+	if err != nil {
+		t.Fatalf("GetPendingTransfer() error = %v, want nil", err)
+	}
+	if transfers.pendingCalls != 1 {
+		t.Fatalf("GetPendingByServer calls = %d, want 1", transfers.pendingCalls)
+	}
+	if got.ID != pending.ID {
+		t.Errorf("got id %v, want %v", got.ID, pending.ID)
+	}
+}
+
+func TestGetPendingTransfer_NotAMember_Forbidden(t *testing.T) {
+	srv := ownerServer()
+	svc := newService(&fakeServers{server: srv}, &fakeMembers{isMember: false}, &fakeTransfers{})
+
+	_, err := svc.GetPendingTransfer(context.Background(), ownership_transfer_service.GetPendingParams{
+		ServerID: srv.ID, ActorUserID: "outsider",
+	})
+	if !errors.Is(err, model.ErrForbiddenNotMember) {
+		t.Errorf("err = %v, want ErrForbiddenNotMember", err)
+	}
+}
+
+func TestGetPendingTransfer_None_NotFound(t *testing.T) {
+	srv := ownerServer()
+	transfers := &fakeTransfers{pendingErr: model.ErrOwnershipTransferNotFound}
+	svc := newService(&fakeServers{server: srv}, &fakeMembers{isMember: true}, transfers)
+
+	_, err := svc.GetPendingTransfer(context.Background(), ownership_transfer_service.GetPendingParams{
+		ServerID: srv.ID, ActorUserID: testOwner,
+	})
+	if !errors.Is(err, model.ErrOwnershipTransferNotFound) {
+		t.Errorf("err = %v, want ErrOwnershipTransferNotFound", err)
+	}
+}
+
+func TestGetPendingTransfer_Unauthenticated(t *testing.T) {
+	svc := newService(&fakeServers{}, &fakeMembers{}, &fakeTransfers{})
+
+	_, err := svc.GetPendingTransfer(context.Background(), ownership_transfer_service.GetPendingParams{ServerID: uuid.New()})
+	if !errors.Is(err, model.ErrUnauthorized) {
+		t.Errorf("err = %v, want ErrUnauthorized", err)
+	}
+}
+
+func TestGetPendingTransfer_ServerNotFound(t *testing.T) {
+	svc := newService(&fakeServers{getErr: model.ErrServerNotFound}, &fakeMembers{}, &fakeTransfers{})
+
+	_, err := svc.GetPendingTransfer(context.Background(), ownership_transfer_service.GetPendingParams{
+		ServerID: uuid.New(), ActorUserID: testMember,
+	})
+	if !errors.Is(err, model.ErrServerNotFound) {
+		t.Errorf("err = %v, want ErrServerNotFound", err)
+	}
+}

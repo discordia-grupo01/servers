@@ -7,3 +7,10 @@ type LeaveParams struct {
 	ActorUserID  string
 	TargetUserID string
 }
+
+type ListMembersParams struct {
+	ServerID    uuid.UUID
+	ActorUserID string
+	Limit       int
+	Offset      int
+}

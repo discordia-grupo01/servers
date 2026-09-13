@@ -88,6 +88,7 @@ func NewRouter(d Deps) *gin.Engine {
 	v1.DELETE("/servers/:serverId/members/:userId/roles/:roleId", memberRoleH.RemoveRole)
 	v1.GET("/servers/:serverId/members/:userId/roles", memberRoleH.ListMemberRoles)
 
+	v1.GET("/servers/:serverId/members", membershipH.ListMembers)
 	v1.DELETE("/servers/:serverId/members/:userId", membershipH.LeaveServer)
 
 	v1.POST("/servers/:serverId/channels", channelH.CreateChannel)
@@ -100,8 +101,10 @@ func NewRouter(d Deps) *gin.Engine {
 	v1.PATCH("/servers/:serverId/categories/reorder", categoryH.Reorder)
 
 	v1.POST("/servers/:serverId/ownership-transfers", transferH.Initiate)
+	v1.GET("/servers/:serverId/ownership-transfers/pending", transferH.GetPending)
 	v1.POST("/servers/:serverId/ownership-transfers/:transferId/accept", transferH.Accept)
 	v1.POST("/servers/:serverId/ownership-transfers/:transferId/reject", transferH.Reject)
+	v1.POST("/servers/:serverId/ownership-transfers/:transferId/cancel", transferH.Cancel)
 
 	invitation.NewHandler(d.Invitations).Register(v1)
 

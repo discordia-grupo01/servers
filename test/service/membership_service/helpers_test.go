@@ -31,6 +31,15 @@ type fakeMembers struct {
 	removeErr   error
 	removeCalls int
 	removedUser string
+
+	isMember    bool
+	isMemberErr error
+
+	listResult []model.Member
+	listTotal  int
+	listErr    error
+	gotLimit   int
+	gotOffset  int
 }
 
 func (f *fakeMembers) RemoveMember(_ context.Context, _ uuid.UUID, userID string) (bool, error) {
@@ -40,6 +49,22 @@ func (f *fakeMembers) RemoveMember(_ context.Context, _ uuid.UUID, userID string
 		return false, f.removeErr
 	}
 	return f.removed, nil
+}
+
+func (f *fakeMembers) IsMember(context.Context, uuid.UUID, string) (bool, error) {
+	if f.isMemberErr != nil {
+		return false, f.isMemberErr
+	}
+	return f.isMember, nil
+}
+
+func (f *fakeMembers) ListMembers(_ context.Context, _ uuid.UUID, limit, offset int) ([]model.Member, int, error) {
+	f.gotLimit = limit
+	f.gotOffset = offset
+	if f.listErr != nil {
+		return nil, 0, f.listErr
+	}
+	return f.listResult, f.listTotal, nil
 }
 
 // memberServer returns a server owned by testOwner (so testMember is a plain

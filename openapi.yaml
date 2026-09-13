@@ -141,13 +141,28 @@ components:
         server_id: { type: string, format: uuid }
         from_user_id: { type: string, description: user id of the server's owner at the time the transfer was created }
         to_user_id: { type: string, description: user id of the member offered ownership }
-        status: { type: string, enum: [pending, accepted, rejected] }
+        status: { type: string, enum: [pending, accepted, rejected, cancelled] }
         created_at: { type: string, format: date-time }
         resolved_at:
           type: string
           format: date-time
           nullable: true
-          description: Set once the recipient accepts or rejects; null while pending.
+          description: Set once the transfer is accepted, rejected, or cancelled; null while pending.
+    Member:
+      type: object
+      properties:
+        user_id: { type: string }
+        is_owner: { type: boolean }
+        joined_at: { type: string, format: date-time }
+    MemberList:
+      type: object
+      properties:
+        members:
+          type: array
+          items: { $ref: "#/components/schemas/Member" }
+        total: { type: integer, description: Total member count across all pages. }
+        limit: { type: integer }
+        offset: { type: integer }
 
 security:
   - bearerAuth: []
@@ -942,6 +957,55 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
 
+  /v1/servers/{serverId}/members:
+    get:
+      summary: List server members
+      description: >
+        Paginated list of a server's members. The caller must already be a
+        member of the server. Used, among other things, to let the owner
+        pick an ownership-transfer target.
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: limit
+          in: query
+          required: false
+          description: Page size. Defaults to 20, capped at 100.
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: offset
+          in: query
+          required: false
+          description: Number of members to skip. Defaults to 0.
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        "200":
+          description: One page of members, oldest join first.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MemberList" }
+        "400":
+          description: "`limit` or `offset` is not a non-negative integer."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not a member of this server.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Server not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
   /v1/servers/{serverId}/members/{userId}:
     delete:
       summary: Leave a server
@@ -1042,6 +1106,41 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
 
+  /v1/servers/{serverId}/ownership-transfers/pending:
+    get:
+      summary: Get a server's pending ownership transfer
+      description: >
+        Returns the server's pending ownership transfer, if any. Only
+        members of the server (the owner who created it, or the member it
+        was offered to) can see it. There is at most one pending transfer
+        per server.
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: The pending transfer.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OwnershipTransfer" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not a member of this server.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Server not found, or it has no pending transfer.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
   /v1/servers/{serverId}/ownership-transfers/{transferId}/accept:
     post:
       summary: Accept an ownership transfer
@@ -1125,6 +1224,54 @@ paths:
               schema: { $ref: "#/components/schemas/Error" }
         "403":
           description: The authenticated user is not the transfer's recipient.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Transfer not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: The transfer is no longer pending (already resolved).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/servers/{serverId}/ownership-transfers/{transferId}/cancel:
+    post:
+      summary: Cancel a pending ownership transfer
+      description: >
+        Only the owner who initiated the transfer can cancel it. Withdraws
+        the pending transfer without changing ownership, freeing the server
+        up to start a new one (e.g. to send it to a different member).
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: transferId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Transfer cancelled.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OwnershipTransfer" }
+        "400":
+          description: The transfer does not belong to this server.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not the transfer's initiator.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }

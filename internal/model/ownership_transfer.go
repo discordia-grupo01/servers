@@ -9,9 +9,10 @@ import (
 type OwnershipTransferStatus string
 
 const (
-	OwnershipTransferPending  OwnershipTransferStatus = "pending"
-	OwnershipTransferAccepted OwnershipTransferStatus = "accepted"
-	OwnershipTransferRejected OwnershipTransferStatus = "rejected"
+	OwnershipTransferPending   OwnershipTransferStatus = "pending"
+	OwnershipTransferAccepted  OwnershipTransferStatus = "accepted"
+	OwnershipTransferRejected  OwnershipTransferStatus = "rejected"
+	OwnershipTransferCancelled OwnershipTransferStatus = "cancelled"
 )
 
 type OwnershipTransfer struct {

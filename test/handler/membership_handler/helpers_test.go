@@ -11,6 +11,7 @@ import (
 
 	"github.com/discordia-grupo01/servers/internal/handler"
 	"github.com/discordia-grupo01/servers/internal/middleware"
+	"github.com/discordia-grupo01/servers/internal/model"
 	"github.com/discordia-grupo01/servers/internal/service/membership_service"
 )
 
@@ -20,12 +21,27 @@ type fakeMembershipUseCases struct {
 	err       error
 	calls     int
 	gotParams membership_service.LeaveParams
+
+	listMembers   []model.Member
+	listTotal     int
+	listErr       error
+	listCalls     int
+	gotListParams membership_service.ListMembersParams
 }
 
 func (f *fakeMembershipUseCases) LeaveServer(_ context.Context, p membership_service.LeaveParams) error {
 	f.calls++
 	f.gotParams = p
 	return f.err
+}
+
+func (f *fakeMembershipUseCases) ListMembers(_ context.Context, p membership_service.ListMembersParams) ([]model.Member, int, error) {
+	f.listCalls++
+	f.gotListParams = p
+	if f.listErr != nil {
+		return nil, 0, f.listErr
+	}
+	return f.listMembers, f.listTotal, nil
 }
 
 type okPinger struct{}
@@ -53,6 +69,17 @@ func newRouter(t *testing.T, uc *fakeMembershipUseCases) *gin.Engine {
 func doDelete(t *testing.T, r http.Handler, path, user string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodDelete, path, nil)
+	if user != "" {
+		req.Header.Set("X-User-Id", user)
+	}
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	return w
+}
+
+func doGet(t *testing.T, r http.Handler, path, user string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, path, nil)
 	if user != "" {
 		req.Header.Set("X-User-Id", user)
 	}

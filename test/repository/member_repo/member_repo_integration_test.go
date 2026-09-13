@@ -256,6 +256,74 @@ func TestMemberRepo_RemoveMember_CascadesToMemberRoles(t *testing.T) {
 	}
 }
 
+func TestMemberRepo_ListMembers_PaginatesAndReportsTotal(t *testing.T) {
+	members, servers, _, pool := newRepo(t)
+	ctx := context.Background()
+	srv, _ := seedServerWithMember(ctx, t, servers, pool)
+
+	// seedServerWithMember already left the server with 2 rows: the owner
+	// (inserted by CreateServer) and one plain member. Add one more so
+	// paging across 3 members with a page size of 2 is meaningful.
+	secondMember := "member-" + uuid.NewString()
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO server_members (server_id, user_id, is_owner, joined_at) VALUES ($1, $2, FALSE, $3)`,
+		srv.ID, secondMember, time.Now().UTC().Add(time.Second),
+	); err != nil {
+		t.Fatalf("seed second member: %v", err)
+	}
+
+	page1, total, err := members.ListMembers(ctx, srv.ID, 2, 0)
+	if err != nil {
+		t.Fatalf("ListMembers(page1) error = %v", err)
+	}
+	if total != 3 {
+		t.Fatalf("total = %d, want 3", total)
+	}
+	if len(page1) != 2 {
+		t.Fatalf("len(page1) = %d, want 2", len(page1))
+	}
+
+	page2, total2, err := members.ListMembers(ctx, srv.ID, 2, 2)
+	if err != nil {
+		t.Fatalf("ListMembers(page2) error = %v", err)
+	}
+	if total2 != 3 {
+		t.Fatalf("total (page2) = %d, want 3", total2)
+	}
+	if len(page2) != 1 {
+		t.Fatalf("len(page2) = %d, want 1", len(page2))
+	}
+
+	seen := map[string]bool{}
+	for _, m := range append(page1, page2...) {
+		seen[m.UserID] = true
+	}
+	if len(seen) != 3 {
+		t.Errorf("distinct members across pages = %d, want 3 (pages must not overlap)", len(seen))
+	}
+}
+
+func TestMemberRepo_ListMembers_ReportsOwnerFlag(t *testing.T) {
+	members, servers, _, pool := newRepo(t)
+	ctx := context.Background()
+	srv, member := seedServerWithMember(ctx, t, servers, pool)
+
+	all, _, err := members.ListMembers(ctx, srv.ID, 10, 0)
+	if err != nil {
+		t.Fatalf("ListMembers error = %v", err)
+	}
+	byUser := map[string]bool{}
+	for _, m := range all {
+		byUser[m.UserID] = m.IsOwner
+	}
+	if isOwner, ok := byUser[srv.OwnerID]; !ok || !isOwner {
+		t.Errorf("owner %q is_owner = %v, ok = %v; want true, true", srv.OwnerID, isOwner, ok)
+	}
+	if isOwner, ok := byUser[member]; !ok || isOwner {
+		t.Errorf("member %q is_owner = %v, ok = %v; want false, true", member, isOwner, ok)
+	}
+}
+
 // dropAllTestTables wipes every table any of this repo's integration test
 // packages might have created, so a test run leaves the database exactly as
 // clean as it found it -- both before it starts and after it finishes.

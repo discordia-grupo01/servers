@@ -64,6 +64,29 @@ func (s *Service) InitiateTransfer(ctx context.Context, p InitiateParams) (model
 	return t, nil
 }
 
+// GetPendingTransfer returns a server's pending ownership transfer, if any.
+// Only members of the server (the owner initiating it, or the member it was
+// sent to) can see it.
+func (s *Service) GetPendingTransfer(ctx context.Context, p GetPendingParams) (model.OwnershipTransfer, error) {
+	if p.ActorUserID == "" {
+		return model.OwnershipTransfer{}, model.ErrUnauthorized
+	}
+
+	if _, err := s.servers.GetByID(ctx, p.ServerID); err != nil {
+		return model.OwnershipTransfer{}, err
+	}
+
+	isMember, err := s.members.IsMember(ctx, p.ServerID, p.ActorUserID)
+	if err != nil {
+		return model.OwnershipTransfer{}, err
+	}
+	if !isMember {
+		return model.OwnershipTransfer{}, model.ErrForbiddenNotMember
+	}
+
+	return s.transfers.GetPendingByServer(ctx, p.ServerID)
+}
+
 func (s *Service) AcceptTransfer(ctx context.Context, p RespondParams) (model.OwnershipTransfer, error) {
 	if _, err := s.resolveRespondable(ctx, p); err != nil {
 		return model.OwnershipTransfer{}, err
@@ -84,6 +107,27 @@ func (s *Service) RejectTransfer(ctx context.Context, p RespondParams) (model.Ow
 		return model.OwnershipTransfer{}, err
 	}
 	return t, nil
+}
+
+func (s *Service) CancelTransfer(ctx context.Context, p RespondParams) (model.OwnershipTransfer, error) {
+	if p.ActorUserID == "" {
+		return model.OwnershipTransfer{}, model.ErrUnauthorized
+	}
+	t, err := s.transfers.GetByID(ctx, p.TransferID)
+	if err != nil {
+		return model.OwnershipTransfer{}, err
+	}
+	if t.ServerID != p.ServerID {
+		return model.OwnershipTransfer{}, model.ErrOwnershipTransferServerMismatch
+	}
+	if t.FromUserID != p.ActorUserID {
+		return model.OwnershipTransfer{}, model.ErrOwnershipTransferNotInitiator
+	}
+	if !t.IsPending() {
+		return model.OwnershipTransfer{}, model.ErrOwnershipTransferNotPending
+	}
+
+	return s.transfers.Cancel(ctx, p.TransferID, s.now())
 }
 
 func (s *Service) resolveRespondable(ctx context.Context, p RespondParams) (model.OwnershipTransfer, error) {
