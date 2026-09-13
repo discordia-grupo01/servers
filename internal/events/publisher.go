@@ -5,11 +5,21 @@ import (
 	"encoding/json"
 	"log"
 	"sync"
+	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 const exchangeName = "discordia.events"
+
+// dialTimeout bounds how long a connection attempt can take. Publish() may
+// call connect() synchronously from an HTTP handler's goroutine, so this
+// needs to be short: amqp.Dial's own default (no Config.Dial) falls back to
+// a 30s net.DialTimeout, which would be a very noticeable stall on a
+// request whenever RabbitMQ is unreachable in a way that doesn't fail fast
+// (network partition, dropped packets) rather than actively refusing the
+// connection.
+const dialTimeout = 3 * time.Second
 
 type Publisher interface {
 	Publish(ctx context.Context, routingKey string, payload any) error
@@ -36,7 +46,7 @@ func NewAMQPPublisher(url string) *AMQPPublisher {
 }
 
 func (p *AMQPPublisher) connect() error {
-	conn, err := amqp.Dial(p.url)
+	conn, err := amqp.DialConfig(p.url, amqp.Config{Dial: amqp.DefaultDial(dialTimeout)})
 	if err != nil {
 		return err
 	}

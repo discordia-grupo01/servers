@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
+	"github.com/discordia-grupo01/servers/internal/events"
 	"github.com/discordia-grupo01/servers/internal/handler"
 	"github.com/discordia-grupo01/servers/internal/iconstore"
 	"github.com/discordia-grupo01/servers/internal/middleware"
@@ -106,7 +107,7 @@ func newRouter(t *testing.T, maxIcon int64, repoErr error) (*gin.Engine, *fakeRe
 		t.Fatal(err)
 	}
 	r := handler.NewRouter(handler.Deps{
-		Servers: service.New(repo, icons),
+		Servers: service.New(repo, icons, events.NewAMQPPublisher("")),
 		Icons:   icons,
 		Auth:    middleware.AuthConfig{UserIDHeader: "X-User-Id"},
 		DB:      okPinger{},

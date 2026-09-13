@@ -68,7 +68,7 @@ func main() {
 	categoryRepo := category_repo.NewCategoryRepository(pool)
 	channelRepo := channel_repo.NewChannelRepository(pool)
 
-	svc := service.New(serverRepo, icons)
+	svc := service.New(serverRepo, icons, publisher)
 	roleSvc := role_service.New(serverRepo, roleRepo)
 	memberRoleSvc := member_role_service.New(serverRepo, roleRepo, memberRepo)
 	membershipSvc := membership_service.New(serverRepo, memberRepo, publisher)

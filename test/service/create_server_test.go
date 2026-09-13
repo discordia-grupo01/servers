@@ -5,6 +5,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/discordia-grupo01/servers/internal/events"
 	"github.com/discordia-grupo01/servers/internal/model"
 	"github.com/discordia-grupo01/servers/internal/service"
 )
@@ -164,6 +165,57 @@ func TestCreateServer_WithIcon_SetsIconURL(t *testing.T) {
 	}
 	if srv.IconURL == nil || *srv.IconURL != "/v1/servers/"+srv.ID.String()+"/icon" {
 		t.Errorf("icon_url = %v", srv.IconURL)
+	}
+}
+
+// RF: creating a server also makes the owner a member of it (the repo
+// inserts the owner into server_members in the same transaction as the
+// server row), so it must publish servers.member_joined for the owner just
+// like invitation.Service.JoinServer does for anyone else who joins --
+// otherwise the owner never shows up in "servidores en común" with anyone,
+// in any server they own.
+func TestCreateServer_Success_PublishesMemberJoinedForTheOwner(t *testing.T) {
+	pub := &fakePublisher{}
+	srv, err, _, _ := createWithPublisher(t, validParams("Mi Comunidad"), pub)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(pub.published) != 1 {
+		t.Fatalf("published events = %d, want 1", len(pub.published))
+	}
+	got := pub.published[0]
+	if got.routingKey != events.RoutingKeyMemberJoined {
+		t.Errorf("routing key = %q, want %q", got.routingKey, events.RoutingKeyMemberJoined)
+	}
+	evt, ok := got.payload.(events.MembershipEvent)
+	if !ok {
+		t.Fatalf("payload type = %T, want events.MembershipEvent", got.payload)
+	}
+	if evt.EventID == "" {
+		t.Error("event_id must not be empty")
+	}
+	if evt.ServerID != srv.ID.String() {
+		t.Errorf("server_id = %q, want %q", evt.ServerID, srv.ID.String())
+	}
+	if evt.UserID != testOwner {
+		t.Errorf("user_id = %q, want %q", evt.UserID, testOwner)
+	}
+	if !evt.OccurredAt.Equal(srv.CreatedAt) {
+		t.Errorf("occurred_at = %v, want the server's created_at %v (same instant server_members.joined_at was written)", evt.OccurredAt, srv.CreatedAt)
+	}
+}
+
+// CB: the DB write fails (e.g. name taken) -> no membership row was created,
+// so nothing should be published.
+func TestCreateServer_RepoFails_DoesNotPublish(t *testing.T) {
+	pub := &fakePublisher{}
+	_, err, _, _ := createRepoErrWithPublisher(t, validParams("Mi Comunidad"), model.ErrNameTaken, pub)
+	if err == nil {
+		t.Fatal("expected an error from the repository")
+	}
+	if len(pub.published) != 0 {
+		t.Errorf("published = %d events, want 0 when the DB write fails", len(pub.published))
 	}
 }
 
