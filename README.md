@@ -110,6 +110,16 @@ vacía (sin tablas) al finalizar; si vas a seguir probando el servicio a mano
 después, hace falta recrear las tablas (`docker compose down -v && docker
 compose up -d db`, o `make migrate` de nuevo).
 
+El test de `test/events/publisher_integration_test.go` también es de
+integración: se saltea si no hay `RABBITMQ_URL`. No agregamos un servicio
+`rabbitmq` a este `docker-compose.yml` (para no chocar de puerto si en algún
+momento se levanta junto al compose de `discordia-identify`, que también lo
+usa) — se levanta un contenedor suelto para probar:
+```bash
+docker run --rm -p 5672:5672 -p 15672:15672 rabbitmq:3.13-management-alpine
+RABBITMQ_URL=amqp://guest:guest@localhost:5672/ go test ./test/events/...
+```
+
 ## Supabase (produccion)
 El proyecto de Supabase es **compartido entre todos los servicios de Discordia** (un solo proyecto, un schema por servicio). Pasos:
 1. Una sola vez por proyecto de Supabase: crear el schema de este servicio. Se puede hacer sin SQL desde **Database > Schemas > New schema** (nombre `servers`), o corriendo en el SQL Editor:

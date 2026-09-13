@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/discordia-grupo01/servers/internal/events"
 	"github.com/discordia-grupo01/servers/internal/model"
 	"github.com/discordia-grupo01/servers/internal/service/membership_service"
 )
@@ -74,8 +75,30 @@ func memberServer() model.Server {
 }
 
 func newService(servers *fakeServers, members *fakeMembers) *membership_service.MembershipService {
-	return membership_service.New(servers, members)
+	return membership_service.New(servers, members, &fakePublisher{})
 }
+
+func newServiceWithPublisher(servers *fakeServers, members *fakeMembers, pub *fakePublisher) *membership_service.MembershipService {
+	return membership_service.New(servers, members, pub)
+}
+
+// fakePublisher records every event handed to it, for tests that assert on
+// what gets published.
+type fakePublisher struct {
+	published []publishedEvent
+}
+
+type publishedEvent struct {
+	routingKey string
+	payload    any
+}
+
+func (f *fakePublisher) Publish(_ context.Context, routingKey string, payload any) error {
+	f.published = append(f.published, publishedEvent{routingKey: routingKey, payload: payload})
+	return nil
+}
+
+var _ events.Publisher = (*fakePublisher)(nil)
 
 func leaveParams(srv model.Server, actor string) membership_service.LeaveParams {
 	return membership_service.LeaveParams{ServerID: srv.ID, ActorUserID: actor, TargetUserID: actor}
