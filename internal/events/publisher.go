@@ -21,6 +21,12 @@ const exchangeName = "discordia.events"
 // connection.
 const dialTimeout = 3 * time.Second
 
+// ConnectionName is set as the client_properties.connection_name on every
+// AMQP connection this publisher opens -- shows up in the RabbitMQ
+// management UI/API, which also lets tests find and force-close exactly
+// this publisher's connection without touching anyone else's.
+const ConnectionName = "discordia-servers-events-publisher"
+
 type Publisher interface {
 	Publish(ctx context.Context, routingKey string, payload any) error
 }
@@ -46,7 +52,9 @@ func NewAMQPPublisher(url string) *AMQPPublisher {
 }
 
 func (p *AMQPPublisher) connect() error {
-	conn, err := amqp.DialConfig(p.url, amqp.Config{Dial: amqp.DefaultDial(dialTimeout)})
+	props := amqp.NewConnectionProperties()
+	props.SetClientConnectionName(ConnectionName)
+	conn, err := amqp.DialConfig(p.url, amqp.Config{Dial: amqp.DefaultDial(dialTimeout), Properties: props})
 	if err != nil {
 		return err
 	}

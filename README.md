@@ -72,7 +72,7 @@ servers/
 ├── migrations/                migraciones de BDD (ej. golang-migrate)
 ├── .github/
 │   └── workflows/
-│       └── ci.yml            gofmt, build, vet y test en cada PR/push a main
+│       └── ci.yml            gofmt, build, vet y test (con Postgres y RabbitMQ reales) en cada PR/push a main
 ├── .githooks/
 │   └── pre-commit             hook de gofmt local
 ├── openapi.yaml               contrato de la API REST
@@ -110,15 +110,23 @@ vacía (sin tablas) al finalizar; si vas a seguir probando el servicio a mano
 después, hace falta recrear las tablas (`docker compose down -v && docker
 compose up -d db`, o `make migrate` de nuevo).
 
-El test de `test/events/publisher_integration_test.go` también es de
-integración: se saltea si no hay `RABBITMQ_URL`. No agregamos un servicio
-`rabbitmq` a este `docker-compose.yml` (para no chocar de puerto si en algún
-momento se levanta junto al compose de `discordia-identify`, que también lo
-usa) — se levanta un contenedor suelto para probar:
+Los tests de `test/events/publisher_integration_test.go` (incluida la
+reconexión real, forzada vía la API de management de RabbitMQ) y
+`test/e2e/**` (HTTP real → Postgres real → RabbitMQ real) también son de
+integración: se saltean si no hay `RABBITMQ_URL` (`test/e2e` además necesita
+`DATABASE_HOST`). No agregamos un servicio `rabbitmq` a este
+`docker-compose.yml` (para no chocar de puerto si en algún momento se levanta
+junto al compose de `discordia-identify`, que también lo usa) — se levanta un
+contenedor suelto para probar:
 ```bash
 docker run --rm -p 5672:5672 -p 15672:15672 rabbitmq:3.13-management-alpine
 RABBITMQ_URL=amqp://guest:guest@localhost:5672/ go test ./test/events/...
 ```
+
+**CI** (`.github/workflows/ci.yml`) sí levanta ambos servicios (Postgres y
+RabbitMQ) y corre `go test ./... -p 1` con las variables ya seteadas, así que
+toda la suite -- unitarios e integración -- corre en cada PR/push, no solo
+localmente a mano.
 
 ## Supabase (produccion)
 El proyecto de Supabase es **compartido entre todos los servicios de Discordia** (un solo proyecto, un schema por servicio). Pasos:
