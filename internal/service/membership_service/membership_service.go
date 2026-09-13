@@ -2,17 +2,28 @@ package membership_service
 
 import (
 	"context"
+	"time"
 
+	"github.com/google/uuid"
+
+	"github.com/discordia-grupo01/servers/internal/events"
 	"github.com/discordia-grupo01/servers/internal/model"
 )
 
 type MembershipService struct {
 	servers Servers
 	members Members
+	events  events.Publisher
+	now     func() time.Time
 }
 
-func New(servers Servers, members Members) *MembershipService {
-	return &MembershipService{servers: servers, members: members}
+func New(servers Servers, members Members, publisher events.Publisher) *MembershipService {
+	return &MembershipService{
+		servers: servers,
+		members: members,
+		events:  publisher,
+		now:     func() time.Time { return time.Now().UTC() },
+	}
 }
 
 func (s *MembershipService) LeaveServer(ctx context.Context, p LeaveParams) error {
@@ -38,6 +49,7 @@ func (s *MembershipService) LeaveServer(ctx context.Context, p LeaveParams) erro
 	if !removed {
 		return model.ErrMemberNotFound
 	}
+	s.publishMemberLeft(ctx, p.ServerID, p.ActorUserID)
 	return nil
 }
 
@@ -74,4 +86,13 @@ func (s *MembershipService) ListMembers(ctx context.Context, p ListMembersParams
 	}
 
 	return s.members.ListMembers(ctx, p.ServerID, limit, offset)
+}
+
+func (s *MembershipService) publishMemberLeft(ctx context.Context, serverID uuid.UUID, userID string) {
+	_ = s.events.Publish(ctx, events.RoutingKeyMemberLeft, events.MembershipEvent{
+		EventID:    uuid.NewString(),
+		ServerID:   serverID.String(),
+		UserID:     userID,
+		OccurredAt: s.now(),
+	})
 }

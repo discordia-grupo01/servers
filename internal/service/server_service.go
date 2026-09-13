@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/discordia-grupo01/servers/internal/events"
 	"github.com/discordia-grupo01/servers/internal/model"
 )
 
@@ -27,12 +28,13 @@ type IconStore interface {
 }
 
 type Service struct {
-	repo  Repo
-	icons IconStore
+	repo   Repo
+	icons  IconStore
+	events events.Publisher
 }
 
-func New(repo Repo, icons IconStore) *Service {
-	return &Service{repo: repo, icons: icons}
+func New(repo Repo, icons IconStore, publisher events.Publisher) *Service {
+	return &Service{repo: repo, icons: icons, events: publisher}
 }
 
 func validateServerName(raw string) (string, error) {
@@ -107,8 +109,19 @@ func (s *Service) CreateServer(ctx context.Context, p CreateServerParams) (model
 		return model.Server{}, err
 	}
 
+	s.publishMemberJoined(ctx, srv.ID, srv.OwnerID, srv.CreatedAt)
+
 	srv.Channels = channels
 	return srv, nil
+}
+
+func (s *Service) publishMemberJoined(ctx context.Context, serverID uuid.UUID, ownerID string, occurredAt time.Time) {
+	_ = s.events.Publish(ctx, events.RoutingKeyMemberJoined, events.MembershipEvent{
+		EventID:    uuid.NewString(),
+		ServerID:   serverID.String(),
+		UserID:     ownerID,
+		OccurredAt: occurredAt,
+	})
 }
 
 func (s *Service) ListMyServers(ctx context.Context, userID string) ([]model.Server, error) {

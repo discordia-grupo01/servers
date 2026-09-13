@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/discordia-grupo01/servers/internal/config"
+	"github.com/discordia-grupo01/servers/internal/events"
 	"github.com/discordia-grupo01/servers/internal/handler"
 	"github.com/discordia-grupo01/servers/internal/iconstore"
 	"github.com/discordia-grupo01/servers/internal/middleware"
@@ -58,6 +59,8 @@ func main() {
 		}
 	}
 
+	publisher := events.NewAMQPPublisher(cfg.RabbitMQURL)
+
 	serverRepo := repository.NewServerRepository(pool)
 	roleRepo := role_repo.NewRoleRepository(pool)
 	memberRepo := member_repo.NewMemberRepository(pool)
@@ -65,12 +68,12 @@ func main() {
 	categoryRepo := category_repo.NewCategoryRepository(pool)
 	channelRepo := channel_repo.NewChannelRepository(pool)
 
-	svc := service.New(serverRepo, icons)
+	svc := service.New(serverRepo, icons, publisher)
 	roleSvc := role_service.New(serverRepo, roleRepo)
 	memberRoleSvc := member_role_service.New(serverRepo, roleRepo, memberRepo)
-	membershipSvc := membership_service.New(serverRepo, memberRepo)
+	membershipSvc := membership_service.New(serverRepo, memberRepo, publisher)
 	transferSvc := ownership_transfer_service.New(serverRepo, memberRepo, transferRepo)
-	invSvc := invitation.NewService(repository.NewInvitationRepository(pool))
+	invSvc := invitation.NewService(repository.NewInvitationRepository(pool), publisher)
 	categorySvc := category_service.New(serverRepo, categoryRepo)
 	channelSvc := channel_service.New(serverRepo, categoryRepo, channelRepo)
 

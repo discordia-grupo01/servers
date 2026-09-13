@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/discordia-grupo01/servers/internal/events"
 	"github.com/discordia-grupo01/servers/internal/model"
 	"github.com/discordia-grupo01/servers/internal/service/invitation"
 )
@@ -497,5 +498,99 @@ func TestJoin_RedeemRaceReportsExhausted(t *testing.T) {
 	_, err := join(repo, inv.Code)
 	if !errors.Is(err, model.ErrInvitationExhausted) {
 		t.Fatalf("err = %v, want ErrInvitationExhausted", err)
+	}
+}
+
+// RF1: a successful new join publishes servers.member_joined with the right
+// payload shape.
+func TestJoin_Success_PublishesMemberJoined(t *testing.T) {
+	inv := activeInvitation(uuid.New())
+	repo := joinRepo(inv)
+	pub := &fakePublisher{}
+
+	res, err := newInviteServiceWithPublisher(repo, pub).JoinServer(context.Background(), invitation.JoinParams{
+		Code: inv.Code, UserID: joinerID,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(pub.published) != 1 {
+		t.Fatalf("published events = %d, want 1", len(pub.published))
+	}
+	got := pub.published[0]
+	if got.routingKey != events.RoutingKeyMemberJoined {
+		t.Errorf("routing key = %q, want %q", got.routingKey, events.RoutingKeyMemberJoined)
+	}
+	evt, ok := got.payload.(events.MembershipEvent)
+	if !ok {
+		t.Fatalf("payload type = %T, want events.MembershipEvent", got.payload)
+	}
+	if evt.EventID == "" {
+		t.Error("event_id must not be empty")
+	}
+	if evt.ServerID != res.ServerID.String() {
+		t.Errorf("server_id = %q, want %q", evt.ServerID, res.ServerID.String())
+	}
+	if evt.UserID != joinerID {
+		t.Errorf("user_id = %q, want %q", evt.UserID, joinerID)
+	}
+	if evt.OccurredAt.IsZero() {
+		t.Error("occurred_at must not be zero")
+	}
+}
+
+// CB: joining fails at the DB step -> nothing gets published.
+func TestJoin_RedeemFails_DoesNotPublish(t *testing.T) {
+	inv := activeInvitation(uuid.New())
+	repo := joinRepo(inv)
+	repo.redeemErr = errors.New("db down")
+	pub := &fakePublisher{}
+
+	_, err := newInviteServiceWithPublisher(repo, pub).JoinServer(context.Background(), invitation.JoinParams{
+		Code: inv.Code, UserID: joinerID,
+	})
+	if err == nil {
+		t.Fatal("expected an error from RedeemInvitation")
+	}
+	if len(pub.published) != 0 {
+		t.Errorf("published = %d events, want 0 when the DB write fails", len(pub.published))
+	}
+}
+
+// CB: the user was already a member -> no new join happened, no event.
+func TestJoin_AlreadyMember_DoesNotPublish(t *testing.T) {
+	inv := activeInvitation(uuid.New())
+	repo := joinRepo(inv)
+	repo.member = true
+	pub := &fakePublisher{}
+
+	_, err := newInviteServiceWithPublisher(repo, pub).JoinServer(context.Background(), invitation.JoinParams{
+		Code: inv.Code, UserID: joinerID,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(pub.published) != 0 {
+		t.Errorf("published = %d events, want 0 for an already-member join", len(pub.published))
+	}
+}
+
+// CB: a concurrent redeem race that reports already-member must not publish
+// either -- same reasoning, no new membership was created.
+func TestJoin_RedeemRaceAlreadyMember_DoesNotPublish(t *testing.T) {
+	inv := activeInvitation(uuid.New())
+	repo := joinRepo(inv)
+	repo.redeemErr = model.ErrAlreadyMember
+	pub := &fakePublisher{}
+
+	_, err := newInviteServiceWithPublisher(repo, pub).JoinServer(context.Background(), invitation.JoinParams{
+		Code: inv.Code, UserID: joinerID,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(pub.published) != 0 {
+		t.Errorf("published = %d events, want 0", len(pub.published))
 	}
 }

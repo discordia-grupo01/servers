@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/discordia-grupo01/servers/internal/events"
 	"github.com/discordia-grupo01/servers/internal/model"
 )
 
@@ -20,12 +21,13 @@ const (
 )
 
 type Service struct {
-	repo Repository
-	now  func() time.Time
+	repo   Repository
+	events events.Publisher
+	now    func() time.Time
 }
 
-func NewService(repo Repository) *Service {
-	return &Service{repo: repo, now: func() time.Time { return time.Now().UTC() }}
+func NewService(repo Repository, publisher events.Publisher) *Service {
+	return &Service{repo: repo, events: publisher, now: func() time.Time { return time.Now().UTC() }}
 }
 
 func (s *Service) GenerateInvitation(ctx context.Context, p GenerateParams) (model.Invitation, error) {
@@ -175,12 +177,22 @@ func (s *Service) JoinServer(ctx context.Context, p JoinParams) (JoinResult, err
 	serverID, err := s.repo.RedeemInvitation(ctx, inv.Code, p.UserID, s.now())
 	switch {
 	case err == nil:
+		s.publishMemberJoined(ctx, serverID, p.UserID)
 		return JoinResult{ServerID: serverID, AlreadyMember: false}, nil
 	case errors.Is(err, model.ErrAlreadyMember):
 		return JoinResult{ServerID: inv.ServerID, AlreadyMember: true}, nil
 	default:
 		return JoinResult{}, err
 	}
+}
+
+func (s *Service) publishMemberJoined(ctx context.Context, serverID uuid.UUID, userID string) {
+	_ = s.events.Publish(ctx, events.RoutingKeyMemberJoined, events.MembershipEvent{
+		EventID:    uuid.NewString(),
+		ServerID:   serverID.String(),
+		UserID:     userID,
+		OccurredAt: s.now(),
+	})
 }
 
 func newCode() (string, error) {

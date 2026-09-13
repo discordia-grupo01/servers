@@ -97,21 +97,35 @@ func (f *fakeIconsHelper) GenerateDefault() ([]byte, error) {
 func create(t *testing.T, p service.CreateServerParams) (model.Server, error, *fakeRepoHelper, *fakeIconsHelper) {
 	t.Helper()
 	repo, icons := &fakeRepoHelper{}, &fakeIconsHelper{}
-	srv, err := service.New(repo, icons).CreateServer(context.Background(), p)
+	srv, err := service.New(repo, icons, &fakePublisher{}).CreateServer(context.Background(), p)
 	return srv, err, repo, icons
 }
 
 func createRepoErr(t *testing.T, p service.CreateServerParams, repoErr error) (model.Server, error, *fakeRepoHelper, *fakeIconsHelper) {
 	t.Helper()
 	repo, icons := &fakeRepoHelper{err: repoErr}, &fakeIconsHelper{}
-	srv, err := service.New(repo, icons).CreateServer(context.Background(), p)
+	srv, err := service.New(repo, icons, &fakePublisher{}).CreateServer(context.Background(), p)
 	return srv, err, repo, icons
 }
 
 func createIconErr(t *testing.T, p service.CreateServerParams, iconErr error) (model.Server, error, *fakeRepoHelper, *fakeIconsHelper) {
 	t.Helper()
 	repo, icons := &fakeRepoHelper{}, &fakeIconsHelper{err: iconErr}
-	srv, err := service.New(repo, icons).CreateServer(context.Background(), p)
+	srv, err := service.New(repo, icons, &fakePublisher{}).CreateServer(context.Background(), p)
+	return srv, err, repo, icons
+}
+
+func createWithPublisher(t *testing.T, p service.CreateServerParams, pub *fakePublisher) (model.Server, error, *fakeRepoHelper, *fakeIconsHelper) {
+	t.Helper()
+	repo, icons := &fakeRepoHelper{}, &fakeIconsHelper{}
+	srv, err := service.New(repo, icons, pub).CreateServer(context.Background(), p)
+	return srv, err, repo, icons
+}
+
+func createRepoErrWithPublisher(t *testing.T, p service.CreateServerParams, repoErr error, pub *fakePublisher) (model.Server, error, *fakeRepoHelper, *fakeIconsHelper) {
+	t.Helper()
+	repo, icons := &fakeRepoHelper{err: repoErr}, &fakeIconsHelper{}
+	srv, err := service.New(repo, icons, pub).CreateServer(context.Background(), p)
 	return srv, err, repo, icons
 }
 

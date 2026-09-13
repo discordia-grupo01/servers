@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/discordia-grupo01/servers/internal/events"
 	"github.com/discordia-grupo01/servers/internal/model"
 	"github.com/discordia-grupo01/servers/internal/service/membership_service"
 )
@@ -185,5 +186,84 @@ func TestListMembers_Unauthenticated(t *testing.T) {
 	_, _, err := svc.ListMembers(context.Background(), membership_service.ListMembersParams{ServerID: uuid.New()})
 	if !errors.Is(err, model.ErrUnauthorized) {
 		t.Errorf("err = %v, want ErrUnauthorized", err)
+	}
+}
+
+// RF2: a successful leave publishes servers.member_left with the right
+// payload shape.
+func TestLeaveServer_Success_PublishesMemberLeft(t *testing.T) {
+	srv := memberServer()
+	pub := &fakePublisher{}
+	svc := newServiceWithPublisher(&fakeServers{server: srv}, &fakeMembers{removed: true}, pub)
+
+	if err := svc.LeaveServer(context.Background(), leaveParams(srv, testMember)); err != nil {
+		t.Fatalf("LeaveServer() error = %v, want nil", err)
+	}
+
+	if len(pub.published) != 1 {
+		t.Fatalf("published events = %d, want 1", len(pub.published))
+	}
+	got := pub.published[0]
+	if got.routingKey != events.RoutingKeyMemberLeft {
+		t.Errorf("routing key = %q, want %q", got.routingKey, events.RoutingKeyMemberLeft)
+	}
+	evt, ok := got.payload.(events.MembershipEvent)
+	if !ok {
+		t.Fatalf("payload type = %T, want events.MembershipEvent", got.payload)
+	}
+	if evt.EventID == "" {
+		t.Error("event_id must not be empty")
+	}
+	if evt.ServerID != srv.ID.String() {
+		t.Errorf("server_id = %q, want %q", evt.ServerID, srv.ID.String())
+	}
+	if evt.UserID != testMember {
+		t.Errorf("user_id = %q, want %q", evt.UserID, testMember)
+	}
+	if evt.OccurredAt.IsZero() {
+		t.Error("occurred_at must not be zero")
+	}
+}
+
+// CB: the underlying RemoveMember write fails -> nothing gets published.
+func TestLeaveServer_RemoveMemberFails_DoesNotPublish(t *testing.T) {
+	srv := memberServer()
+	pub := &fakePublisher{}
+	svc := newServiceWithPublisher(&fakeServers{server: srv}, &fakeMembers{removeErr: errors.New("db down")}, pub)
+
+	if err := svc.LeaveServer(context.Background(), leaveParams(srv, testMember)); err == nil {
+		t.Fatal("expected an error from RemoveMember")
+	}
+	if len(pub.published) != 0 {
+		t.Errorf("published = %d events, want 0 when the DB write fails", len(pub.published))
+	}
+}
+
+// CB: the user was not a member -> nothing gets published.
+func TestLeaveServer_NotAMember_DoesNotPublish(t *testing.T) {
+	srv := memberServer()
+	pub := &fakePublisher{}
+	svc := newServiceWithPublisher(&fakeServers{server: srv}, &fakeMembers{removed: false}, pub)
+
+	if err := svc.LeaveServer(context.Background(), leaveParams(srv, testMember)); !errors.Is(err, model.ErrMemberNotFound) {
+		t.Fatalf("err = %v, want ErrMemberNotFound", err)
+	}
+	if len(pub.published) != 0 {
+		t.Errorf("published = %d events, want 0", len(pub.published))
+	}
+}
+
+// CB: the owner cannot leave -> the request is rejected before any DB write,
+// nothing gets published.
+func TestLeaveServer_OwnerConflict_DoesNotPublish(t *testing.T) {
+	srv := memberServer()
+	pub := &fakePublisher{}
+	svc := newServiceWithPublisher(&fakeServers{server: srv}, &fakeMembers{removed: true}, pub)
+
+	if err := svc.LeaveServer(context.Background(), leaveParams(srv, testOwner)); !errors.Is(err, model.ErrOwnerCannotLeave) {
+		t.Fatalf("err = %v, want ErrOwnerCannotLeave", err)
+	}
+	if len(pub.published) != 0 {
+		t.Errorf("published = %d events, want 0", len(pub.published))
 	}
 }

@@ -15,7 +15,7 @@ func TestGetServer_ReturnsWhatTheRepoGives(t *testing.T) {
 	want := model.Server{Name: "A Server", OwnerID: testOwner}
 	repo, icons := &fakeRepoHelper{getResult: want}, &fakeIconsHelper{}
 
-	got, err := service.New(repo, icons).GetServer(context.Background(), uuid.New())
+	got, err := service.New(repo, icons, &fakePublisher{}).GetServer(context.Background(), uuid.New())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -30,7 +30,7 @@ func TestGetServer_ReturnsWhatTheRepoGives(t *testing.T) {
 func TestGetServer_UnknownServer_PropagatesNotFound(t *testing.T) {
 	repo, icons := &fakeRepoHelper{getErr: model.ErrServerNotFound}, &fakeIconsHelper{}
 
-	_, err := service.New(repo, icons).GetServer(context.Background(), uuid.New())
+	_, err := service.New(repo, icons, &fakePublisher{}).GetServer(context.Background(), uuid.New())
 	if !errors.Is(err, model.ErrServerNotFound) {
 		t.Errorf("err = %v, want ErrServerNotFound", err)
 	}

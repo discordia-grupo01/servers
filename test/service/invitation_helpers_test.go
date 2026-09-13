@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/discordia-grupo01/servers/internal/events"
 	"github.com/discordia-grupo01/servers/internal/model"
 	"github.com/discordia-grupo01/servers/internal/service/invitation"
 )
@@ -108,8 +109,30 @@ func (f *fakeInviteRepo) RedeemInvitation(context.Context, string, string, time.
 }
 
 func newInviteService(repo *fakeInviteRepo) *invitation.Service {
-	return invitation.NewService(repo)
+	return invitation.NewService(repo, &fakePublisher{})
 }
+
+func newInviteServiceWithPublisher(repo *fakeInviteRepo, pub *fakePublisher) *invitation.Service {
+	return invitation.NewService(repo, pub)
+}
+
+// fakePublisher records every event handed to it, for tests that assert on
+// what gets published.
+type fakePublisher struct {
+	published []publishedEvent
+}
+
+type publishedEvent struct {
+	routingKey string
+	payload    any
+}
+
+func (f *fakePublisher) Publish(_ context.Context, routingKey string, payload any) error {
+	f.published = append(f.published, publishedEvent{routingKey: routingKey, payload: payload})
+	return nil
+}
+
+var _ events.Publisher = (*fakePublisher)(nil)
 
 func activeInvitation(serverID uuid.UUID) model.Invitation {
 	return model.Invitation{
