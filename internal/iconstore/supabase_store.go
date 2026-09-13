@@ -33,6 +33,10 @@ func (s *SupabaseStore) objectURL(id string) string {
 	return fmt.Sprintf("%s/storage/v1/object/%s/%s", s.BaseURL, s.Bucket, id)
 }
 
+func (s *SupabaseStore) publicURL(id string) string {
+	return fmt.Sprintf("%s/storage/v1/object/public/%s/%s", s.BaseURL, s.Bucket, id)
+}
+
 func (s *SupabaseStore) authHeaders(req *http.Request) {
 	req.Header.Set("Authorization", "Bearer "+s.ServiceKey)
 	req.Header.Set("apikey", s.ServiceKey)
@@ -63,7 +67,7 @@ func (s *SupabaseStore) Save(id string, data []byte) (string, error) {
 		return "", fmt.Errorf("iconstore: supabase storage upload failed (%d): %s", resp.StatusCode, body)
 	}
 
-	return URLPath(id), nil
+	return s.publicURL(id), nil
 }
 
 func (s *SupabaseStore) Delete(id string) error {
