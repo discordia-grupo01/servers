@@ -52,6 +52,7 @@ Con `docker compose up` se levanta también el servicio (`api`) contra la base.
 | SUPABASE_STORAGE_URL | - (vacio) | URL del proyecto de Supabase (`https://xxxx.supabase.co`). Si esta + `SUPABASE_STORAGE_BUCKET` + `SUPABASE_SERVICE_KEY`, los iconos van a ese bucket en vez de a `ICON_DIR` (ver seccion "Supabase Storage" mas abajo). |
 | SUPABASE_STORAGE_BUCKET | - (vacio) | Nombre del bucket de Storage. |
 | SUPABASE_SERVICE_KEY | - (vacio) | `service_role` key del proyecto (Project Settings > API) -- nunca la `anon` key, esta se salta las políticas RLS del bucket. |
+| RABBITMQ_URL | - (vacio) | Conexion al broker para publicar eventos de dominio (exchange `discordia.events`, ver ADR-07). Vacia = publisher en no-op, el servicio funciona igual sin RabbitMQ. |
 
 Las `DATABASE_*` no tienen default: si falta alguna, el servicio no arranca (no se usa una credencial adivinada). Los valores reales van en el `.env`; `.env.example` trae los del Postgres local.
 
@@ -67,7 +68,7 @@ servers/
 │   ├── repository/            acceso a datos (Postgres, etc.)
 │   ├── model/                 structs de dominio / DTOs
 │   ├── middleware/            middlewares de Gin (auth, logging, etc.)
-│   └── events/                 publish/consume de eventos (RabbitMQ, etc.)
+│   └── events/                 publisher de eventos hacia RabbitMQ (exchange discordia.events)
 ├── migrations/                migraciones de BDD (ej. golang-migrate)
 ├── .github/
 │   └── workflows/

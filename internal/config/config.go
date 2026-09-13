@@ -28,6 +28,8 @@ type Config struct {
 	SupabaseStorageURL    string
 	SupabaseStorageBucket string
 	SupabaseServiceKey    string
+
+	RabbitMQURL string
 }
 
 func Load() (Config, error) {
@@ -52,6 +54,8 @@ func Load() (Config, error) {
 		SupabaseStorageURL:    os.Getenv("SUPABASE_STORAGE_URL"),
 		SupabaseStorageBucket: os.Getenv("SUPABASE_STORAGE_BUCKET"),
 		SupabaseServiceKey:    os.Getenv("SUPABASE_SERVICE_KEY"),
+
+		RabbitMQURL: os.Getenv("RABBITMQ_URL"),
 	}
 
 	var missing []string
