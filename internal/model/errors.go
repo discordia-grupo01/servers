@@ -11,6 +11,7 @@ var (
 
 	ErrIconTooLarge        = errors.New("icon file is too large")
 	ErrIconUnsupportedType = errors.New("icon file type is not supported")
+	ErrIconNotFound        = errors.New("icon not found")
 
 	ErrUnauthorized = errors.New("authentication required")
 
@@ -53,6 +54,23 @@ var (
 
 	ErrAlreadyMember = errors.New("already a member of this server")
 	ErrUserBanned    = errors.New("you are banned from this server")
+
+	ErrChannelNotFound         = errors.New("channel not found")
+	ErrChannelNameRequired     = errors.New("channel name must be provided")
+	ErrChannelNameTooLong      = errors.New("channel name is too long")
+	ErrChannelNameInvalidChars = errors.New("channel name contains control characters")
+	ErrChannelNameTaken        = errors.New("a channel with that name already exists in this category")
+	ErrChannelKindInvalid      = errors.New("channel kind must be 'text' or 'voice'")
+	ErrChannelServerMismatch   = errors.New("channel does not belong to this server")
+
+	ErrCategoryNotFound         = errors.New("category not found")
+	ErrCategoryNameRequired     = errors.New("category name must be provided")
+	ErrCategoryNameTooLong      = errors.New("category name is too long")
+	ErrCategoryNameInvalidChars = errors.New("category name contains control characters")
+	ErrCategoryServerMismatch   = errors.New("category does not belong to this server")
+
+	ErrChannelReorderInvalid  = errors.New("the channel list must match exactly the channels currently in that category")
+	ErrCategoryReorderInvalid = errors.New("the category list must match exactly the categories currently in this server")
 )
 
 // InvalidPermissionError wraps ErrInvalidPermission with the offending

@@ -123,6 +123,36 @@ func WriteDomainError(c *gin.Context, err error) {
 	case errors.Is(err, model.ErrMemberRoleNotFound):
 		RespondError(c, http.StatusNotFound, err.Error(), nil)
 
+	case errors.Is(err, model.ErrChannelNotFound):
+		RespondError(c, http.StatusNotFound, err.Error(), nil)
+	case errors.Is(err, model.ErrChannelNameRequired):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("name", "name_required"))
+	case errors.Is(err, model.ErrChannelNameTooLong):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("name", "name_too_long"))
+	case errors.Is(err, model.ErrChannelNameInvalidChars):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("name", "name_invalid_chars"))
+	case errors.Is(err, model.ErrChannelNameTaken):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("name", "name_taken"))
+	case errors.Is(err, model.ErrChannelKindInvalid):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("kind", "kind_invalid"))
+	case errors.Is(err, model.ErrChannelServerMismatch):
+		RespondError(c, http.StatusBadRequest, err.Error(), nil)
+	case errors.Is(err, model.ErrChannelReorderInvalid):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("channel_ids", "reorder_invalid"))
+
+	case errors.Is(err, model.ErrCategoryNotFound):
+		RespondError(c, http.StatusNotFound, err.Error(), nil)
+	case errors.Is(err, model.ErrCategoryNameRequired):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("name", "name_required"))
+	case errors.Is(err, model.ErrCategoryNameTooLong):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("name", "name_too_long"))
+	case errors.Is(err, model.ErrCategoryNameInvalidChars):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("name", "name_invalid_chars"))
+	case errors.Is(err, model.ErrCategoryServerMismatch):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("category_id", "category_server_mismatch"))
+	case errors.Is(err, model.ErrCategoryReorderInvalid):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("category_ids", "reorder_invalid"))
+
 	default:
 		log.Printf("unmapped internal error: %v", err)
 		RespondError(c, http.StatusInternalServerError, "internal service error", nil)

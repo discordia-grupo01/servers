@@ -17,11 +17,17 @@ type Config struct {
 	DatabaseName     string
 	DatabaseUser     string
 	DatabasePassword string
+	DatabaseSSLMode  string
+	DatabaseSchema   string
 
 	UserIDHeader string
 
 	IconDir      string
 	IconMaxBytes int64
+
+	SupabaseStorageURL    string
+	SupabaseStorageBucket string
+	SupabaseServiceKey    string
 }
 
 func Load() (Config, error) {
@@ -35,11 +41,17 @@ func Load() (Config, error) {
 		DatabaseName:     os.Getenv("DATABASE_NAME"),
 		DatabaseUser:     os.Getenv("DATABASE_USER"),
 		DatabasePassword: os.Getenv("DATABASE_PASSWORD"),
+		DatabaseSSLMode:  getenv("DATABASE_SSLMODE", "disable"),
+		DatabaseSchema:   os.Getenv("DATABASE_SCHEMA"),
 
 		UserIDHeader: getenv("USER_ID_HEADER", "X-User-Id"),
 
 		IconDir:      getenv("ICON_DIR", "./data/icons"),
 		IconMaxBytes: getenvInt64("ICON_MAX_BYTES", 2*1024*1024),
+
+		SupabaseStorageURL:    os.Getenv("SUPABASE_STORAGE_URL"),
+		SupabaseStorageBucket: os.Getenv("SUPABASE_STORAGE_BUCKET"),
+		SupabaseServiceKey:    os.Getenv("SUPABASE_SERVICE_KEY"),
 	}
 
 	var missing []string
@@ -62,13 +74,21 @@ func Load() (Config, error) {
 }
 
 func (c Config) PostgresDSN() string {
-	return fmt.Sprintf(
-		"host=%s port=%s dbname=%s user=%s password=%s sslmode=disable",
-		c.DatabaseHost, c.DatabasePort, c.DatabaseName, c.DatabaseUser, c.DatabasePassword,
+	dsn := fmt.Sprintf(
+		"host=%s port=%s dbname=%s user=%s password=%s sslmode=%s",
+		c.DatabaseHost, c.DatabasePort, c.DatabaseName, c.DatabaseUser, c.DatabasePassword, c.DatabaseSSLMode,
 	)
+	if c.DatabaseSchema != "" {
+		dsn += fmt.Sprintf(" options='-c search_path=%s'", c.DatabaseSchema)
+	}
+	return dsn
 }
 
 func (c Config) IsProduction() bool { return c.Environment == "production" }
+
+func (c Config) UseSupabaseStorage() bool {
+	return c.SupabaseStorageURL != "" && c.SupabaseStorageBucket != "" && c.SupabaseServiceKey != ""
+}
 
 func getenv(key, def string) string {
 	if v := os.Getenv(key); v != "" {

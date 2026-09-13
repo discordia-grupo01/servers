@@ -42,7 +42,7 @@ func ValidateIcon(data []byte, maxBytes int64) (ext string, contentType string, 
 type Store interface {
 	Save(id string, data []byte) (url string, err error)
 	Delete(id string) error
-	FilePath(id string) (path string, ok bool)
+	Get(id string) (data []byte, contentType string, err error)
 	GenerateDefault() (data []byte, err error)
 }
 
@@ -90,14 +90,18 @@ func (s *LocalStore) Delete(id string) error {
 	return nil
 }
 
-func (s *LocalStore) FilePath(id string) (string, bool) {
-	for _, ext := range contentTypeExt {
+func (s *LocalStore) Get(id string) ([]byte, string, error) {
+	for contentType, ext := range contentTypeExt {
 		p := filepath.Join(s.Dir, id+ext)
-		if _, err := os.Stat(p); err == nil {
-			return p, true
+		data, err := os.ReadFile(p)
+		if err == nil {
+			return data, contentType, nil
+		}
+		if !os.IsNotExist(err) {
+			return nil, "", fmt.Errorf("iconstore: cannot read %s: %w", p, err)
 		}
 	}
-	return "", false
+	return nil, "", model.ErrIconNotFound
 }
 
 func humanBytes(n int64) string {

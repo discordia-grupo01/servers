@@ -82,12 +82,18 @@ func (r *ServerRepository) GetByID(ctx context.Context, id uuid.UUID) (model.Ser
 		return model.Server{}, err
 	}
 	s.Channels = channels
+
+	catsByServer, err := r.categoriesByServerIDs(ctx, []uuid.UUID{id})
+	if err != nil {
+		return model.Server{}, err
+	}
+	s.Categories = catsByServer[id]
 	return s, nil
 }
 
 func (r *ServerRepository) channelsByServerID(ctx context.Context, serverID uuid.UUID) ([]model.Channel, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, server_id, name, kind, position, created_at
+		SELECT id, server_id, name, kind, position, category_id, topic, created_at
 		  FROM channels WHERE server_id = $1 ORDER BY position`, serverID)
 	if err != nil {
 		return nil, fmt.Errorf("list channels: %w", err)
@@ -98,7 +104,7 @@ func (r *ServerRepository) channelsByServerID(ctx context.Context, serverID uuid
 	for rows.Next() {
 		var ch model.Channel
 		var kind string
-		if err := rows.Scan(&ch.ID, &ch.ServerID, &ch.Name, &kind, &ch.Position, &ch.CreatedAt); err != nil {
+		if err := rows.Scan(&ch.ID, &ch.ServerID, &ch.Name, &kind, &ch.Position, &ch.CategoryID, &ch.Topic, &ch.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan channel: %w", err)
 		}
 		ch.Kind = model.ChannelKind(kind)
@@ -110,10 +116,36 @@ func (r *ServerRepository) channelsByServerID(ctx context.Context, serverID uuid
 	return channels, nil
 }
 
+// categoriesByServerIDs fetches the categories of every server in serverIDs
+// in a single query, grouped by server. Used both by GetByID (one id) and
+// ListForUser (many), so the latter doesn't do one query per server.
+func (r *ServerRepository) categoriesByServerIDs(ctx context.Context, serverIDs []uuid.UUID) (map[uuid.UUID][]model.Category, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, server_id, name, position, created_at
+		  FROM categories WHERE server_id = ANY($1) ORDER BY position`, serverIDs)
+	if err != nil {
+		return nil, fmt.Errorf("list categories: %w", err)
+	}
+	defer rows.Close()
+
+	byServer := make(map[uuid.UUID][]model.Category)
+	for rows.Next() {
+		var cat model.Category
+		if err := rows.Scan(&cat.ID, &cat.ServerID, &cat.Name, &cat.Position, &cat.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan category: %w", err)
+		}
+		byServer[cat.ServerID] = append(byServer[cat.ServerID], cat)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list categories: %w", err)
+	}
+	return byServer, nil
+}
+
 func (r *ServerRepository) ListForUser(ctx context.Context, userID string) ([]model.Server, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT s.id, s.name, s.name_key, s.icon_url, s.owner_id, s.created_at,
-		       c.id, c.name, c.kind, c.position, c.created_at
+		       c.id, c.name, c.kind, c.position, c.category_id, c.topic, c.created_at
 		  FROM servers s
 		  JOIN server_members m ON m.server_id = s.id
 		  LEFT JOIN channels c ON c.server_id = s.id
@@ -132,11 +164,13 @@ func (r *ServerRepository) ListForUser(ctx context.Context, userID string) ([]mo
 		var chID *uuid.UUID
 		var chName, chKind *string
 		var chPosition *int
+		var chCategoryID *uuid.UUID
+		var chTopic *string
 		var chCreatedAt *time.Time
 
 		if err := rows.Scan(
 			&s.ID, &s.Name, &s.NameKey, &s.IconURL, &s.OwnerID, &s.CreatedAt,
-			&chID, &chName, &chKind, &chPosition, &chCreatedAt,
+			&chID, &chName, &chKind, &chPosition, &chCategoryID, &chTopic, &chCreatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scan server row: %w", err)
 		}
@@ -151,7 +185,8 @@ func (r *ServerRepository) ListForUser(ctx context.Context, userID string) ([]mo
 		if chID != nil {
 			srv.Channels = append(srv.Channels, model.Channel{
 				ID: *chID, ServerID: srv.ID, Name: *chName,
-				Kind: model.ChannelKind(*chKind), Position: *chPosition, CreatedAt: *chCreatedAt,
+				Kind: model.ChannelKind(*chKind), Position: *chPosition,
+				CategoryID: chCategoryID, Topic: chTopic, CreatedAt: *chCreatedAt,
 			})
 		}
 	}
@@ -159,9 +194,16 @@ func (r *ServerRepository) ListForUser(ctx context.Context, userID string) ([]mo
 		return nil, fmt.Errorf("list servers for user: %w", err)
 	}
 
+	catsByServer, err := r.categoriesByServerIDs(ctx, order)
+	if err != nil {
+		return nil, err
+	}
+
 	servers := make([]model.Server, 0, len(order))
 	for _, id := range order {
-		servers = append(servers, *byID[id])
+		srv := *byID[id]
+		srv.Categories = catsByServer[id]
+		servers = append(servers, srv)
 	}
 	return servers, nil
 }
