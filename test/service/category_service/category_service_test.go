@@ -60,6 +60,81 @@ func TestCreateCategory_NotOwner_ErrForbidden(t *testing.T) {
 	}
 }
 
+func TestUpdateCategory_Valid_RenamesIt(t *testing.T) {
+	srv := ownerServer()
+	cat := model.Category{ID: uuid.New(), ServerID: srv.ID, Name: "old"}
+	repo := &fakeCategories{getByIDCategory: cat}
+	svc := newService(&fakeServers{server: srv}, repo)
+
+	got, err := svc.UpdateCategory(context.Background(), category_service.UpdateCategoryParams{
+		CategoryID: cat.ID, UserID: testOwner, Name: "new-name",
+	})
+	if err != nil {
+		t.Fatalf("UpdateCategory: %v", err)
+	}
+	if got.Name != "new-name" {
+		t.Errorf("got.Name = %q, want new-name", got.Name)
+	}
+	if repo.updatedID != cat.ID || repo.updateName != "new-name" {
+		t.Errorf("repo.Update called with id=%v name=%q", repo.updatedID, repo.updateName)
+	}
+}
+
+func TestUpdateCategory_EmptyName_ErrNameRequired(t *testing.T) {
+	srv := ownerServer()
+	cat := model.Category{ID: uuid.New(), ServerID: srv.ID}
+	svc := newService(&fakeServers{server: srv}, &fakeCategories{getByIDCategory: cat})
+
+	_, err := svc.UpdateCategory(context.Background(), category_service.UpdateCategoryParams{
+		CategoryID: cat.ID, UserID: testOwner, Name: "   ",
+	})
+	if !errors.Is(err, model.ErrCategoryNameRequired) {
+		t.Errorf("err = %v, want ErrCategoryNameRequired", err)
+	}
+}
+
+func TestUpdateCategory_NotOwner_ErrForbidden(t *testing.T) {
+	srv := ownerServer()
+	cat := model.Category{ID: uuid.New(), ServerID: srv.ID}
+	svc := newService(&fakeServers{server: srv}, &fakeCategories{getByIDCategory: cat})
+
+	_, err := svc.UpdateCategory(context.Background(), category_service.UpdateCategoryParams{
+		CategoryID: cat.ID, UserID: "someone-else", Name: "new-name",
+	})
+	if !errors.Is(err, model.ErrForbiddenNotOwner) {
+		t.Errorf("err = %v, want ErrForbiddenNotOwner", err)
+	}
+}
+
+func TestDeleteCategory_Valid_CallsRepoDelete(t *testing.T) {
+	srv := ownerServer()
+	cat := model.Category{ID: uuid.New(), ServerID: srv.ID}
+	repo := &fakeCategories{getByIDCategory: cat}
+	svc := newService(&fakeServers{server: srv}, repo)
+
+	if err := svc.DeleteCategory(context.Background(), category_service.DeleteCategoryParams{
+		CategoryID: cat.ID, UserID: testOwner,
+	}); err != nil {
+		t.Fatalf("DeleteCategory: %v", err)
+	}
+	if !repo.deleteCalled || repo.deletedID != cat.ID {
+		t.Errorf("repo.Delete not called with the right id")
+	}
+}
+
+func TestDeleteCategory_NotOwner_ErrForbidden(t *testing.T) {
+	srv := ownerServer()
+	cat := model.Category{ID: uuid.New(), ServerID: srv.ID}
+	svc := newService(&fakeServers{server: srv}, &fakeCategories{getByIDCategory: cat})
+
+	err := svc.DeleteCategory(context.Background(), category_service.DeleteCategoryParams{
+		CategoryID: cat.ID, UserID: "someone-else",
+	})
+	if !errors.Is(err, model.ErrForbiddenNotOwner) {
+		t.Errorf("err = %v, want ErrForbiddenNotOwner", err)
+	}
+}
+
 func TestReorderCategories_ExactCurrentSet_Reorders(t *testing.T) {
 	srv := ownerServer()
 	id1, id2 := uuid.New(), uuid.New()

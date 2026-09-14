@@ -28,8 +28,19 @@ type fakeCategories struct {
 	created     model.Category
 	createCalls int
 
+	getByIDCategory model.Category
+	getByIDErr      error
+
 	listResult []model.Category
 	listErr    error
+
+	updateErr  error
+	updatedID  uuid.UUID
+	updateName string
+
+	deleteErr    error
+	deletedID    uuid.UUID
+	deleteCalled bool
 
 	reorderErr   error
 	reorderedIDs []uuid.UUID
@@ -44,11 +55,30 @@ func (f *fakeCategories) Create(_ context.Context, cat model.Category) error {
 	return nil
 }
 
+func (f *fakeCategories) GetByID(_ context.Context, _ uuid.UUID) (model.Category, error) {
+	if f.getByIDErr != nil {
+		return model.Category{}, f.getByIDErr
+	}
+	return f.getByIDCategory, nil
+}
+
 func (f *fakeCategories) ListByServer(_ context.Context, _ uuid.UUID) ([]model.Category, error) {
 	if f.listErr != nil {
 		return nil, f.listErr
 	}
 	return f.listResult, nil
+}
+
+func (f *fakeCategories) Update(_ context.Context, id uuid.UUID, name string) error {
+	f.updatedID = id
+	f.updateName = name
+	return f.updateErr
+}
+
+func (f *fakeCategories) Delete(_ context.Context, id uuid.UUID) error {
+	f.deleteCalled = true
+	f.deletedID = id
+	return f.deleteErr
 }
 
 func (f *fakeCategories) ReorderPositions(_ context.Context, orderedIDs []uuid.UUID) error {
