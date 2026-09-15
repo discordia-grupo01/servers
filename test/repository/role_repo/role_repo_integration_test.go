@@ -70,7 +70,7 @@ func TestRoleRepo_Create_ThenGetByID_ReturnsIt(t *testing.T) {
 	roles, servers, _ := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, chans); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 
@@ -101,10 +101,10 @@ func TestRoleRepo_ListByServer_ReturnsOnlyThatServersRoles(t *testing.T) {
 	ctx := context.Background()
 	srvA, chA := serverFixture("owner-" + uuid.NewString())
 	srvB, chB := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srvA, chA); err != nil {
+	if err := servers.CreateServer(ctx, srvA, nil, chA); err != nil {
 		t.Fatalf("seed server A: %v", err)
 	}
-	if err := servers.CreateServer(ctx, srvB, chB); err != nil {
+	if err := servers.CreateServer(ctx, srvB, nil, chB); err != nil {
 		t.Fatalf("seed server B: %v", err)
 	}
 

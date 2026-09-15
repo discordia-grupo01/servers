@@ -61,6 +61,19 @@ func (s *ChannelService) resolveCategory(ctx context.Context, serverID uuid.UUID
 	return nil
 }
 
+// nativeCategoryID returns the id of the server's native category for kind
+// (its DefaultKind matches), or nil if it was deleted or never existed --
+// callers fall back to leaving the channel uncategorized in that case.
+func nativeCategoryID(categories []model.Category, kind model.ChannelKind) *uuid.UUID {
+	for _, cat := range categories {
+		if cat.DefaultKind != nil && *cat.DefaultKind == kind {
+			id := cat.ID
+			return &id
+		}
+	}
+	return nil
+}
+
 func validateChannelName(name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -106,12 +119,17 @@ func (s *ChannelService) CreateChannel(ctx context.Context, p CreateChannelParam
 		return model.Channel{}, err
 	}
 
+	categoryID := p.CategoryID
+	if categoryID == nil {
+		categoryID = nativeCategoryID(srv.Categories, kind)
+	}
+
 	ch := model.Channel{
 		ID:         uuid.New(),
 		ServerID:   p.ServerID,
 		Name:       name,
 		Kind:       kind,
-		CategoryID: p.CategoryID,
+		CategoryID: categoryID,
 		CreatedAt:  time.Now().UTC(),
 	}
 	if err := s.channels.Create(ctx, ch); err != nil {

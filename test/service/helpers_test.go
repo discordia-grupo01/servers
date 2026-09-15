@@ -16,6 +16,7 @@ type fakeRepoHelper struct {
 	err       error
 	calls     int
 	gotServer model.Server
+	gotCats   []model.Category
 	gotChans  []model.Channel
 
 	listResult  []model.Server
@@ -31,12 +32,12 @@ type fakeRepoHelper struct {
 	updateCalls int
 }
 
-func (f *fakeRepoHelper) CreateServer(_ context.Context, s model.Server, ch []model.Channel) error {
+func (f *fakeRepoHelper) CreateServer(_ context.Context, s model.Server, cats []model.Category, ch []model.Channel) error {
 	f.calls++
 	if f.err != nil {
 		return f.err
 	}
-	f.gotServer, f.gotChans = s, ch
+	f.gotServer, f.gotCats, f.gotChans = s, cats, ch
 	return nil
 }
 

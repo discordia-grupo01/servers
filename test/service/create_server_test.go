@@ -219,6 +219,74 @@ func TestCreateServer_RepoFails_DoesNotPublish(t *testing.T) {
 	}
 }
 
+func TestCreateServer_CreatesTwoNativeCategories(t *testing.T) {
+	srv, _, _, _ := create(t, validParams("Mi Comunidad"))
+	if len(srv.Categories) != 2 {
+		t.Fatalf("got %d categories, want 2: %+v", len(srv.Categories), srv.Categories)
+	}
+}
+
+func TestCreateServer_NativeCategoriesBelongToTheNewServer(t *testing.T) {
+	srv, _, _, _ := create(t, validParams("Mi Comunidad"))
+	for _, cat := range srv.Categories {
+		if cat.ServerID != srv.ID {
+			t.Errorf("category %q has ServerID %s, want %s", cat.Name, cat.ServerID, srv.ID)
+		}
+	}
+}
+
+func TestCreateServer_NativeTextCategory_HasExpectedNameAndKind(t *testing.T) {
+	srv, _, _, _ := create(t, validParams("Mi Comunidad"))
+	cat := findCategory(t, srv, model.ChannelText)
+	if cat.Name != model.DefaultTextCategoryName {
+		t.Errorf("text category name = %q, want %q", cat.Name, model.DefaultTextCategoryName)
+	}
+}
+
+func TestCreateServer_NativeVoiceCategory_HasExpectedNameAndKind(t *testing.T) {
+	srv, _, _, _ := create(t, validParams("Mi Comunidad"))
+	cat := findCategory(t, srv, model.ChannelVoice)
+	if cat.Name != model.DefaultVoiceCategoryName {
+		t.Errorf("voice category name = %q, want %q", cat.Name, model.DefaultVoiceCategoryName)
+	}
+}
+
+func TestCreateServer_DefaultTextChannel_BelongsToNativeTextCategory(t *testing.T) {
+	srv, _, _, _ := create(t, validParams("Mi Comunidad"))
+	ch := findChannel(t, srv, model.ChannelText)
+	cat := findCategory(t, srv, model.ChannelText)
+	if ch.CategoryID == nil || *ch.CategoryID != cat.ID {
+		t.Errorf("text channel CategoryID = %v, want %s", ch.CategoryID, cat.ID)
+	}
+}
+
+func TestCreateServer_DefaultVoiceChannel_BelongsToNativeVoiceCategory(t *testing.T) {
+	srv, _, _, _ := create(t, validParams("Mi Comunidad"))
+	ch := findChannel(t, srv, model.ChannelVoice)
+	cat := findCategory(t, srv, model.ChannelVoice)
+	if ch.CategoryID == nil || *ch.CategoryID != cat.ID {
+		t.Errorf("voice channel CategoryID = %v, want %s", ch.CategoryID, cat.ID)
+	}
+}
+
+func TestCreateServer_PersistsCategoriesThroughTheRepositoryOnce(t *testing.T) {
+	_, _, repo, _ := create(t, validParams("Mi Comunidad"))
+	if len(repo.gotCats) != 2 {
+		t.Fatalf("repo.CreateServer got %d categories, want 2: %+v", len(repo.gotCats), repo.gotCats)
+	}
+}
+
+func findCategory(t *testing.T, s model.Server, kind model.ChannelKind) model.Category {
+	t.Helper()
+	for _, cat := range s.Categories {
+		if cat.DefaultKind != nil && *cat.DefaultKind == kind {
+			return cat
+		}
+	}
+	t.Fatalf("no native category for kind %s in %+v", kind, s.Categories)
+	return model.Category{}
+}
+
 func findChannel(t *testing.T, s model.Server, kind model.ChannelKind) model.Channel {
 	t.Helper()
 	for _, ch := range s.Channels {

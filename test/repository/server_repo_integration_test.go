@@ -43,6 +43,7 @@ func newRepo(t *testing.T) (*repository.ServerRepository, *pgxpool.Pool) {
 		"../../migrations/0005_default_role.up.sql",
 		"../../migrations/0007_categories.up.sql",
 		"../../migrations/0009_server_banner.up.sql",
+		"../../migrations/0010_native_categories.up.sql",
 	} {
 		schema, err := os.ReadFile(path)
 		if err != nil {
@@ -79,7 +80,7 @@ func TestRepo_CreateServer_PersistsServerChannelsAndOwnerMembership(t *testing.T
 	owner := "owner-" + uuid.NewString()
 	srv, chans := serverFixture("Persist Test", owner)
 
-	if err := repo.CreateServer(ctx, srv, chans); err != nil {
+	if err := repo.CreateServer(ctx, srv, nil, chans); err != nil {
 		t.Fatalf("CreateServer: %v", err)
 	}
 
@@ -103,11 +104,61 @@ func TestRepo_CreateServer_PersistsServerChannelsAndOwnerMembership(t *testing.T
 	}
 }
 
+func TestRepo_CreateServer_PersistsNativeCategoriesAndChannelCategoryID(t *testing.T) {
+	repo, pool := newRepo(t)
+	ctx := context.Background()
+	owner := "owner-" + uuid.NewString()
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	id := uuid.New()
+
+	textKind, voiceKind := model.ChannelText, model.ChannelVoice
+	textCatID, voiceCatID := uuid.New(), uuid.New()
+	srv := model.Server{ID: id, Name: "With Categories", NameKey: "with categories", OwnerID: owner, CreatedAt: now}
+	categories := []model.Category{
+		{ID: textCatID, ServerID: id, Name: model.DefaultTextCategoryName, Position: 0, DefaultKind: &textKind, CreatedAt: now},
+		{ID: voiceCatID, ServerID: id, Name: model.DefaultVoiceCategoryName, Position: 1, DefaultKind: &voiceKind, CreatedAt: now},
+	}
+	chans := []model.Channel{
+		{ID: uuid.New(), ServerID: id, Name: "general", Kind: model.ChannelText, CategoryID: &textCatID, CreatedAt: now},
+		{ID: uuid.New(), ServerID: id, Name: "General", Kind: model.ChannelVoice, CategoryID: &voiceCatID, CreatedAt: now},
+	}
+
+	if err := repo.CreateServer(ctx, srv, categories, chans); err != nil {
+		t.Fatalf("CreateServer: %v", err)
+	}
+
+	var nCategories int
+	_ = pool.QueryRow(ctx, `SELECT count(*) FROM categories WHERE server_id = $1`, id).Scan(&nCategories)
+	if nCategories != 2 {
+		t.Fatalf("categories = %d, want 2", nCategories)
+	}
+
+	got, err := repo.GetByID(ctx, id)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if len(got.Categories) != 2 {
+		t.Fatalf("got.Categories = %d, want 2: %+v", len(got.Categories), got.Categories)
+	}
+	for _, ch := range got.Channels {
+		switch ch.Kind {
+		case model.ChannelText:
+			if ch.CategoryID == nil || *ch.CategoryID != textCatID {
+				t.Errorf("text channel CategoryID = %v, want %s", ch.CategoryID, textCatID)
+			}
+		case model.ChannelVoice:
+			if ch.CategoryID == nil || *ch.CategoryID != voiceCatID {
+				t.Errorf("voice channel CategoryID = %v, want %s", ch.CategoryID, voiceCatID)
+			}
+		}
+	}
+}
+
 func TestRepo_GetByID_ReturnsServerWithItsChannels(t *testing.T) {
 	repo, _ := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("Get By ID", "owner-"+uuid.NewString())
-	if err := repo.CreateServer(ctx, srv, chans); err != nil {
+	if err := repo.CreateServer(ctx, srv, nil, chans); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
@@ -142,10 +193,10 @@ func TestRepo_CreateServer_DuplicateIDFails(t *testing.T) {
 	ctx := context.Background()
 	srv, chans := serverFixture("Dup ID", "owner-"+uuid.NewString())
 
-	if err := repo.CreateServer(ctx, srv, chans); err != nil {
+	if err := repo.CreateServer(ctx, srv, nil, chans); err != nil {
 		t.Fatalf("first insert: %v", err)
 	}
-	if err := repo.CreateServer(ctx, srv, chans); err == nil {
+	if err := repo.CreateServer(ctx, srv, nil, chans); err == nil {
 		t.Error("expected an error for a duplicate id")
 	}
 }
@@ -156,13 +207,13 @@ func TestRepo_CreateServer_SameNameKeySameOwnerReturnsNameTaken(t *testing.T) {
 	owner := "owner-" + uuid.NewString()
 
 	first, firstCh := serverFixture("Comunidad", owner)
-	if err := repo.CreateServer(ctx, first, firstCh); err != nil {
+	if err := repo.CreateServer(ctx, first, nil, firstCh); err != nil {
 		t.Fatalf("first insert: %v", err)
 	}
 
 	second, secondCh := serverFixture("COMUNIDAD", owner) // distinto Name/ID
 	second.NameKey = first.NameKey                        // mismo name_key
-	if err := repo.CreateServer(ctx, second, secondCh); !errors.Is(err, model.ErrNameTaken) {
+	if err := repo.CreateServer(ctx, second, nil, secondCh); !errors.Is(err, model.ErrNameTaken) {
 		t.Fatalf("err = %v, want ErrNameTaken", err)
 	}
 }
@@ -172,13 +223,13 @@ func TestRepo_CreateServer_SameNameKeyDifferentOwnerIsAllowed(t *testing.T) {
 	ctx := context.Background()
 
 	a, aCh := serverFixture("Comunidad", "owner-"+uuid.NewString())
-	if err := repo.CreateServer(ctx, a, aCh); err != nil {
+	if err := repo.CreateServer(ctx, a, nil, aCh); err != nil {
 		t.Fatalf("first insert: %v", err)
 	}
 
 	b, bCh := serverFixture("Comunidad", "owner-"+uuid.NewString())
 	b.NameKey = a.NameKey
-	if err := repo.CreateServer(ctx, b, bCh); err != nil {
+	if err := repo.CreateServer(ctx, b, nil, bCh); err != nil {
 		t.Errorf("same name_key / different owner should be allowed: %v", err)
 	}
 }
@@ -189,11 +240,11 @@ func TestRepo_ListForUser_ReturnsOwnedServersWithChannels(t *testing.T) {
 	owner := "owner-" + uuid.NewString()
 
 	a, aCh := serverFixture("Server A", owner)
-	if err := repo.CreateServer(ctx, a, aCh); err != nil {
+	if err := repo.CreateServer(ctx, a, nil, aCh); err != nil {
 		t.Fatalf("create A: %v", err)
 	}
 	b, bCh := serverFixture("Server B", owner)
-	if err := repo.CreateServer(ctx, b, bCh); err != nil {
+	if err := repo.CreateServer(ctx, b, nil, bCh); err != nil {
 		t.Fatalf("create B: %v", err)
 	}
 
@@ -216,11 +267,11 @@ func TestRepo_ListForUser_OnlyReturnsServersTheUserBelongsTo(t *testing.T) {
 	ctx := context.Background()
 
 	mine, mineCh := serverFixture("Mine", "owner-"+uuid.NewString())
-	if err := repo.CreateServer(ctx, mine, mineCh); err != nil {
+	if err := repo.CreateServer(ctx, mine, nil, mineCh); err != nil {
 		t.Fatalf("create mine: %v", err)
 	}
 	other, otherCh := serverFixture("Not Mine", "someone-else-"+uuid.NewString())
-	if err := repo.CreateServer(ctx, other, otherCh); err != nil {
+	if err := repo.CreateServer(ctx, other, nil, otherCh); err != nil {
 		t.Fatalf("create other: %v", err)
 	}
 
@@ -238,7 +289,7 @@ func TestRepo_ListForUser_IncludesServersJoinedNotOwned(t *testing.T) {
 	ctx := context.Background()
 
 	srv, ch := serverFixture("Joined Server", "owner-"+uuid.NewString())
-	if err := repo.CreateServer(ctx, srv, ch); err != nil {
+	if err := repo.CreateServer(ctx, srv, nil, ch); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
@@ -263,7 +314,7 @@ func TestRepo_UpdateServer_ChangesNameIconAndBanner(t *testing.T) {
 	repo, _ := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("Before Update", "owner-"+uuid.NewString())
-	if err := repo.CreateServer(ctx, srv, chans); err != nil {
+	if err := repo.CreateServer(ctx, srv, nil, chans); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
@@ -291,7 +342,7 @@ func TestRepo_UpdateServer_BannerNil_ClearsIt(t *testing.T) {
 	repo, _ := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("Has Banner", "owner-"+uuid.NewString())
-	if err := repo.CreateServer(ctx, srv, chans); err != nil {
+	if err := repo.CreateServer(ctx, srv, nil, chans); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 	bannerURL := "/v1/servers/" + srv.ID.String() + "/banner"
@@ -327,11 +378,11 @@ func TestRepo_UpdateServer_NameKeyCollisionWithAnotherOwnedServer_ReturnsNameTak
 	owner := "owner-" + uuid.NewString()
 
 	a, aCh := serverFixture("Server A", owner)
-	if err := repo.CreateServer(ctx, a, aCh); err != nil {
+	if err := repo.CreateServer(ctx, a, nil, aCh); err != nil {
 		t.Fatalf("create A: %v", err)
 	}
 	b, bCh := serverFixture("Server B", owner)
-	if err := repo.CreateServer(ctx, b, bCh); err != nil {
+	if err := repo.CreateServer(ctx, b, nil, bCh); err != nil {
 		t.Fatalf("create B: %v", err)
 	}
 

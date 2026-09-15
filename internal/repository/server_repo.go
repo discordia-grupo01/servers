@@ -24,7 +24,10 @@ func NewServerRepository(pool *pgxpool.Pool) *ServerRepository {
 	return &ServerRepository{pool: pool}
 }
 
-func (r *ServerRepository) CreateServer(ctx context.Context, srv model.Server, channels []model.Channel) error {
+// CreateServer inserts the server together with its native categories
+// (categories comes first, so channels below can FK into them), its default
+// channels and the owner's membership row, all in one transaction.
+func (r *ServerRepository) CreateServer(ctx context.Context, srv model.Server, categories []model.Category, channels []model.Channel) error {
 	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO servers (id, name, name_key, icon_url, owner_id, created_at)
@@ -39,11 +42,26 @@ func (r *ServerRepository) CreateServer(ctx context.Context, srv model.Server, c
 			return fmt.Errorf("insert server: %w", err)
 		}
 
+		for _, cat := range categories {
+			var defaultKind *string
+			if cat.DefaultKind != nil {
+				s := string(*cat.DefaultKind)
+				defaultKind = &s
+			}
+			if _, err := tx.Exec(ctx, `
+				INSERT INTO categories (id, server_id, name, position, default_kind, created_at)
+				VALUES ($1, $2, $3, $4, $5, $6)`,
+				cat.ID, cat.ServerID, cat.Name, cat.Position, defaultKind, cat.CreatedAt,
+			); err != nil {
+				return fmt.Errorf("insert category %s: %w", cat.Name, err)
+			}
+		}
+
 		for _, ch := range channels {
 			if _, err := tx.Exec(ctx, `
-				INSERT INTO channels (id, server_id, name, kind, position, created_at)
-				VALUES ($1, $2, $3, $4, $5, $6)`,
-				ch.ID, ch.ServerID, ch.Name, string(ch.Kind), ch.Position, ch.CreatedAt,
+				INSERT INTO channels (id, server_id, name, kind, position, category_id, created_at)
+				VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+				ch.ID, ch.ServerID, ch.Name, string(ch.Kind), ch.Position, ch.CategoryID, ch.CreatedAt,
 			); err != nil {
 				return fmt.Errorf("insert channel %s: %w", ch.Name, err)
 			}
@@ -121,7 +139,7 @@ func (r *ServerRepository) channelsByServerID(ctx context.Context, serverID uuid
 // ListForUser (many), so the latter doesn't do one query per server.
 func (r *ServerRepository) categoriesByServerIDs(ctx context.Context, serverIDs []uuid.UUID) (map[uuid.UUID][]model.Category, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, server_id, name, position, created_at
+		SELECT id, server_id, name, position, default_kind, created_at
 		  FROM categories WHERE server_id = ANY($1) ORDER BY position`, serverIDs)
 	if err != nil {
 		return nil, fmt.Errorf("list categories: %w", err)
@@ -131,8 +149,13 @@ func (r *ServerRepository) categoriesByServerIDs(ctx context.Context, serverIDs 
 	byServer := make(map[uuid.UUID][]model.Category)
 	for rows.Next() {
 		var cat model.Category
-		if err := rows.Scan(&cat.ID, &cat.ServerID, &cat.Name, &cat.Position, &cat.CreatedAt); err != nil {
+		var defaultKind *string
+		if err := rows.Scan(&cat.ID, &cat.ServerID, &cat.Name, &cat.Position, &defaultKind, &cat.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan category: %w", err)
+		}
+		if defaultKind != nil {
+			kind := model.ChannelKind(*defaultKind)
+			cat.DefaultKind = &kind
 		}
 		byServer[cat.ServerID] = append(byServer[cat.ServerID], cat)
 	}
