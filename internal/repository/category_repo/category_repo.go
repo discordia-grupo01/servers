@@ -71,6 +71,31 @@ func (r *CategoryRepository) ListByServer(ctx context.Context, serverID uuid.UUI
 	return categories, nil
 }
 
+func (r *CategoryRepository) Update(ctx context.Context, id uuid.UUID, name string) error {
+	tag, err := r.pool.Exec(ctx, `UPDATE categories SET name = $1 WHERE id = $2`, name, id)
+	if err != nil {
+		return fmt.Errorf("update category: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return model.ErrCategoryNotFound
+	}
+	return nil
+}
+
+// Delete removes a category. Channels in it are not deleted: their
+// category_id is set to NULL by the FK (ON DELETE SET NULL), so they fall
+// back to the "sin categoria" bucket.
+func (r *CategoryRepository) Delete(ctx context.Context, id uuid.UUID) error {
+	tag, err := r.pool.Exec(ctx, `DELETE FROM categories WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("delete category: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return model.ErrCategoryNotFound
+	}
+	return nil
+}
+
 // ReorderPositions sets each category's position to its index in orderedIDs,
 // atomically. Callers must have already validated that orderedIDs is exactly
 // the current set of categories for the server.

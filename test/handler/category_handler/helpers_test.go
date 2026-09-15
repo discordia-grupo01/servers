@@ -43,6 +43,13 @@ type fakeCategoryUseCases struct {
 	created   model.Category
 	gotCreate category_service.CreateCategoryParams
 
+	updateErr error
+	updated   model.Category
+	gotUpdate category_service.UpdateCategoryParams
+
+	deleteErr error
+	gotDelete category_service.DeleteCategoryParams
+
 	reorderErr error
 	gotReorder category_service.ReorderCategoriesParams
 }
@@ -56,6 +63,22 @@ func (f *fakeCategoryUseCases) CreateCategory(_ context.Context, p category_serv
 		f.created = model.Category{ID: uuid.New(), ServerID: p.ServerID, Name: p.Name}
 	}
 	return f.created, nil
+}
+
+func (f *fakeCategoryUseCases) UpdateCategory(_ context.Context, p category_service.UpdateCategoryParams) (model.Category, error) {
+	f.gotUpdate = p
+	if f.updateErr != nil {
+		return model.Category{}, f.updateErr
+	}
+	if f.updated.ID == uuid.Nil {
+		f.updated = model.Category{ID: p.CategoryID, Name: p.Name}
+	}
+	return f.updated, nil
+}
+
+func (f *fakeCategoryUseCases) DeleteCategory(_ context.Context, p category_service.DeleteCategoryParams) error {
+	f.gotDelete = p
+	return f.deleteErr
 }
 
 func (f *fakeCategoryUseCases) ReorderCategories(_ context.Context, p category_service.ReorderCategoriesParams) error {

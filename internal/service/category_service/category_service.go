@@ -1,5 +1,5 @@
-// Package category_service contains the business logic for creating and
-// reordering categories.
+// Package category_service contains the business logic for creating,
+// editing, deleting and reordering categories.
 package category_service
 
 import (
@@ -23,7 +23,10 @@ type Servers interface {
 // Repo is the slice of CategoryRepository this service needs.
 type Repo interface {
 	Create(ctx context.Context, cat model.Category) error
+	GetByID(ctx context.Context, id uuid.UUID) (model.Category, error)
 	ListByServer(ctx context.Context, serverID uuid.UUID) ([]model.Category, error)
+	Update(ctx context.Context, id uuid.UUID, name string) error
+	Delete(ctx context.Context, id uuid.UUID) error
 	ReorderPositions(ctx context.Context, orderedIDs []uuid.UUID) error
 }
 
@@ -34,6 +37,20 @@ type CategoryService struct {
 
 func New(servers Servers, repo Repo) *CategoryService {
 	return &CategoryService{servers: servers, repo: repo}
+}
+
+func validateCategoryName(name string) (string, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", model.ErrCategoryNameRequired
+	}
+	if strings.ContainsFunc(name, unicode.IsControl) {
+		return "", model.ErrCategoryNameInvalidChars
+	}
+	if utf8.RuneCountInString(name) > model.CategoryNameMaxLen {
+		return "", model.ErrCategoryNameTooLong
+	}
+	return name, nil
 }
 
 type CreateCategoryParams struct {
@@ -51,15 +68,9 @@ func (s *CategoryService) CreateCategory(ctx context.Context, p CreateCategoryPa
 		return model.Category{}, err
 	}
 
-	name := strings.TrimSpace(p.Name)
-	if name == "" {
-		return model.Category{}, model.ErrCategoryNameRequired
-	}
-	if strings.ContainsFunc(name, unicode.IsControl) {
-		return model.Category{}, model.ErrCategoryNameInvalidChars
-	}
-	if utf8.RuneCountInString(name) > model.CategoryNameMaxLen {
-		return model.Category{}, model.ErrCategoryNameTooLong
+	name, err := validateCategoryName(p.Name)
+	if err != nil {
+		return model.Category{}, err
 	}
 
 	cat := model.Category{
@@ -73,6 +84,69 @@ func (s *CategoryService) CreateCategory(ctx context.Context, p CreateCategoryPa
 	}
 	// TODO(events): publicar "channels.category_created" en discordia.events cuando exista un consumidor real.
 	return cat, nil
+}
+
+type UpdateCategoryParams struct {
+	CategoryID uuid.UUID
+	UserID     string
+	Name       string
+}
+
+func (s *CategoryService) UpdateCategory(ctx context.Context, p UpdateCategoryParams) (model.Category, error) {
+	cat, err := s.repo.GetByID(ctx, p.CategoryID)
+	if err != nil {
+		return model.Category{}, err
+	}
+
+	srv, err := s.servers.GetByID(ctx, cat.ServerID)
+	if err != nil {
+		return model.Category{}, err
+	}
+	if err := service.RequireManageChannels(srv, p.UserID); err != nil {
+		return model.Category{}, err
+	}
+
+	name, err := validateCategoryName(p.Name)
+	if err != nil {
+		return model.Category{}, err
+	}
+
+	if err := s.repo.Update(ctx, p.CategoryID, name); err != nil {
+		return model.Category{}, err
+	}
+	// TODO(events): publicar "channels.category_updated" en discordia.events cuando exista un consumidor real.
+
+	cat.Name = name
+	return cat, nil
+}
+
+type DeleteCategoryParams struct {
+	CategoryID uuid.UUID
+	UserID     string
+}
+
+// DeleteCategory removes the category. Its channels are not deleted: they
+// fall back to "sin categoria" (category_repo.Delete relies on the FK's
+// ON DELETE SET NULL for this).
+func (s *CategoryService) DeleteCategory(ctx context.Context, p DeleteCategoryParams) error {
+	cat, err := s.repo.GetByID(ctx, p.CategoryID)
+	if err != nil {
+		return err
+	}
+
+	srv, err := s.servers.GetByID(ctx, cat.ServerID)
+	if err != nil {
+		return err
+	}
+	if err := service.RequireManageChannels(srv, p.UserID); err != nil {
+		return err
+	}
+
+	if err := s.repo.Delete(ctx, p.CategoryID); err != nil {
+		return err
+	}
+	// TODO(events): publicar "channels.category_deleted" en discordia.events cuando exista un consumidor real.
+	return nil
 }
 
 type ReorderCategoriesParams struct {
