@@ -106,35 +106,6 @@ func TestUpdateCategory_NotOwner_ErrForbidden(t *testing.T) {
 	}
 }
 
-func TestDeleteCategory_Valid_CallsRepoDelete(t *testing.T) {
-	srv := ownerServer()
-	cat := model.Category{ID: uuid.New(), ServerID: srv.ID}
-	repo := &fakeCategories{getByIDCategory: cat}
-	svc := newService(&fakeServers{server: srv}, repo)
-
-	if err := svc.DeleteCategory(context.Background(), category_service.DeleteCategoryParams{
-		CategoryID: cat.ID, UserID: testOwner,
-	}); err != nil {
-		t.Fatalf("DeleteCategory: %v", err)
-	}
-	if !repo.deleteCalled || repo.deletedID != cat.ID {
-		t.Errorf("repo.Delete not called with the right id")
-	}
-}
-
-func TestDeleteCategory_NotOwner_ErrForbidden(t *testing.T) {
-	srv := ownerServer()
-	cat := model.Category{ID: uuid.New(), ServerID: srv.ID}
-	svc := newService(&fakeServers{server: srv}, &fakeCategories{getByIDCategory: cat})
-
-	err := svc.DeleteCategory(context.Background(), category_service.DeleteCategoryParams{
-		CategoryID: cat.ID, UserID: "someone-else",
-	})
-	if !errors.Is(err, model.ErrForbiddenNotOwner) {
-		t.Errorf("err = %v, want ErrForbiddenNotOwner", err)
-	}
-}
-
 func TestReorderCategories_ExactCurrentSet_Reorders(t *testing.T) {
 	srv := ownerServer()
 	id1, id2 := uuid.New(), uuid.New()

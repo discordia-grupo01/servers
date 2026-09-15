@@ -47,9 +47,6 @@ type fakeCategoryUseCases struct {
 	updated   model.Category
 	gotUpdate category_service.UpdateCategoryParams
 
-	deleteErr error
-	gotDelete category_service.DeleteCategoryParams
-
 	reorderErr error
 	gotReorder category_service.ReorderCategoriesParams
 }
@@ -74,11 +71,6 @@ func (f *fakeCategoryUseCases) UpdateCategory(_ context.Context, p category_serv
 		f.updated = model.Category{ID: p.CategoryID, Name: p.Name}
 	}
 	return f.updated, nil
-}
-
-func (f *fakeCategoryUseCases) DeleteCategory(_ context.Context, p category_service.DeleteCategoryParams) error {
-	f.gotDelete = p
-	return f.deleteErr
 }
 
 func (f *fakeCategoryUseCases) ReorderCategories(_ context.Context, p category_service.ReorderCategoriesParams) error {

@@ -38,10 +38,6 @@ type fakeCategories struct {
 	updatedID  uuid.UUID
 	updateName string
 
-	deleteErr    error
-	deletedID    uuid.UUID
-	deleteCalled bool
-
 	reorderErr   error
 	reorderedIDs []uuid.UUID
 }
@@ -73,12 +69,6 @@ func (f *fakeCategories) Update(_ context.Context, id uuid.UUID, name string) er
 	f.updatedID = id
 	f.updateName = name
 	return f.updateErr
-}
-
-func (f *fakeCategories) Delete(_ context.Context, id uuid.UUID) error {
-	f.deleteCalled = true
-	f.deletedID = id
-	return f.deleteErr
 }
 
 func (f *fakeCategories) ReorderPositions(_ context.Context, orderedIDs []uuid.UUID) error {

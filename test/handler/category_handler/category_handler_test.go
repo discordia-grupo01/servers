@@ -82,27 +82,6 @@ func TestUpdateCategory_DomainError_MapsToHTTPStatus(t *testing.T) {
 	}
 }
 
-func TestDeleteCategory_Returns204(t *testing.T) {
-	fake := &fakeCategoryUseCases{}
-	r := newRouter(t, fake)
-	categoryID := uuid.New()
-	w := doJSON(t, r, http.MethodDelete, "/v1/categories/"+categoryID.String(), testUser, nil)
-	if w.Code != http.StatusNoContent {
-		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
-	}
-	if fake.gotDelete.CategoryID != categoryID {
-		t.Errorf("gotDelete.CategoryID = %v, want %v", fake.gotDelete.CategoryID, categoryID)
-	}
-}
-
-func TestDeleteCategory_DomainError_MapsToHTTPStatus(t *testing.T) {
-	r := newRouter(t, &fakeCategoryUseCases{deleteErr: model.ErrForbiddenNotOwner})
-	w := doJSON(t, r, http.MethodDelete, "/v1/categories/"+uuid.New().String(), testUser, nil)
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
-	}
-}
-
 func TestReorderCategories_Returns200(t *testing.T) {
 	fake := &fakeCategoryUseCases{}
 	r := newRouter(t, fake)
