@@ -1,5 +1,5 @@
 // Package category_service contains the business logic for creating,
-// editing, deleting and reordering categories.
+// editing and reordering categories.
 package category_service
 
 import (
@@ -26,7 +26,6 @@ type Repo interface {
 	GetByID(ctx context.Context, id uuid.UUID) (model.Category, error)
 	ListByServer(ctx context.Context, serverID uuid.UUID) ([]model.Category, error)
 	Update(ctx context.Context, id uuid.UUID, name string) error
-	Delete(ctx context.Context, id uuid.UUID) error
 	ReorderPositions(ctx context.Context, orderedIDs []uuid.UUID) error
 }
 
@@ -118,35 +117,6 @@ func (s *CategoryService) UpdateCategory(ctx context.Context, p UpdateCategoryPa
 
 	cat.Name = name
 	return cat, nil
-}
-
-type DeleteCategoryParams struct {
-	CategoryID uuid.UUID
-	UserID     string
-}
-
-// DeleteCategory removes the category. Its channels are not deleted: they
-// fall back to "sin categoria" (category_repo.Delete relies on the FK's
-// ON DELETE SET NULL for this).
-func (s *CategoryService) DeleteCategory(ctx context.Context, p DeleteCategoryParams) error {
-	cat, err := s.repo.GetByID(ctx, p.CategoryID)
-	if err != nil {
-		return err
-	}
-
-	srv, err := s.servers.GetByID(ctx, cat.ServerID)
-	if err != nil {
-		return err
-	}
-	if err := service.RequireManageChannels(srv, p.UserID); err != nil {
-		return err
-	}
-
-	if err := s.repo.Delete(ctx, p.CategoryID); err != nil {
-		return err
-	}
-	// TODO(events): publicar "channels.category_deleted" en discordia.events cuando exista un consumidor real.
-	return nil
 }
 
 type ReorderCategoriesParams struct {

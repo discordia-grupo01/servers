@@ -13,7 +13,6 @@ import (
 	"github.com/discordia-grupo01/servers/internal/model"
 	"github.com/discordia-grupo01/servers/internal/repository"
 	"github.com/discordia-grupo01/servers/internal/repository/category_repo"
-	"github.com/discordia-grupo01/servers/internal/repository/channel_repo"
 )
 
 func newRepo(t *testing.T) (*category_repo.CategoryRepository, *repository.ServerRepository, *pgxpool.Pool) {
@@ -162,67 +161,6 @@ func TestCategoryRepo_Update_NotFound_ErrCategoryNotFound(t *testing.T) {
 	err := categories.Update(context.Background(), uuid.New(), "name")
 	if !errors.Is(err, model.ErrCategoryNotFound) {
 		t.Errorf("err = %v, want ErrCategoryNotFound", err)
-	}
-}
-
-func TestCategoryRepo_Delete_RemovesIt(t *testing.T) {
-	categories, servers, _ := newRepo(t)
-	ctx := context.Background()
-	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, chans); err != nil {
-		t.Fatalf("seed server: %v", err)
-	}
-	cat := categoryFixture(srv.ID, "Texto", 0)
-	if err := categories.Create(ctx, cat); err != nil {
-		t.Fatalf("Create: %v", err)
-	}
-
-	if err := categories.Delete(ctx, cat.ID); err != nil {
-		t.Fatalf("Delete: %v", err)
-	}
-	if _, err := categories.GetByID(ctx, cat.ID); !errors.Is(err, model.ErrCategoryNotFound) {
-		t.Errorf("category should be gone, got err=%v", err)
-	}
-}
-
-func TestCategoryRepo_Delete_NotFound_ErrCategoryNotFound(t *testing.T) {
-	categories, _, _ := newRepo(t)
-	err := categories.Delete(context.Background(), uuid.New())
-	if !errors.Is(err, model.ErrCategoryNotFound) {
-		t.Errorf("err = %v, want ErrCategoryNotFound", err)
-	}
-}
-
-func TestCategoryRepo_Delete_ChannelsFallBackToNoCategory(t *testing.T) {
-	categories, servers, pool := newRepo(t)
-	channels := channel_repo.NewChannelRepository(pool)
-	ctx := context.Background()
-	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, chans); err != nil {
-		t.Fatalf("seed server: %v", err)
-	}
-	cat := categoryFixture(srv.ID, "Texto", 0)
-	if err := categories.Create(ctx, cat); err != nil {
-		t.Fatalf("Create category: %v", err)
-	}
-	ch := model.Channel{
-		ID: uuid.New(), ServerID: srv.ID, Name: "general", Kind: model.ChannelText,
-		CategoryID: &cat.ID, CreatedAt: time.Now().UTC().Truncate(time.Millisecond),
-	}
-	if err := channels.Create(ctx, ch); err != nil {
-		t.Fatalf("seed channel: %v", err)
-	}
-
-	if err := categories.Delete(ctx, cat.ID); err != nil {
-		t.Fatalf("Delete category: %v", err)
-	}
-
-	got, err := channels.GetByID(ctx, ch.ID)
-	if err != nil {
-		t.Fatalf("GetByID channel: %v", err)
-	}
-	if got.CategoryID != nil {
-		t.Errorf("channel.CategoryID = %v, want nil (fell back to sin categoria)", got.CategoryID)
 	}
 }
 

@@ -19,7 +19,6 @@ import (
 type CategoryUseCases interface {
 	CreateCategory(ctx context.Context, p category_service.CreateCategoryParams) (model.Category, error)
 	UpdateCategory(ctx context.Context, p category_service.UpdateCategoryParams) (model.Category, error)
-	DeleteCategory(ctx context.Context, p category_service.DeleteCategoryParams) error
 	ReorderCategories(ctx context.Context, p category_service.ReorderCategoriesParams) error
 }
 
@@ -87,24 +86,6 @@ func (h *Handler) UpdateCategory(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, categoryview.ToResponse(cat))
-}
-
-// DELETE /v1/categories/:categoryId
-func (h *Handler) DeleteCategory(c *gin.Context) {
-	categoryID, ok := apierr.ParseUUIDParam(c, "categoryId")
-	if !ok {
-		return
-	}
-
-	err := h.uc.DeleteCategory(c.Request.Context(), category_service.DeleteCategoryParams{
-		CategoryID: categoryID,
-		UserID:     middleware.UserID(c),
-	})
-	if err != nil {
-		apierr.WriteDomainError(c, err)
-		return
-	}
-	c.Status(http.StatusNoContent)
 }
 
 type reorderCategoriesRequest struct {
