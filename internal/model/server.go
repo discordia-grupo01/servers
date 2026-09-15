@@ -28,6 +28,11 @@ const (
 	DefaultVoiceChannelName = "General"
 )
 
+const (
+	DefaultTextCategoryName  = "Canales de texto"
+	DefaultVoiceCategoryName = "Canales de voz"
+)
+
 type Server struct {
 	ID            uuid.UUID
 	Name          string

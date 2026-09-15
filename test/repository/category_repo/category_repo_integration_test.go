@@ -40,6 +40,7 @@ func newRepo(t *testing.T) (*category_repo.CategoryRepository, *repository.Serve
 	for _, file := range []string{
 		"../../../migrations/0001_init.up.sql",
 		"../../../migrations/0007_categories.up.sql",
+		"../../../migrations/0010_native_categories.up.sql",
 	} {
 		schema, err := os.ReadFile(file)
 		if err != nil {
@@ -69,7 +70,7 @@ func TestCategoryRepo_Create_ThenGetByID_ReturnsIt(t *testing.T) {
 	categories, servers, _ := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, chans); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 
@@ -87,6 +88,52 @@ func TestCategoryRepo_Create_ThenGetByID_ReturnsIt(t *testing.T) {
 	}
 }
 
+func TestCategoryRepo_Create_WithDefaultKind_RoundTripsThroughGetByID(t *testing.T) {
+	categories, servers, _ := newRepo(t)
+	ctx := context.Background()
+	srv, chans := serverFixture("owner-" + uuid.NewString())
+	if err := servers.CreateServer(ctx, srv, nil, chans); err != nil {
+		t.Fatalf("seed server: %v", err)
+	}
+
+	cat := categoryFixture(srv.ID, "Canales de texto", 0)
+	textKind := model.ChannelText
+	cat.DefaultKind = &textKind
+	if err := categories.Create(ctx, cat); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	got, err := categories.GetByID(ctx, cat.ID)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if got.DefaultKind == nil || *got.DefaultKind != model.ChannelText {
+		t.Errorf("DefaultKind = %v, want %q", got.DefaultKind, model.ChannelText)
+	}
+}
+
+func TestCategoryRepo_Create_WithoutDefaultKind_StaysNil(t *testing.T) {
+	categories, servers, _ := newRepo(t)
+	ctx := context.Background()
+	srv, chans := serverFixture("owner-" + uuid.NewString())
+	if err := servers.CreateServer(ctx, srv, nil, chans); err != nil {
+		t.Fatalf("seed server: %v", err)
+	}
+
+	cat := categoryFixture(srv.ID, "Owner-made category", 0)
+	if err := categories.Create(ctx, cat); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	got, err := categories.GetByID(ctx, cat.ID)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if got.DefaultKind != nil {
+		t.Errorf("DefaultKind = %v, want nil", *got.DefaultKind)
+	}
+}
+
 func TestCategoryRepo_GetByID_NotFound_ReturnsErrCategoryNotFound(t *testing.T) {
 	categories, _, _ := newRepo(t)
 	_, err := categories.GetByID(context.Background(), uuid.New())
@@ -100,10 +147,10 @@ func TestCategoryRepo_ListByServer_ReturnsOnlyThatServersCategories_OrderedByPos
 	ctx := context.Background()
 	srvA, chA := serverFixture("owner-" + uuid.NewString())
 	srvB, chB := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srvA, chA); err != nil {
+	if err := servers.CreateServer(ctx, srvA, nil, chA); err != nil {
 		t.Fatalf("seed server A: %v", err)
 	}
-	if err := servers.CreateServer(ctx, srvB, chB); err != nil {
+	if err := servers.CreateServer(ctx, srvB, nil, chB); err != nil {
 		t.Fatalf("seed server B: %v", err)
 	}
 
@@ -135,7 +182,7 @@ func TestCategoryRepo_Update_ChangesName(t *testing.T) {
 	categories, servers, _ := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, chans); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 	cat := categoryFixture(srv.ID, "old-name", 0)
@@ -168,7 +215,7 @@ func TestCategoryRepo_ReorderPositions_UpdatesInOrder(t *testing.T) {
 	categories, servers, _ := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, chans); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 

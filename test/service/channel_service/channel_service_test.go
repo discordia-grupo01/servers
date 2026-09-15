@@ -94,6 +94,98 @@ func TestCreateChannel_NameTakenFromRepo_Propagates(t *testing.T) {
 	}
 }
 
+func withNativeCategories(srv model.Server) model.Server {
+	textKind, voiceKind := model.ChannelText, model.ChannelVoice
+	srv.Categories = []model.Category{
+		{ID: uuid.New(), ServerID: srv.ID, Name: model.DefaultTextCategoryName, DefaultKind: &textKind},
+		{ID: uuid.New(), ServerID: srv.ID, Name: model.DefaultVoiceCategoryName, DefaultKind: &voiceKind},
+	}
+	return srv
+}
+
+func TestCreateChannel_NoCategoryID_TextChannel_DefaultsToNativeTextCategory(t *testing.T) {
+	srv := withNativeCategories(ownerServer())
+	channels := &fakeChannels{}
+	svc := newService(&fakeServers{server: srv}, &fakeCategories{}, channels)
+
+	ch, err := svc.CreateChannel(context.Background(), channel_service.CreateChannelParams{
+		ServerID: srv.ID, Name: "general", Kind: "text", UserID: testOwner,
+	})
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+	wantCategory := findNativeCategory(t, srv, model.ChannelText)
+	if ch.CategoryID == nil || *ch.CategoryID != wantCategory.ID {
+		t.Errorf("CategoryID = %v, want %s", ch.CategoryID, wantCategory.ID)
+	}
+}
+
+func TestCreateChannel_NoCategoryID_VoiceChannel_DefaultsToNativeVoiceCategory(t *testing.T) {
+	srv := withNativeCategories(ownerServer())
+	channels := &fakeChannels{}
+	svc := newService(&fakeServers{server: srv}, &fakeCategories{}, channels)
+
+	ch, err := svc.CreateChannel(context.Background(), channel_service.CreateChannelParams{
+		ServerID: srv.ID, Name: "general-voice", Kind: "voice", UserID: testOwner,
+	})
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+	wantCategory := findNativeCategory(t, srv, model.ChannelVoice)
+	if ch.CategoryID == nil || *ch.CategoryID != wantCategory.ID {
+		t.Errorf("CategoryID = %v, want %s", ch.CategoryID, wantCategory.ID)
+	}
+}
+
+// TestCreateChannel_NoCategoryID_NoNativeCategory_FallsBackToNil covers what
+// happens once the native category for that kind has been deleted (they can
+// be, like any other category, see model.Category.DefaultKind): the channel
+// just lands in "sin categoria" instead of erroring or resurrecting one.
+func TestCreateChannel_NoCategoryID_NoNativeCategory_FallsBackToNil(t *testing.T) {
+	srv := ownerServer() // no Categories at all
+	channels := &fakeChannels{}
+	svc := newService(&fakeServers{server: srv}, &fakeCategories{}, channels)
+
+	ch, err := svc.CreateChannel(context.Background(), channel_service.CreateChannelParams{
+		ServerID: srv.ID, Name: "general", Kind: "text", UserID: testOwner,
+	})
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+	if ch.CategoryID != nil {
+		t.Errorf("CategoryID = %v, want nil", ch.CategoryID)
+	}
+}
+
+func TestCreateChannel_ExplicitCategoryID_OverridesNativeDefault(t *testing.T) {
+	srv := withNativeCategories(ownerServer())
+	explicit := model.Category{ID: uuid.New(), ServerID: srv.ID}
+	channels := &fakeChannels{}
+	svc := newService(&fakeServers{server: srv}, &fakeCategories{category: explicit}, channels)
+
+	catID := explicit.ID
+	ch, err := svc.CreateChannel(context.Background(), channel_service.CreateChannelParams{
+		ServerID: srv.ID, Name: "general", Kind: "text", CategoryID: &catID, UserID: testOwner,
+	})
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+	if ch.CategoryID == nil || *ch.CategoryID != explicit.ID {
+		t.Errorf("CategoryID = %v, want the explicit category %s, not the native default", ch.CategoryID, explicit.ID)
+	}
+}
+
+func findNativeCategory(t *testing.T, srv model.Server, kind model.ChannelKind) model.Category {
+	t.Helper()
+	for _, cat := range srv.Categories {
+		if cat.DefaultKind != nil && *cat.DefaultKind == kind {
+			return cat
+		}
+	}
+	t.Fatalf("no native category for kind %s in %+v", kind, srv.Categories)
+	return model.Category{}
+}
+
 func TestUpdateChannel_NameAndTopic_Updates(t *testing.T) {
 	srv := ownerServer()
 	ch := model.Channel{ID: uuid.New(), ServerID: srv.ID, Name: "old", Kind: model.ChannelText}

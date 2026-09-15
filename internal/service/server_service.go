@@ -15,7 +15,7 @@ import (
 )
 
 type Repo interface {
-	CreateServer(ctx context.Context, srv model.Server, channels []model.Channel) error
+	CreateServer(ctx context.Context, srv model.Server, categories []model.Category, channels []model.Channel) error
 	ListForUser(ctx context.Context, userID string) ([]model.Server, error)
 	GetByID(ctx context.Context, id uuid.UUID) (model.Server, error)
 	UpdateServer(ctx context.Context, id uuid.UUID, name, nameKey string, iconURL, bannerURL *string) error
@@ -78,14 +78,27 @@ func (s *Service) CreateServer(ctx context.Context, p CreateServerParams) (model
 		CreatedAt: now,
 	}
 
+	textKind, voiceKind := model.ChannelText, model.ChannelVoice
+	textCategoryID, voiceCategoryID := uuid.New(), uuid.New()
+	categories := []model.Category{
+		{
+			ID: textCategoryID, ServerID: id, Name: model.DefaultTextCategoryName,
+			Position: 0, DefaultKind: &textKind, CreatedAt: now,
+		},
+		{
+			ID: voiceCategoryID, ServerID: id, Name: model.DefaultVoiceCategoryName,
+			Position: 1, DefaultKind: &voiceKind, CreatedAt: now,
+		},
+	}
+
 	channels := []model.Channel{
 		{
 			ID: uuid.New(), ServerID: id, Name: model.DefaultTextChannelName,
-			Kind: model.ChannelText, Position: 0, CreatedAt: now,
+			Kind: model.ChannelText, Position: 0, CategoryID: &textCategoryID, CreatedAt: now,
 		},
 		{
 			ID: uuid.New(), ServerID: id, Name: model.DefaultVoiceChannelName,
-			Kind: model.ChannelVoice, Position: 0, CreatedAt: now,
+			Kind: model.ChannelVoice, Position: 0, CategoryID: &voiceCategoryID, CreatedAt: now,
 		},
 	}
 
@@ -104,13 +117,14 @@ func (s *Service) CreateServer(ctx context.Context, p CreateServerParams) (model
 	}
 	srv.IconURL = &url
 
-	if err := s.repo.CreateServer(ctx, srv, channels); err != nil {
+	if err := s.repo.CreateServer(ctx, srv, categories, channels); err != nil {
 		_ = s.icons.Delete(id.String())
 		return model.Server{}, err
 	}
 
 	s.publishMemberJoined(ctx, srv.ID, srv.OwnerID, srv.CreatedAt)
 
+	srv.Categories = categories
 	srv.Channels = channels
 	return srv, nil
 }

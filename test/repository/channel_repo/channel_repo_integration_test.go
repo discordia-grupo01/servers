@@ -41,6 +41,7 @@ func newRepo(t *testing.T) (*channel_repo.ChannelRepository, *category_repo.Cate
 	for _, file := range []string{
 		"../../../migrations/0001_init.up.sql",
 		"../../../migrations/0007_categories.up.sql",
+		"../../../migrations/0010_native_categories.up.sql",
 	} {
 		schema, err := os.ReadFile(file)
 		if err != nil {
@@ -70,7 +71,7 @@ func TestChannelRepo_Create_ThenGetByID_ReturnsIt(t *testing.T) {
 	channels, _, servers := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, chans); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 
@@ -100,7 +101,7 @@ func TestChannelRepo_Create_DuplicateNameNoCategory_ErrChannelNameTaken(t *testi
 	channels, _, servers := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, chans); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 
@@ -117,7 +118,7 @@ func TestChannelRepo_Create_DuplicateNameSameCategory_ErrChannelNameTaken(t *tes
 	channels, categories, servers := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, chans); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 	cat := model.Category{ID: uuid.New(), ServerID: srv.ID, Name: "Texto", CreatedAt: time.Now().UTC().Truncate(time.Millisecond)}
@@ -138,7 +139,7 @@ func TestChannelRepo_Create_SameNameDifferentCategory_Allowed(t *testing.T) {
 	channels, categories, servers := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, chans); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 	catA := model.Category{ID: uuid.New(), ServerID: srv.ID, Name: "A", CreatedAt: time.Now().UTC().Truncate(time.Millisecond)}
@@ -162,7 +163,7 @@ func TestChannelRepo_Update_ChangesNameAndTopic(t *testing.T) {
 	channels, _, servers := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, chans); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 	ch := channelFixture(srv.ID, "general", nil)
@@ -196,7 +197,7 @@ func TestChannelRepo_Delete_RemovesIt(t *testing.T) {
 	channels, _, servers := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, chans); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 	ch := channelFixture(srv.ID, "general", nil)
@@ -224,7 +225,7 @@ func TestChannelRepo_MoveToCategory_UpdatesCategoryID(t *testing.T) {
 	channels, categories, servers := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, chans); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 	cat := model.Category{ID: uuid.New(), ServerID: srv.ID, Name: "Texto", CreatedAt: time.Now().UTC().Truncate(time.Millisecond)}
@@ -263,7 +264,7 @@ func TestChannelRepo_ListByServerAndCategory_ScopesCorrectly(t *testing.T) {
 	channels, categories, servers := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, chans); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 	cat := model.Category{ID: uuid.New(), ServerID: srv.ID, Name: "Texto", CreatedAt: time.Now().UTC().Truncate(time.Millisecond)}
@@ -301,7 +302,7 @@ func TestChannelRepo_ReorderPositions_UpdatesInOrder(t *testing.T) {
 	channels, _, servers := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, chans); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 	a := channelFixture(srv.ID, "a", nil)

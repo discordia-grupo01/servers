@@ -21,11 +21,31 @@ func NewCategoryRepository(pool *pgxpool.Pool) *CategoryRepository {
 	return &CategoryRepository{pool: pool}
 }
 
+// defaultKindString converts a *model.ChannelKind to the *string the
+// default_kind column expects (nil stays nil), same pattern already used for
+// Channel.Kind elsewhere in this repo layer (pgx scans/binds plain strings,
+// not this package's named string types).
+func defaultKindString(k *model.ChannelKind) *string {
+	if k == nil {
+		return nil
+	}
+	s := string(*k)
+	return &s
+}
+
+func defaultKindFromString(s *string) *model.ChannelKind {
+	if s == nil {
+		return nil
+	}
+	k := model.ChannelKind(*s)
+	return &k
+}
+
 func (r *CategoryRepository) Create(ctx context.Context, cat model.Category) error {
 	_, err := r.pool.Exec(ctx, `
-		INSERT INTO categories (id, server_id, name, position, created_at)
-		VALUES ($1, $2, $3, $4, $5)`,
-		cat.ID, cat.ServerID, cat.Name, cat.Position, cat.CreatedAt,
+		INSERT INTO categories (id, server_id, name, position, default_kind, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6)`,
+		cat.ID, cat.ServerID, cat.Name, cat.Position, defaultKindString(cat.DefaultKind), cat.CreatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("insert category: %w", err)
@@ -35,22 +55,24 @@ func (r *CategoryRepository) Create(ctx context.Context, cat model.Category) err
 
 func (r *CategoryRepository) GetByID(ctx context.Context, id uuid.UUID) (model.Category, error) {
 	row := r.pool.QueryRow(ctx, `
-		SELECT id, server_id, name, position, created_at
+		SELECT id, server_id, name, position, default_kind, created_at
 		  FROM categories WHERE id = $1`, id)
 
 	var cat model.Category
-	if err := row.Scan(&cat.ID, &cat.ServerID, &cat.Name, &cat.Position, &cat.CreatedAt); err != nil {
+	var defaultKind *string
+	if err := row.Scan(&cat.ID, &cat.ServerID, &cat.Name, &cat.Position, &defaultKind, &cat.CreatedAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return model.Category{}, model.ErrCategoryNotFound
 		}
 		return model.Category{}, fmt.Errorf("select category: %w", err)
 	}
+	cat.DefaultKind = defaultKindFromString(defaultKind)
 	return cat, nil
 }
 
 func (r *CategoryRepository) ListByServer(ctx context.Context, serverID uuid.UUID) ([]model.Category, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, server_id, name, position, created_at
+		SELECT id, server_id, name, position, default_kind, created_at
 		  FROM categories WHERE server_id = $1 ORDER BY position`, serverID)
 	if err != nil {
 		return nil, fmt.Errorf("list categories: %w", err)
@@ -60,9 +82,11 @@ func (r *CategoryRepository) ListByServer(ctx context.Context, serverID uuid.UUI
 	categories := make([]model.Category, 0)
 	for rows.Next() {
 		var cat model.Category
-		if err := rows.Scan(&cat.ID, &cat.ServerID, &cat.Name, &cat.Position, &cat.CreatedAt); err != nil {
+		var defaultKind *string
+		if err := rows.Scan(&cat.ID, &cat.ServerID, &cat.Name, &cat.Position, &defaultKind, &cat.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan category: %w", err)
 		}
+		cat.DefaultKind = defaultKindFromString(defaultKind)
 		categories = append(categories, cat)
 	}
 	if err := rows.Err(); err != nil {
