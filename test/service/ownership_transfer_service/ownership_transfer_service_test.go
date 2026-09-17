@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -120,6 +121,29 @@ func TestInitiateTransfer_AlreadyPending(t *testing.T) {
 	}
 }
 
+// TTL: the owner shouldn't have to wait for Expirer's sweep to send a new
+// offer once the old one expired -- InitiateTransfer expires it itself.
+func TestInitiateTransfer_ExpiredExisting_ExpiresAndCreatesNew(t *testing.T) {
+	srv := ownerServer()
+	expired := expiredPendingTransfer(srv.ID)
+	transfers := &fakeTransfers{pendingResult: expired}
+	svc := newService(&fakeServers{server: srv}, &fakeMembers{isMember: true}, transfers)
+
+	got, err := svc.InitiateTransfer(context.Background(), validInitiateParams(srv))
+	if err != nil {
+		t.Fatalf("InitiateTransfer() error = %v, want nil", err)
+	}
+	if transfers.rejectCalls != 1 {
+		t.Errorf("Reject calls = %d, want 1 (auto-expire of the old offer)", transfers.rejectCalls)
+	}
+	if transfers.createdN != 1 {
+		t.Fatalf("Create calls = %d, want 1", transfers.createdN)
+	}
+	if got.Status != model.OwnershipTransferPending {
+		t.Errorf("status = %q, want pending", got.Status)
+	}
+}
+
 func respondParams(serverID, transferID uuid.UUID, actor string) ownership_transfer_service.RespondParams {
 	return ownership_transfer_service.RespondParams{ServerID: serverID, TransferID: transferID, ActorUserID: actor}
 }
@@ -127,8 +151,16 @@ func respondParams(serverID, transferID uuid.UUID, actor string) ownership_trans
 func pendingTransfer(serverID uuid.UUID) model.OwnershipTransfer {
 	return model.OwnershipTransfer{
 		ID: uuid.New(), ServerID: serverID, FromUserID: testOwner, ToUserID: testMember,
-		Status: model.OwnershipTransferPending,
+		Status: model.OwnershipTransferPending, CreatedAt: time.Now(),
 	}
+}
+
+// expiredPendingTransfer is like pendingTransfer but old enough that the
+// TTL (CA original: "TTL, backend seria createdAt") has run out.
+func expiredPendingTransfer(serverID uuid.UUID) model.OwnershipTransfer {
+	t := pendingTransfer(serverID)
+	t.CreatedAt = time.Now().Add(-model.OwnershipTransferTTL - time.Hour)
+	return t
 }
 
 // CA1: the recipient accepts and becomes the new owner (delegated to the repo;
@@ -195,6 +227,27 @@ func TestAcceptTransfer_WrongTarget_Forbidden(t *testing.T) {
 	}
 }
 
+// TTL: an offer nobody answered in time can't be accepted anymore, even if
+// Expirer's background sweep hasn't gotten to it yet -- resolveRespondable
+// rejects it itself as soon as anyone tries to act on it.
+func TestAcceptTransfer_Expired_NotPending(t *testing.T) {
+	serverID := uuid.New()
+	expired := expiredPendingTransfer(serverID)
+	transfers := &fakeTransfers{getResult: expired}
+	svc := newService(&fakeServers{}, &fakeMembers{}, transfers)
+
+	_, err := svc.AcceptTransfer(context.Background(), respondParams(serverID, expired.ID, testMember))
+	if !errors.Is(err, model.ErrOwnershipTransferNotPending) {
+		t.Errorf("err = %v, want ErrOwnershipTransferNotPending", err)
+	}
+	if transfers.rejectCalls != 1 {
+		t.Errorf("Reject calls = %d, want 1 (auto-expire)", transfers.rejectCalls)
+	}
+	if transfers.acceptCalls != 0 {
+		t.Error("Accept must not be called on an expired transfer")
+	}
+}
+
 func TestAcceptTransfer_NotPending(t *testing.T) {
 	serverID := uuid.New()
 	resolved := pendingTransfer(serverID)
@@ -231,6 +284,23 @@ func TestRejectTransfer_Success(t *testing.T) {
 	}
 	if got.Status != model.OwnershipTransferRejected {
 		t.Errorf("status = %q, want rejected", got.Status)
+	}
+}
+
+func TestRejectTransfer_Expired_NotPending(t *testing.T) {
+	serverID := uuid.New()
+	expired := expiredPendingTransfer(serverID)
+	transfers := &fakeTransfers{getResult: expired}
+	svc := newService(&fakeServers{}, &fakeMembers{}, transfers)
+
+	_, err := svc.RejectTransfer(context.Background(), respondParams(serverID, expired.ID, testMember))
+	if !errors.Is(err, model.ErrOwnershipTransferNotPending) {
+		t.Errorf("err = %v, want ErrOwnershipTransferNotPending", err)
+	}
+	// El auto-expire (dentro de resolveRespondable) ya la rechazó una vez;
+	// RejectTransfer no debe intentarlo de nuevo.
+	if transfers.rejectCalls != 1 {
+		t.Errorf("Reject calls = %d, want 1 (auto-expire only)", transfers.rejectCalls)
 	}
 }
 
@@ -366,6 +436,25 @@ func TestGetPendingTransfer_NotAMember_Forbidden(t *testing.T) {
 	})
 	if !errors.Is(err, model.ErrForbiddenNotMember) {
 		t.Errorf("err = %v, want ErrForbiddenNotMember", err)
+	}
+}
+
+// TTL: a pending transfer past its 24hs is reported as if there were none,
+// and gets rejected in the DB right there instead of waiting for Expirer.
+func TestGetPendingTransfer_Expired_NotFound(t *testing.T) {
+	srv := ownerServer()
+	expired := expiredPendingTransfer(srv.ID)
+	transfers := &fakeTransfers{pendingResult: expired}
+	svc := newService(&fakeServers{server: srv}, &fakeMembers{isMember: true}, transfers)
+
+	_, err := svc.GetPendingTransfer(context.Background(), ownership_transfer_service.GetPendingParams{
+		ServerID: srv.ID, ActorUserID: testOwner,
+	})
+	if !errors.Is(err, model.ErrOwnershipTransferNotFound) {
+		t.Errorf("err = %v, want ErrOwnershipTransferNotFound", err)
+	}
+	if transfers.rejectCalls != 1 {
+		t.Errorf("Reject calls = %d, want 1 (auto-expire)", transfers.rejectCalls)
 	}
 }
 

@@ -73,6 +73,7 @@ func main() {
 	memberRoleSvc := member_role_service.New(serverRepo, roleRepo, memberRepo)
 	membershipSvc := membership_service.New(serverRepo, memberRepo, publisher)
 	transferSvc := ownership_transfer_service.New(serverRepo, memberRepo, transferRepo)
+	go ownership_transfer_service.NewExpirer(transferRepo).Start(ctx)
 	invSvc := invitation.NewService(repository.NewInvitationRepository(pool), publisher)
 	categorySvc := category_service.New(serverRepo, categoryRepo)
 	channelSvc := channel_service.New(serverRepo, categoryRepo, channelRepo)

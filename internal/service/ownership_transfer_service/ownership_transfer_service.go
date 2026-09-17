@@ -50,6 +50,10 @@ func (s *Service) InitiateTransfer(ctx context.Context, p InitiateParams) (model
 		return model.OwnershipTransfer{}, model.ErrTransferTargetNotMember
 	}
 
+	if existing, err := s.transfers.GetPendingByServer(ctx, p.ServerID); err == nil {
+		s.expireIfStale(ctx, existing)
+	}
+
 	t := model.OwnershipTransfer{
 		ID:         uuid.New(),
 		ServerID:   p.ServerID,
@@ -84,7 +88,14 @@ func (s *Service) GetPendingTransfer(ctx context.Context, p GetPendingParams) (m
 		return model.OwnershipTransfer{}, model.ErrForbiddenNotMember
 	}
 
-	return s.transfers.GetPendingByServer(ctx, p.ServerID)
+	t, err := s.transfers.GetPendingByServer(ctx, p.ServerID)
+	if err != nil {
+		return model.OwnershipTransfer{}, err
+	}
+	if _, expired := s.expireIfStale(ctx, t); expired {
+		return model.OwnershipTransfer{}, model.ErrOwnershipTransferNotFound
+	}
+	return t, nil
 }
 
 func (s *Service) AcceptTransfer(ctx context.Context, p RespondParams) (model.OwnershipTransfer, error) {
@@ -147,5 +158,19 @@ func (s *Service) resolveRespondable(ctx context.Context, p RespondParams) (mode
 	if !t.IsPending() {
 		return model.OwnershipTransfer{}, model.ErrOwnershipTransferNotPending
 	}
+	if _, expired := s.expireIfStale(ctx, t); expired {
+		return model.OwnershipTransfer{}, model.ErrOwnershipTransferNotPending
+	}
 	return t, nil
+}
+
+func (s *Service) expireIfStale(ctx context.Context, t model.OwnershipTransfer) (model.OwnershipTransfer, bool) {
+	if !t.IsPending() || s.now().Sub(t.CreatedAt) <= model.OwnershipTransferTTL {
+		return t, false
+	}
+	rejected, err := s.transfers.Reject(ctx, t.ID, s.now())
+	if err != nil {
+		return t, false
+	}
+	return rejected, true
 }

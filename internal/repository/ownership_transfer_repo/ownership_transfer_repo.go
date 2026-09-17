@@ -101,6 +101,18 @@ func (r *Repository) Reject(ctx context.Context, id uuid.UUID, resolvedAt time.T
 	return t, nil
 }
 
+func (r *Repository) ExpireStalePending(ctx context.Context, cutoff time.Time, resolvedAt time.Time) (int, error) {
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE ownership_transfers SET status = 'rejected', resolved_at = $2
+		 WHERE status = 'pending' AND created_at < $1`,
+		cutoff, resolvedAt,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("expire stale ownership transfers: %w", err)
+	}
+	return int(tag.RowsAffected()), nil
+}
+
 func (r *Repository) Cancel(ctx context.Context, id uuid.UUID, resolvedAt time.Time) (model.OwnershipTransfer, error) {
 	t, err := scanTransfer(r.pool.QueryRow(ctx, `
 		UPDATE ownership_transfers SET status = 'cancelled', resolved_at = $2

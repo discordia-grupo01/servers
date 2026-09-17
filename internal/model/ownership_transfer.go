@@ -15,6 +15,8 @@ const (
 	OwnershipTransferCancelled OwnershipTransferStatus = "cancelled"
 )
 
+const OwnershipTransferTTL = 24 * time.Hour
+
 type OwnershipTransfer struct {
 	ID         uuid.UUID
 	ServerID   uuid.UUID

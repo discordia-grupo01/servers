@@ -406,6 +406,66 @@ func TestOwnershipTransferRepo_Accept_TargetNoLongerMember_LeavesEverythingUncha
 	}
 }
 
+// TTL: Expirer's sweep (see ownership_transfer_service.Expirer) calls this
+// directly against the repo, so it's tested here rather than through the
+// service's fake.
+func TestOwnershipTransferRepo_ExpireStalePending_RejectsOldOnes(t *testing.T) {
+	repo, servers, pool := newRepo(t)
+	ctx := context.Background()
+	srv, member := seedServerWithMember(ctx, t, servers, pool)
+
+	old := pendingTransfer(srv, member)
+	old.CreatedAt = time.Now().UTC().Add(-25 * time.Hour)
+	if err := repo.Create(ctx, old); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	now := time.Now().UTC()
+	n, err := repo.ExpireStalePending(ctx, now.Add(-model.OwnershipTransferTTL), now)
+	if err != nil {
+		t.Fatalf("ExpireStalePending: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("expired = %d, want 1", n)
+	}
+
+	got, err := repo.GetByID(ctx, old.ID)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if got.Status != model.OwnershipTransferRejected || got.ResolvedAt == nil {
+		t.Errorf("got = %+v, want status=rejected with resolved_at set", got)
+	}
+}
+
+func TestOwnershipTransferRepo_ExpireStalePending_IgnoresFreshOnes(t *testing.T) {
+	repo, servers, pool := newRepo(t)
+	ctx := context.Background()
+	srv, member := seedServerWithMember(ctx, t, servers, pool)
+
+	fresh := pendingTransfer(srv, member)
+	if err := repo.Create(ctx, fresh); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	now := time.Now().UTC()
+	n, err := repo.ExpireStalePending(ctx, now.Add(-model.OwnershipTransferTTL), now)
+	if err != nil {
+		t.Fatalf("ExpireStalePending: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("expired = %d, want 0 (transfer is still fresh)", n)
+	}
+
+	got, err := repo.GetByID(ctx, fresh.ID)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if !got.IsPending() {
+		t.Errorf("status = %v, want still pending", got.Status)
+	}
+}
+
 func dropAllTestTables(ctx context.Context, pool *pgxpool.Pool) {
 	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS ownership_transfers, member_roles, roles, server_bans, invitations, server_members, channels, servers CASCADE`)
 }

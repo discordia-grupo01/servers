@@ -21,4 +21,5 @@ type Transfers interface {
 	Accept(ctx context.Context, id uuid.UUID, resolvedAt time.Time) (model.OwnershipTransfer, error)
 	Reject(ctx context.Context, id uuid.UUID, resolvedAt time.Time) (model.OwnershipTransfer, error)
 	Cancel(ctx context.Context, id uuid.UUID, resolvedAt time.Time) (model.OwnershipTransfer, error)
+	ExpireStalePending(ctx context.Context, cutoff time.Time, resolvedAt time.Time) (int, error)
 }

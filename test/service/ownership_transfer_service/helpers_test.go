@@ -62,6 +62,10 @@ type fakeTransfers struct {
 	cancelResult model.OwnershipTransfer
 	cancelErr    error
 	cancelCalls  int
+
+	expireStaleN     int
+	expireStaleErr   error
+	expireStaleCalls int
 }
 
 func (f *fakeTransfers) Create(_ context.Context, t model.OwnershipTransfer) error {
@@ -107,6 +111,14 @@ func (f *fakeTransfers) Cancel(context.Context, uuid.UUID, time.Time) (model.Own
 		return model.OwnershipTransfer{}, f.cancelErr
 	}
 	return f.cancelResult, nil
+}
+
+func (f *fakeTransfers) ExpireStalePending(context.Context, time.Time, time.Time) (int, error) {
+	f.expireStaleCalls++
+	if f.expireStaleErr != nil {
+		return 0, f.expireStaleErr
+	}
+	return f.expireStaleN, nil
 }
 
 func ownerServer() model.Server {
