@@ -145,3 +145,26 @@ func TestListRoles_ReturnsRolesFromRepo(t *testing.T) {
 		t.Errorf("got %d roles, want 2", len(got))
 	}
 }
+
+func TestGetRole_ReturnsRoleFromRepo(t *testing.T) {
+	roleID := uuid.New()
+	roles := &fakeRoles{getByIDRole: role.Role{ID: roleID, Name: "Moderator"}}
+	svc := newService(&fakeServers{}, roles)
+
+	got, err := svc.GetRole(context.Background(), roleID)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.ID != roleID || got.Name != "Moderator" {
+		t.Errorf("got role=%+v", got)
+	}
+}
+
+func TestGetRole_NotFound(t *testing.T) {
+	svc := newService(&fakeServers{}, &fakeRoles{getByIDErr: model.ErrRoleNotFound})
+
+	_, err := svc.GetRole(context.Background(), uuid.New())
+	if !errors.Is(err, model.ErrRoleNotFound) {
+		t.Errorf("err = %v, want ErrRoleNotFound", err)
+	}
+}

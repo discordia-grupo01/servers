@@ -19,6 +19,7 @@ import (
 type RoleUseCases interface {
 	CreateRole(ctx context.Context, p role_service.CreateRoleParams) (role.Role, error)
 	ListRoles(ctx context.Context, serverID uuid.UUID) ([]role.Role, error)
+	GetRole(ctx context.Context, roleID uuid.UUID) (role.Role, error)
 	UpdateRolePermissions(ctx context.Context, p role_service.UpdateRolePermissionsParams) (role.Role, error)
 	SetDefaultRole(ctx context.Context, p role_service.SetDefaultRoleParams) error
 	DeleteRole(ctx context.Context, p role_service.DeleteRoleParams) error
@@ -81,6 +82,21 @@ func (h *Handler) ListRoles(c *gin.Context) {
 		resp = append(resp, roleview.ToResponse(rl))
 	}
 	c.JSON(http.StatusOK, resp)
+}
+
+// GET /v1/roles/:roleId
+func (h *Handler) GetRole(c *gin.Context) {
+	roleID, ok := apierr.ParseUUIDParam(c, "roleId")
+	if !ok {
+		return
+	}
+
+	rl, err := h.uc.GetRole(c.Request.Context(), roleID)
+	if err != nil {
+		apierr.WriteDomainError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, roleview.ToResponse(rl))
 }
 
 type updateRolePermissionsRequest struct {

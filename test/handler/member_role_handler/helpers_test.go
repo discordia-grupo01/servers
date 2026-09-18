@@ -46,6 +46,9 @@ func (fakeRoleUseCases) CreateRole(context.Context, role_service.CreateRoleParam
 	return role.Role{}, nil
 }
 func (fakeRoleUseCases) ListRoles(context.Context, uuid.UUID) ([]role.Role, error) { return nil, nil }
+func (fakeRoleUseCases) GetRole(context.Context, uuid.UUID) (role.Role, error) {
+	return role.Role{}, nil
+}
 func (fakeRoleUseCases) UpdateRolePermissions(context.Context, role_service.UpdateRolePermissionsParams) (role.Role, error) {
 	return role.Role{}, nil
 }

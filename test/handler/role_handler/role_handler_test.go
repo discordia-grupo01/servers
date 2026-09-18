@@ -86,3 +86,40 @@ func TestListRoles_ServerNotFound_Returns404(t *testing.T) {
 		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
 	}
 }
+
+func TestGetRole_Returns200(t *testing.T) {
+	roleID := uuid.New()
+	fake := &fakeRoleUseCases{getResult: role.Role{ID: roleID, Name: "Moderator", Color: "#FF00AA"}}
+	r := newRouter(t, fake)
+	w := doJSON(t, r, http.MethodGet, "/v1/roles/"+roleID.String(), testUser, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
+	}
+	if fake.gotGetRole != roleID {
+		t.Errorf("service got roleID=%s, want %s", fake.gotGetRole, roleID)
+	}
+	got := decodeRole(t, w)
+	if got.Name != "Moderator" || got.Color != "#FF00AA" {
+		t.Errorf("role = %+v", got)
+	}
+}
+
+func TestGetRole_InvalidRoleIDParam_BadRequest(t *testing.T) {
+	r := newRouter(t, &fakeRoleUseCases{})
+	w := doJSON(t, r, http.MethodGet, "/v1/roles/not-a-uuid", testUser, nil)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
+	}
+	e := decodeError(t, w)
+	if e.Error.Details["field"] != "roleId" || e.Error.Details["reason"] != "invalid_uuid" {
+		t.Errorf("details = %v", e.Error.Details)
+	}
+}
+
+func TestGetRole_NotFound_Returns404(t *testing.T) {
+	r := newRouter(t, &fakeRoleUseCases{getErr: model.ErrRoleNotFound})
+	w := doJSON(t, r, http.MethodGet, "/v1/roles/"+uuid.New().String(), testUser, nil)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
+	}
+}
