@@ -21,6 +21,7 @@ type MemberRoleUseCases interface {
 	AssignRole(ctx context.Context, p member_role_service.AssignRoleParams) (role.Role, error)
 	RemoveRole(ctx context.Context, p member_role_service.RemoveRoleParams) error
 	ListMemberRoles(ctx context.Context, serverID uuid.UUID, userID string) ([]role.Role, error)
+	GetMemberPermissions(ctx context.Context, serverID uuid.UUID, userID string) ([]string, error)
 }
 
 type Handler struct {
@@ -111,4 +112,31 @@ func (h *Handler) ListMemberRoles(c *gin.Context) {
 		resp = append(resp, roleview.ToResponse(rl))
 	}
 	c.JSON(http.StatusOK, resp)
+}
+
+type memberPermissionsResponse struct {
+	ServerID    string   `json:"server_id"`
+	UserID      string   `json:"user_id"`
+	Permissions []string `json:"permissions"`
+}
+
+// GET /v1/servers/:serverId/members/:userId/permissions
+func (h *Handler) GetMemberPermissions(c *gin.Context) {
+	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
+	if !ok {
+		return
+	}
+	targetUserID := c.Param("userId")
+
+	permissions, err := h.uc.GetMemberPermissions(c.Request.Context(), serverID, targetUserID)
+	if err != nil {
+		apierr.WriteDomainError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, memberPermissionsResponse{
+		ServerID:    serverID.String(),
+		UserID:      targetUserID,
+		Permissions: permissions,
+	})
 }
