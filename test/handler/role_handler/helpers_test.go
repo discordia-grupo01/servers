@@ -46,6 +46,10 @@ type fakeRoleUseCases struct {
 	listErr     error
 	gotServerID uuid.UUID
 
+	getResult  role.Role
+	getErr     error
+	gotGetRole uuid.UUID
+
 	updateErr error
 	updated   role.Role
 	gotUpdate role_service.UpdateRolePermissionsParams
@@ -74,6 +78,17 @@ func (f *fakeRoleUseCases) ListRoles(_ context.Context, serverID uuid.UUID) ([]r
 		return nil, f.listErr
 	}
 	return f.listResult, nil
+}
+
+func (f *fakeRoleUseCases) GetRole(_ context.Context, roleID uuid.UUID) (role.Role, error) {
+	f.gotGetRole = roleID
+	if f.getErr != nil {
+		return role.Role{}, f.getErr
+	}
+	if f.getResult.ID == uuid.Nil {
+		f.getResult = role.Role{ID: roleID, Name: "Fetched"}
+	}
+	return f.getResult, nil
 }
 
 func (f *fakeRoleUseCases) UpdateRolePermissions(_ context.Context, p role_service.UpdateRolePermissionsParams) (role.Role, error) {

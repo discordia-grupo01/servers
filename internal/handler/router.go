@@ -84,6 +84,7 @@ func NewRouter(d Deps) *gin.Engine {
 
 	v1.POST("/servers/:serverId/roles", roleH.CreateRole)
 	v1.GET("/servers/:serverId/roles", roleH.ListRoles)
+	v1.GET("/roles/:roleId", roleH.GetRole)
 	v1.PATCH("/roles/:roleId", roleH.UpdateRolePermissions)
 	v1.DELETE("/roles/:roleId", roleH.DeleteRole)
 	v1.PUT("/servers/:serverId/default-role", roleH.SetDefaultRole)
@@ -91,6 +92,7 @@ func NewRouter(d Deps) *gin.Engine {
 	v1.POST("/servers/:serverId/members/:userId/roles", memberRoleH.AssignRole)
 	v1.DELETE("/servers/:serverId/members/:userId/roles/:roleId", memberRoleH.RemoveRole)
 	v1.GET("/servers/:serverId/members/:userId/roles", memberRoleH.ListMemberRoles)
+	v1.GET("/servers/:serverId/members/:userId/permissions", memberRoleH.GetMemberPermissions)
 
 	v1.GET("/servers/:serverId/members", membershipH.ListMembers)
 	v1.DELETE("/servers/:serverId/members/:userId", membershipH.LeaveServer)

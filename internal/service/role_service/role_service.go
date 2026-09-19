@@ -98,6 +98,12 @@ func (s *RoleService) ListRoles(ctx context.Context, serverID uuid.UUID) ([]role
 	return s.roles.ListByServer(ctx, serverID)
 }
 
+// GetRole fetches a single role by id. It only checks that the role exists,
+// mirroring the same "read is not authz-gated" behavior as ListRoles.
+func (s *RoleService) GetRole(ctx context.Context, roleID uuid.UUID) (role.Role, error) {
+	return s.roles.GetByID(ctx, roleID)
+}
+
 // UpdateRolePermissionsParams. Permissions == nil means "leave the existing
 // permissions untouched" (a caller that only wants to rename/recolor a role
 // doesn't have to resend its full permission list); Name/Color == nil means

@@ -171,3 +171,49 @@ func TestListMemberRoles_ReturnsRolesFromRepo(t *testing.T) {
 		t.Errorf("got %d roles, want 2", len(got))
 	}
 }
+
+func TestGetMemberPermissions_ServerNotFound(t *testing.T) {
+	svc := newService(&fakeServers{getErr: model.ErrServerNotFound}, &fakeRoles{}, &fakeMembers{})
+
+	_, err := svc.GetMemberPermissions(context.Background(), uuid.New(), testUser)
+	if !errors.Is(err, model.ErrServerNotFound) {
+		t.Errorf("err = %v, want ErrServerNotFound", err)
+	}
+}
+
+func TestGetMemberPermissions_ReturnsUnionOfRolePermissions(t *testing.T) {
+	srv := ownerServer()
+	members := &fakeMembers{listRoles: []role.Role{
+		{ID: uuid.New(), Permissions: role.PermBanMembers | role.PermKickMembers | role.PermViewChannels},
+		{ID: uuid.New(), Permissions: role.PermSendMessages | role.PermViewChannels},
+	}}
+	svc := newService(&fakeServers{server: srv}, &fakeRoles{}, members)
+
+	got, err := svc.GetMemberPermissions(context.Background(), srv.ID, testUser)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := []string{"BAN_MEMBERS", "KICK_MEMBERS", "SEND_MESSAGES", "VIEW_CHANNELS"}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i, name := range want {
+		if got[i] != name {
+			t.Errorf("got %v, want %v", got, want)
+			break
+		}
+	}
+}
+
+func TestGetMemberPermissions_NoRoles_ReturnsEmpty(t *testing.T) {
+	srv := ownerServer()
+	svc := newService(&fakeServers{server: srv}, &fakeRoles{}, &fakeMembers{})
+
+	got, err := svc.GetMemberPermissions(context.Background(), srv.ID, testUser)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("got %v, want empty", got)
+	}
+}

@@ -170,10 +170,12 @@ Ver [`openapi.yaml`](openapi.yaml).
 | POST | `/v1/servers/{serverId}/ownership-transfers/{transferId}/cancel` | si (owner que la inicio) | Cancelar la transferencia pendiente antes de que el destinatario responda (p. ej. para ofrecersela a otro miembro). |
 | POST | `/v1/servers/{serverId}/roles` | si (owner) | Crear rol (`name`, `color`). |
 | GET | `/v1/servers/{serverId}/roles` | si | Listar roles de un server. |
+| GET | `/v1/roles/{roleId}` | si | Un rol puntual (mismo shape que un elemento de `GET /v1/servers/{serverId}/roles`). 404 si no existe. |
 | PATCH | `/v1/roles/{roleId}` | si (owner) | Editar permisos/nombre/color de un rol. |
 | POST | `/v1/servers/{serverId}/members/{userId}/roles` | si (owner) | Asignar un rol a un miembro (idempotente). |
 | DELETE | `/v1/servers/{serverId}/members/{userId}/roles/{roleId}` | si (owner) | Quitar un rol de un miembro. |
 | GET | `/v1/servers/{serverId}/members/{userId}/roles` | si | Listar los roles de un miembro. |
+| GET | `/v1/servers/{serverId}/members/{userId}/permissions` | si | Permisos efectivos del miembro (union de los permisos de todos sus roles). |
 | PUT | `/v1/servers/{serverId}/default-role` | si (owner) | Definir el rol por defecto del server. |
 | DELETE | `/v1/roles/{roleId}` | si (owner) | Eliminar un rol (optativa). Limpia asignaciones; rechaza con 409 si el rol es el default actual del server (hay que asignar otro default primero). |
 | POST | `/v1/servers/{serverId}/channels` | si (owner) | Crear canal de texto o voz (`name`, `kind`, `category_id?`). 400 si el nombre esta vacio o ya existe otro canal con ese nombre en la misma categoria (o en el "sin categoria", segun corresponda). |

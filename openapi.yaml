@@ -141,6 +141,18 @@ components:
           example: [SEND_MESSAGES, MANAGE_CHANNELS]
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
+    MemberPermissions:
+      type: object
+      properties:
+        server_id: { type: string, format: uuid }
+        user_id: { type: string }
+        permissions:
+          type: array
+          description: Union of the permissions of every role assigned to the member.
+          items:
+            type: string
+            enum: [VIEW_CHANNELS, SEND_MESSAGES, MANAGE_CHANNELS, MANAGE_ROLES, KICK_MEMBERS, BAN_MEMBERS, MANAGE_SERVER]
+          example: [VIEW_CHANNELS, SEND_MESSAGES, MANAGE_CHANNELS, KICK_MEMBERS, BAN_MEMBERS]
     OwnershipTransfer:
       type: object
       properties:
@@ -885,6 +897,38 @@ paths:
               schema: { $ref: "#/components/schemas/Error" }
 
   /v1/roles/{roleId}:
+    get:
+      summary: Get a single role
+      description: >
+        Same shape as an element of `GET /v1/servers/{serverId}/roles`. Only
+        checks that the role exists (read is not authorization-gated, same as
+        the list endpoint).
+      parameters:
+        - name: roleId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: The role
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Role" }
+        "400":
+          description: roleId is not a valid UUID.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Role not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
     patch:
       summary: Update a role's permissions (and optionally its name/color)
       description: >
@@ -1043,6 +1087,47 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/Role" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Server not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/servers/{serverId}/members/{userId}/permissions:
+    get:
+      summary: Get a member's effective permissions
+      description: >
+        Union of the permissions of every role assigned to the member, so
+        clients don't have to fetch the member's roles and merge their
+        permission arrays by hand. Only checks that the server exists (same
+        criteria as the other GET endpoints in this section) -- does not
+        require the target user to be a member; a non-member or a member with
+        no roles returns an empty `permissions` array.
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: The member's effective permissions
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MemberPermissions" }
+        "400":
+          description: serverId is not a valid UUID.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
         "401":
           description: Missing authentication credential
           content:

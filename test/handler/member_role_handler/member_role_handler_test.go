@@ -141,3 +141,38 @@ func TestListMemberRoles_ServerNotFound_Returns404(t *testing.T) {
 		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
 	}
 }
+
+func TestGetMemberPermissions_Returns200(t *testing.T) {
+	fake := &fakeMemberRoleUseCases{permissionsResult: []string{"BAN_MEMBERS", "KICK_MEMBERS", "VIEW_CHANNELS"}}
+	r := newRouter(t, fake)
+	serverID, userID := uuid.New(), "member-1"
+
+	w := doJSON(t, r, http.MethodGet, "/v1/servers/"+serverID.String()+"/members/"+userID+"/permissions", testUser, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
+	}
+	if fake.gotPermServerID != serverID || fake.gotPermUserID != userID {
+		t.Errorf("service got serverID=%s userID=%s", fake.gotPermServerID, fake.gotPermUserID)
+	}
+	for _, want := range []string{"BAN_MEMBERS", "KICK_MEMBERS", "VIEW_CHANNELS"} {
+		if !strings.Contains(w.Body.String(), want) {
+			t.Errorf("body = %s, want it to contain %q", w.Body.String(), want)
+		}
+	}
+}
+
+func TestGetMemberPermissions_ServerNotFound_Returns404(t *testing.T) {
+	r := newRouter(t, &fakeMemberRoleUseCases{permissionsErr: model.ErrServerNotFound})
+	w := doJSON(t, r, http.MethodGet, "/v1/servers/"+uuid.New().String()+"/members/member-1/permissions", testUser, nil)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestGetMemberPermissions_InvalidServerIDParam_BadRequest(t *testing.T) {
+	r := newRouter(t, &fakeMemberRoleUseCases{})
+	w := doJSON(t, r, http.MethodGet, "/v1/servers/not-a-uuid/members/member-1/permissions", testUser, nil)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
+	}
+}

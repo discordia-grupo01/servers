@@ -124,3 +124,22 @@ func (s *MemberRoleService) ListMemberRoles(ctx context.Context, serverID uuid.U
 	}
 	return s.members.ListRolesForMember(ctx, serverID, userID)
 }
+
+// GetMemberPermissions returns the effective (union) permission names across
+// every role assigned to a member, so clients don't have to fetch the
+// member's roles and merge their permission arrays by hand. Same
+// existence-only check as ListMemberRoles.
+func (s *MemberRoleService) GetMemberPermissions(ctx context.Context, serverID uuid.UUID, userID string) ([]string, error) {
+	if _, err := s.servers.GetByID(ctx, serverID); err != nil {
+		return nil, err
+	}
+	roles, err := s.members.ListRolesForMember(ctx, serverID, userID)
+	if err != nil {
+		return nil, err
+	}
+	var mask role.Permission
+	for _, rl := range roles {
+		mask |= rl.Permissions
+	}
+	return role.PermissionNames(mask), nil
+}

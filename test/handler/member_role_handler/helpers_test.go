@@ -46,6 +46,9 @@ func (fakeRoleUseCases) CreateRole(context.Context, role_service.CreateRoleParam
 	return role.Role{}, nil
 }
 func (fakeRoleUseCases) ListRoles(context.Context, uuid.UUID) ([]role.Role, error) { return nil, nil }
+func (fakeRoleUseCases) GetRole(context.Context, uuid.UUID) (role.Role, error) {
+	return role.Role{}, nil
+}
 func (fakeRoleUseCases) UpdateRolePermissions(context.Context, role_service.UpdateRolePermissionsParams) (role.Role, error) {
 	return role.Role{}, nil
 }
@@ -68,6 +71,11 @@ type fakeMemberRoleUseCases struct {
 	listErr         error
 	gotListServerID uuid.UUID
 	gotListUserID   string
+
+	permissionsResult []string
+	permissionsErr    error
+	gotPermServerID   uuid.UUID
+	gotPermUserID     string
 }
 
 func (f *fakeMemberRoleUseCases) AssignRole(_ context.Context, p member_role_service.AssignRoleParams) (role.Role, error) {
@@ -89,6 +97,14 @@ func (f *fakeMemberRoleUseCases) ListMemberRoles(_ context.Context, serverID uui
 		return nil, f.listErr
 	}
 	return f.listResult, nil
+}
+
+func (f *fakeMemberRoleUseCases) GetMemberPermissions(_ context.Context, serverID uuid.UUID, userID string) ([]string, error) {
+	f.gotPermServerID, f.gotPermUserID = serverID, userID
+	if f.permissionsErr != nil {
+		return nil, f.permissionsErr
+	}
+	return f.permissionsResult, nil
 }
 
 type okPinger struct{}
