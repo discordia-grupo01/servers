@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, develop]
 
 jobs:
   test:
@@ -21,6 +21,14 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 5
+      rabbitmq:
+        image: rabbitmq:3.13-management-alpine
+        ports: ["5672:5672", "15672:15672"]
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -37,4 +45,15 @@ jobs:
 
       - run: go build ./...
       - run: go vet ./...
-      - run: go test ./... -cover
+      - name: Tests (unitarios + integracion contra Postgres y RabbitMQ reales)
+        env:
+          DATABASE_HOST: localhost
+          DATABASE_PORT: 5432
+          DATABASE_NAME: discordia_servicio
+          DATABASE_USER: discordia
+          DATABASE_PASSWORD: discordia
+          RABBITMQ_URL: amqp://guest:guest@localhost:5672/
+        # -p 1: varios paquetes de integracion (test/repository/**, test/e2e)
+        # dropean y recrean el schema contra la misma base -- si corren en
+        # paralelo se pisan entre si (ver seccion "Tests" del README).
+        run: go test ./... -p 1 -cover

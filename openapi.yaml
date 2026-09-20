@@ -1,16 +1,1623 @@
 openapi: 3.0.3
 info:
-  title: Discordia - SERVICIO
+  title: Discordia - Servers
   version: "1.0.0"
+  description: >
+    Servers service. Covered story: "Create server".
+    All /v1/** routes require identity: the JWT is validated by Kong at the
+    gateway, and this service takes the user id from the X-User-Id header (or from
+    the "sub" claim of the token Kong forwards).
+
+servers:
+  - url: http://localhost:8000
+    description: Through the gateway (Kong)
+  - url: http://localhost:8080
+    description: Directly to the service
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Channel:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        server_id: { type: string, format: uuid }
+        name: { type: string, example: general }
+        kind: { type: string, enum: [text, voice] }
+        position: { type: integer, example: 0 }
+        category_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Null means the channel is not in any category ("sin categoria").
+        topic:
+          type: string
+          nullable: true
+          example: Anuncios importantes del servidor
+    Category:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        server_id: { type: string, format: uuid }
+        name: { type: string, example: Texto }
+        position: { type: integer, example: 0 }
+    Invitation:
+      type: object
+      properties:
+        code: { type: string, example: 8sKq2Zr1a9Xa }
+        url:
+          type: string
+          description: Relative invite link (append to the frontend base URL).
+          example: /invite/8sKq2Zr1a9Xa
+        server_id: { type: string, format: uuid }
+        created_by: { type: string, description: user id of the member who generated it }
+        max_uses:
+          type: integer
+          nullable: true
+          description: Null means unlimited uses.
+          example: 10
+        uses: { type: integer, example: 0 }
+        expires_at:
+          type: string
+          format: date-time
+          description: Always set. Fixed at 7 days after creation.
+        revoked_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Non-null once the invitation has been revoked.
+        created_at: { type: string, format: date-time }
+    JoinResult:
+      type: object
+      properties:
+        server_id: { type: string, format: uuid }
+        already_member:
+          type: boolean
+          description: >
+            true when the caller was already a member; no new membership is
+            created and no invitation use is consumed.
+    Server:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, example: My Community }
+        icon_url:
+          type: string
+          nullable: true
+          description: >
+            Publicly accessible URL to the icon (a Supabase Storage public
+            object URL in production; a same-API proxy path in local/dev
+            setups without Supabase configured). Never null in practice: a
+            server always has an icon, either the one its owner uploaded or a
+            random solid-color default generated at creation time.
+        banner_url:
+          type: string
+          nullable: true
+          description: >
+            Publicly accessible URL to the banner, same URL scheme as
+            icon_url. Null until the owner uploads one.
+        owner_id: { type: string, description: user id of the creator }
+        created_at: { type: string, format: date-time }
+        channels:
+          type: array
+          items: { $ref: "#/components/schemas/Channel" }
+        categories:
+          type: array
+          items: { $ref: "#/components/schemas/Category" }
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: integer
+              description: HTTP status code.
+              example: 400
+            message:
+              type: string
+              example: name is too long
+            details:
+              type: object
+              additionalProperties: true
+              description: Structured context; {} when there is nothing to add.
+              example: { field: name, reason: name_too_long }
+    Role:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        server_id: { type: string, format: uuid }
+        name: { type: string, example: Moderator }
+        color: { type: string, example: "#FF00AA", description: "Hex color, #RRGGBB." }
+        permissions:
+          type: array
+          items:
+            type: string
+            enum: [VIEW_CHANNELS, SEND_MESSAGES, MANAGE_CHANNELS, MANAGE_ROLES, KICK_MEMBERS, BAN_MEMBERS, MANAGE_SERVER]
+          example: [SEND_MESSAGES, MANAGE_CHANNELS]
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    MemberPermissions:
+      type: object
+      properties:
+        server_id: { type: string, format: uuid }
+        user_id: { type: string }
+        permissions:
+          type: array
+          description: Union of the permissions of every role assigned to the member.
+          items:
+            type: string
+            enum: [VIEW_CHANNELS, SEND_MESSAGES, MANAGE_CHANNELS, MANAGE_ROLES, KICK_MEMBERS, BAN_MEMBERS, MANAGE_SERVER]
+          example: [VIEW_CHANNELS, SEND_MESSAGES, MANAGE_CHANNELS, KICK_MEMBERS, BAN_MEMBERS]
+    OwnershipTransfer:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        server_id: { type: string, format: uuid }
+        from_user_id: { type: string, description: user id of the server's owner at the time the transfer was created }
+        to_user_id: { type: string, description: user id of the member offered ownership }
+        status: { type: string, enum: [pending, accepted, rejected, cancelled] }
+        created_at: { type: string, format: date-time }
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Set once the transfer is accepted, rejected, or cancelled; null while pending.
+    Member:
+      type: object
+      properties:
+        user_id: { type: string }
+        is_owner: { type: boolean }
+        joined_at: { type: string, format: date-time }
+    MemberList:
+      type: object
+      properties:
+        members:
+          type: array
+          items: { $ref: "#/components/schemas/Member" }
+        total: { type: integer, description: Total member count across all pages. }
+        limit: { type: integer }
+        offset: { type: integer }
+
+security:
+  - bearerAuth: []
+
 paths:
   /livez:
     get:
       summary: Liveness check
+      security: []
       responses:
         "200": { description: OK }
   /readyz:
     get:
       summary: Readiness check
+      security: []
       responses:
         "200": { description: OK }
-        "503": { description: Dependencias no disponibles }
+        "503": { description: Dependencies unavailable }
+
+  /v1/servers:
+    post:
+      summary: Create a server
+      description: >
+        Creates a server, makes the authenticated user its owner, and
+        automatically generates one text channel ("general") and one voice
+        channel ("General").
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  minLength: 2
+                  maxLength: 100
+                  description: >
+                    2..100 characters (counted after Unicode NFC normalization,
+                    so an accented letter counts as one). Control characters are
+                    rejected. Uniqueness per owner is case-, accent- and
+                    whitespace-insensitive.
+                icon:
+                  type: string
+                  format: binary
+                  description: >
+                    Optional. PNG, JPEG or WEBP, up to 5 MB (configurable via
+                    ICON_MAX_BYTES). If omitted, a random solid-color icon is
+                    generated so icon_url is never null.
+      responses:
+        "201":
+          description: Server created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Server" }
+        "400":
+          description: >
+            Invalid name (empty, out of range, or containing control characters)
+            or invalid icon (unsupported format or size). The server is not created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: The authenticated user already has a server with that name.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    get:
+      summary: List my servers
+      description: >
+        Lists every server the authenticated user is a member of (owned or
+        joined), most recently joined first. Each entry includes its channels,
+        same shape as the create-server response.
+      responses:
+        "200":
+          description: The caller's servers (possibly empty).
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Server" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/servers/{serverId}:
+    get:
+      summary: Get a server
+      description: >
+        Fetches one server (name, icon_url, owner, channels) by id. Typical
+        use: right after joining via an invitation, the client only has
+        server_id -- this is how it gets the rest of the server's data.
+        Like GET /v1/servers/{serverId}/roles, this only checks that the
+        server exists; it doesn't (yet) require the caller to be a member.
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: The server.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Server" }
+        "400":
+          description: Invalid serverId.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Server not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    patch:
+      summary: Edit a server's general settings
+      description: >
+        Updates name, icon and/or banner. Only the server's owner may call
+        this. Every field is optional: send only what you want to change
+        (e.g. just `name`, or just `icon`). Send `remove_banner=true` to
+        clear an existing banner without uploading a new one.
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  minLength: 2
+                  maxLength: 100
+                  description: Same validation rules as at creation.
+                icon:
+                  type: string
+                  format: binary
+                  description: Optional. PNG, JPEG or WEBP, up to 5 MB. Replaces the current icon.
+                banner:
+                  type: string
+                  format: binary
+                  description: Optional. PNG, JPEG or WEBP, up to 5 MB. Replaces the current banner.
+                remove_banner:
+                  type: string
+                  description: Set to "true" to clear the banner. Ignored if `banner` is also sent.
+      responses:
+        "200":
+          description: Server updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Server" }
+        "400":
+          description: >
+            Invalid name, or invalid icon/banner (unsupported format or size).
+            Nothing is persisted (CA3).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not the server's owner (CA2).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Server not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: Another of the owner's servers already has that name.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/servers/{serverId}/icon:
+    get:
+      summary: Get a server's icon
+      description: >
+        Serves the icon file itself (image bytes), whether it was uploaded or
+        auto-generated. This is what icon_url points to. Public: no
+        authentication required, since any client with just the URL should be
+        able to render it (in production this is a direct Supabase Storage
+        public URL instead, bypassing this endpoint entirely).
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: The icon image.
+          content:
+            image/png: { schema: { type: string, format: binary } }
+            image/jpeg: { schema: { type: string, format: binary } }
+            image/webp: { schema: { type: string, format: binary } }
+        "400":
+          description: Invalid serverId.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: No icon file for that id (server doesn't exist, or was never given one).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/servers/{serverId}/banner:
+    get:
+      summary: Get a server's banner
+      description: >
+        Serves the banner file itself (image bytes). This is what banner_url
+        points to. Public: no authentication required, same reasoning as
+        GET /v1/servers/{serverId}/icon.
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: The banner image.
+          content:
+            image/png: { schema: { type: string, format: binary } }
+            image/jpeg: { schema: { type: string, format: binary } }
+            image/webp: { schema: { type: string, format: binary } }
+        "400":
+          description: Invalid serverId.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: No banner set for that server.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/servers/{serverId}/channels:
+    post:
+      summary: Create a channel
+      description: >
+        Only the server owner can create channels. The name must be unique
+        within its category (or within the "sin categoria" bucket, when
+        category_id is omitted).
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, kind]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 100 }
+                kind: { type: string, enum: [text, voice] }
+                category_id: { type: string, format: uuid, nullable: true }
+      responses:
+        "201":
+          description: Channel created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Channel" }
+        "400":
+          description: Empty/too long name, invalid kind, name already taken in that category, or category_id belongs to a different server.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not the server owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Server or category not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/channels/{channelId}:
+    patch:
+      summary: Edit a channel's name and/or topic
+      description: Fields omitted from the body are left unchanged.
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, minLength: 1, maxLength: 100 }
+                topic: { type: string, nullable: true }
+      responses:
+        "200":
+          description: Channel updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Channel" }
+        "400":
+          description: Empty/too long name, or name already taken in that category.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not the server owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Channel not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    delete:
+      summary: Delete a channel
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204":
+          description: Channel deleted.
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not the server owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Channel not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/channels/{channelId}/category:
+    patch:
+      summary: Move a channel to a category (or out of one)
+      description: category_id null moves the channel to "sin categoria".
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                category_id: { type: string, format: uuid, nullable: true }
+      responses:
+        "200":
+          description: Channel moved
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Channel" }
+        "400":
+          description: A channel with that name already exists in the destination category, or category_id belongs to a different server.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not the server owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Channel or category not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/servers/{serverId}/channels/reorder:
+    patch:
+      summary: Reorder the channels of a category
+      description: >
+        channel_ids must be exactly the current set of channels in that
+        category (or in "sin categoria", when category_id is omitted) -- not
+        a subset, not extra ids. Their position is set to match their index
+        in the array.
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [channel_ids]
+              properties:
+                category_id: { type: string, format: uuid, nullable: true }
+                channel_ids:
+                  type: array
+                  items: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Channels reordered.
+        "400":
+          description: channel_ids does not match exactly the channels currently in that category.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not the server owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Server or category not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/servers/{serverId}/categories:
+    post:
+      summary: Create a category
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 100 }
+      responses:
+        "201":
+          description: Category created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Category" }
+        "400":
+          description: Empty or too long name.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not the server owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Server not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/servers/{serverId}/categories/reorder:
+    patch:
+      summary: Reorder a server's categories
+      description: >
+        category_ids must be exactly the current set of categories for the
+        server -- not a subset, not extra ids. Their position is set to
+        match their index in the array.
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [category_ids]
+              properties:
+                category_ids:
+                  type: array
+                  items: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Categories reordered.
+        "400":
+          description: category_ids does not match exactly the categories currently in this server.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not the server owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Server not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/servers/{serverId}/roles:
+    post:
+      summary: Create a role
+      description: Only the server owner can create roles. Permissions start empty.
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, color]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 100 }
+                color: { type: string, example: "#FF00AA" }
+      responses:
+        "201":
+          description: Role created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Role" }
+        "400":
+          description: Invalid name or color.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not the server owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Server not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    get:
+      summary: List a server's roles
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: List of roles
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Role" }
+        "404":
+          description: Server not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/servers/{serverId}/invites:
+    post:
+      summary: Generate an invitation
+      description: >
+        A member of the server generates a unique invite link. It expires 7 days
+        after creation (fixed server-side, not client-configurable). "max_uses"
+        is optional: omit it for unlimited uses.
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                max_uses:
+                  type: integer
+                  minimum: 1
+                  description: Optional. Max number of successful joins before the link stops working.
+      responses:
+        "201":
+          description: Invitation created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Invitation" }
+        "400":
+          description: "max_uses is not a positive number, or the body is not valid JSON."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The caller is not a member of the server and cannot invite.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: The server does not exist.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    get:
+      summary: List a server's invitations
+      description: >
+        Any member can see every invitation ever created for the server --
+        active, revoked, or expired -- newest first. There's no filtering by
+        status server-side; the caller decides what to do with each one (e.g.
+        revoke an active one it no longer wants around).
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: The server's invitations (possibly empty).
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Invitation" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The caller is not a member of the server.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: The server does not exist.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/roles/{roleId}:
+    get:
+      summary: Get a single role
+      description: >
+        Same shape as an element of `GET /v1/servers/{serverId}/roles`. Only
+        checks that the role exists (read is not authorization-gated, same as
+        the list endpoint).
+      parameters:
+        - name: roleId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: The role
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Role" }
+        "400":
+          description: roleId is not a valid UUID.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Role not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    patch:
+      summary: Update a role's permissions (and optionally its name/color)
+      description: >
+        Only the server owner (of the role's server) can edit it. `permissions`
+        omitted means "leave the current permissions untouched"; an empty array
+        clears them. `name`/`color` are optional too.
+      parameters:
+        - name: roleId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                permissions:
+                  type: array
+                  items: { type: string }
+                  example: [SEND_MESSAGES, MANAGE_CHANNELS]
+                name: { type: string }
+                color: { type: string }
+      responses:
+        "200":
+          description: Role updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Role" }
+        "400":
+          description: Invalid name, color, or an unknown permission name.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not the owner of the role's server.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Role not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    delete:
+      summary: Delete a role
+      description: >
+        Only the server owner (of the role's server) can delete it. Any
+        member assignment of this role is removed automatically (`member_roles`
+        cascades on the role's FK). Deleting the server's current default role
+        is rejected with 409 -- set a different default role first (via
+        `PUT /v1/servers/{serverId}/default-role`) so new members never join
+        with zero roles.
+      parameters:
+        - name: roleId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204":
+          description: Role deleted
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not the owner of the role's server.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Role not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: The role is the server's current default role.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/servers/{serverId}/members/{userId}/roles:
+    post:
+      summary: Assign a role to a member
+      description: >
+        Only the server owner can assign roles. The target user must already
+        be a member of the server, and the role must belong to it. Assigning
+        an already-assigned role is idempotent.
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role_id]
+              properties:
+                role_id: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Role assigned (or already assigned).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Role" }
+        "400":
+          description: The role belongs to a different server, or the body is not valid JSON.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not the server owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Server, role, or target member not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    get:
+      summary: List a member's roles
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: List of roles assigned to the member
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Role" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Server not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/servers/{serverId}/members/{userId}/permissions:
+    get:
+      summary: Get a member's effective permissions
+      description: >
+        Union of the permissions of every role assigned to the member, so
+        clients don't have to fetch the member's roles and merge their
+        permission arrays by hand. Only checks that the server exists (same
+        criteria as the other GET endpoints in this section) -- does not
+        require the target user to be a member; a non-member or a member with
+        no roles returns an empty `permissions` array.
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: The member's effective permissions
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MemberPermissions" }
+        "400":
+          description: serverId is not a valid UUID.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Server not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/servers/{serverId}/members/{userId}/roles/{roleId}:
+    delete:
+      summary: Remove a role from a member
+      description: Only the server owner can remove roles. The role must belong to this server.
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: roleId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204":
+          description: Role removed
+        "400":
+          description: The role belongs to a different server.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not the server owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Server not found, or the member doesn't have this role.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/servers/{serverId}/members:
+    get:
+      summary: List server members
+      description: >
+        Paginated list of a server's members. The caller must already be a
+        member of the server. Used, among other things, to let the owner
+        pick an ownership-transfer target.
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: limit
+          in: query
+          required: false
+          description: Page size. Defaults to 20, capped at 100.
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: offset
+          in: query
+          required: false
+          description: Number of members to skip. Defaults to 0.
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        "200":
+          description: One page of members, oldest join first.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MemberList" }
+        "400":
+          description: "`limit` or `offset` is not a non-negative integer."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not a member of this server.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Server not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/servers/{serverId}/members/{userId}:
+    delete:
+      summary: Leave a server
+      description: >
+        A member removes their own membership from a server. `userId` must be
+        the caller's own id -- this endpoint does not support removing another
+        member (kick), only leaving voluntarily. The server owner cannot leave
+        this way: they must transfer ownership or delete the server first.
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: userId
+          in: path
+          required: true
+          description: Must equal the authenticated caller's id.
+          schema: { type: string }
+      responses:
+        "204":
+          description: Membership removed. The caller no longer has access to the server's channels.
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: "`userId` does not match the authenticated caller."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Server not found, or the caller is not a member of it.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: >
+            The caller is the server's owner and cannot leave directly.
+            Transfer ownership or delete the server first.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/servers/{serverId}/ownership-transfers:
+    post:
+      summary: Transfer server ownership
+      description: >
+        The server's owner offers ownership to another member. Creates a
+        pending transfer that the recipient must accept or reject; nothing
+        changes until they respond. Only one pending transfer can exist per
+        server at a time.
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [to_user_id]
+              properties:
+                to_user_id: { type: string, description: user id of the member to transfer ownership to }
+      responses:
+        "201":
+          description: Pending transfer created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OwnershipTransfer" }
+        "400":
+          description: >
+            `to_user_id` is missing, belongs to the current owner, or is not
+            a member of this server (CA2).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not the server's owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Server not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: This server already has a pending ownership transfer.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/servers/{serverId}/ownership-transfers/pending:
+    get:
+      summary: Get a server's pending ownership transfer
+      description: >
+        Returns the server's pending ownership transfer, if any. Only
+        members of the server (the owner who created it, or the member it
+        was offered to) can see it. There is at most one pending transfer
+        per server.
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: The pending transfer.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OwnershipTransfer" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not a member of this server.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Server not found, or it has no pending transfer.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/servers/{serverId}/ownership-transfers/{transferId}/accept:
+    post:
+      summary: Accept an ownership transfer
+      description: >
+        Only the transfer's recipient can accept it. On success, they become
+        the server's new owner and the previous owner becomes a regular
+        member (CA1).
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: transferId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Ownership transferred.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OwnershipTransfer" }
+        "400":
+          description: The transfer does not belong to this server.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not the transfer's recipient.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Transfer not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: >
+            The transfer is no longer pending (already resolved), or the
+            recipient is no longer a member of the server.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/servers/{serverId}/ownership-transfers/{transferId}/reject:
+    post:
+      summary: Reject an ownership transfer
+      description: >
+        Only the transfer's recipient can reject it. Ownership does not
+        change; the original owner keeps it (CA3).
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: transferId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Transfer rejected.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OwnershipTransfer" }
+        "400":
+          description: The transfer does not belong to this server.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not the transfer's recipient.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Transfer not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: The transfer is no longer pending (already resolved).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/servers/{serverId}/ownership-transfers/{transferId}/cancel:
+    post:
+      summary: Cancel a pending ownership transfer
+      description: >
+        Only the owner who initiated the transfer can cancel it. Withdraws
+        the pending transfer without changing ownership, freeing the server
+        up to start a new one (e.g. to send it to a different member).
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: transferId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Transfer cancelled.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OwnershipTransfer" }
+        "400":
+          description: The transfer does not belong to this server.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not the transfer's initiator.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Transfer not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: The transfer is no longer pending (already resolved).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/invites/{code}:
+    delete:
+      summary: Revoke an invitation
+      description: >
+        Deactivates the invitation immediately. Idempotent: revoking an already
+        revoked invitation still returns 204.
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: Invitation revoked (or already revoked) }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The caller is not a member of the invitation's server.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: No invitation with that code.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/servers/{serverId}/default-role:
+    put:
+      summary: Set the server's default role for new members
+      description: >
+        Only the server owner can set this. The role must belong to this
+        server. The default role is assigned automatically to new members
+        when they join via an invitation.
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role_id]
+              properties:
+                role_id: { type: string, format: uuid }
+      responses:
+        "204":
+          description: Default role set.
+        "400":
+          description: The role belongs to a different server.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The authenticated user is not the server owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Server or role not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/invites/{code}/join:
+    post:
+      summary: Join a server via an invitation
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "201":
+          description: The caller joined the server with the default role.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JoinResult" }
+        "200":
+          description: >
+            The caller was already a member; returned straight to the server
+            without duplicating the membership.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JoinResult" }
+        "401":
+          description: Missing authentication credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The caller is banned from the server.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: >
+            The invitation is invalid: no such code, or it was revoked, has
+            expired, or reached its use limit.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }

@@ -1,0 +1,237 @@
+package handler_test
+
+import (
+	"bytes"
+	"mime/multipart"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/google/uuid"
+
+	"github.com/discordia-grupo01/servers/internal/model"
+)
+
+func patchServer(t *testing.T, r http.Handler, user, serverID string, fields map[string]string, files map[string][]byte) *httptest.ResponseRecorder {
+	t.Helper()
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	for k, v := range fields {
+		fw, _ := mw.CreateFormField(k)
+		_, _ = fw.Write([]byte(v))
+	}
+	for field, data := range files {
+		fw, _ := mw.CreateFormFile(field, field+".bin")
+		_, _ = fw.Write(data)
+	}
+	_ = mw.Close()
+
+	req := httptest.NewRequest(http.MethodPatch, "/v1/servers/"+serverID, &body)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	if user != "" {
+		req.Header.Set("X-User-Id", user)
+	}
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	return w
+}
+
+// CA1: a valid edit by the owner persists (the repo is called) and the
+// change is reflected in the response.
+func TestUpdateServer_NameChange_Returns200(t *testing.T) {
+	r, repo := newRouter(t, oneMB, nil)
+	id := uuid.New()
+	repo.getResult = model.Server{ID: id, Name: "Original", OwnerID: testUser}
+
+	w := patchServer(t, r, testUser, id.String(), map[string]string{"name": "Updated"}, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
+	}
+	if got := decodeServer(t, w); got.Name != "Updated" {
+		t.Errorf("name = %q, want %q", got.Name, "Updated")
+	}
+	if repo.updateCalls != 1 {
+		t.Errorf("UpdateServer calls = %d, want 1", repo.updateCalls)
+	}
+}
+
+func TestUpdateServer_IconChange_IsServedBackAfterwards(t *testing.T) {
+	r, repo := newRouter(t, oneMB, nil)
+	id := uuid.New()
+	repo.getResult = model.Server{ID: id, Name: "Con Icono", OwnerID: testUser}
+
+	w := patchServer(t, r, testUser, id.String(), nil, map[string][]byte{"icon": pngBytes()})
+	if w.Code != http.StatusOK {
+		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
+	}
+
+	get := getAsUser(t, r, testUser, "/v1/servers/"+id.String()+"/icon")
+	if get.Code != http.StatusOK {
+		t.Fatalf("icon not servable after update: code=%d", get.Code)
+	}
+}
+
+// CA2: a non-owner can't edit the server's config, and nothing is persisted.
+func TestUpdateServer_NotOwner_Returns403(t *testing.T) {
+	r, repo := newRouter(t, oneMB, nil)
+	id := uuid.New()
+	repo.getResult = model.Server{ID: id, Name: "Original", OwnerID: testUser}
+
+	w := patchServer(t, r, "someone-else", id.String(), map[string]string{"name": "Hijacked"}, nil)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
+	}
+	if repo.updateCalls != 0 {
+		t.Error("UpdateServer must not be called for a non-owner")
+	}
+}
+
+func TestUpdateServer_MissingIdentity_Returns401(t *testing.T) {
+	r, _ := newRouter(t, oneMB, nil)
+	w := patchServer(t, r, "", uuid.New().String(), map[string]string{"name": "Nope"}, nil)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("code=%d", w.Code)
+	}
+}
+
+func TestUpdateServer_UnknownServer_Returns404(t *testing.T) {
+	r, repo := newRouter(t, oneMB, nil)
+	repo.getErr = model.ErrServerNotFound
+
+	w := patchServer(t, r, testUser, uuid.New().String(), map[string]string{"name": "Nope"}, nil)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestUpdateServer_InvalidServerID_Returns400(t *testing.T) {
+	r, _ := newRouter(t, oneMB, nil)
+	w := patchServer(t, r, testUser, "not-a-uuid", map[string]string{"name": "Nope"}, nil)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("code=%d", w.Code)
+	}
+}
+
+// CA3: invalid data is rejected and nothing is persisted.
+func TestUpdateServer_TooShortName_Returns400AndDoesNotPersist(t *testing.T) {
+	r, repo := newRouter(t, oneMB, nil)
+	id := uuid.New()
+	repo.getResult = model.Server{ID: id, Name: "Original", OwnerID: testUser}
+
+	w := patchServer(t, r, testUser, id.String(), map[string]string{"name": "a"}, nil)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
+	}
+	if e := decodeError(t, w); e.Error.Details["reason"] != "name_too_short" {
+		t.Errorf("reason = %v", e.Error.Details["reason"])
+	}
+	if repo.updateCalls != 0 {
+		t.Error("UpdateServer must not be called with an invalid name")
+	}
+}
+
+func TestUpdateServer_UnsupportedIconType_Returns400(t *testing.T) {
+	r, repo := newRouter(t, oneMB, nil)
+	id := uuid.New()
+	repo.getResult = model.Server{ID: id, Name: "Original", OwnerID: testUser}
+	gif := append([]byte("GIF87a"), make([]byte, 32)...)
+
+	w := patchServer(t, r, testUser, id.String(), nil, map[string][]byte{"icon": gif})
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
+	}
+	if e := decodeError(t, w); e.Error.Details["reason"] != "icon_unsupported_type" {
+		t.Errorf("reason = %v", e.Error.Details["reason"])
+	}
+	if repo.updateCalls != 0 {
+		t.Error("UpdateServer must not be called when the icon is rejected")
+	}
+}
+
+func TestUpdateServer_DuplicateName_Returns409(t *testing.T) {
+	r, repo := newRouter(t, oneMB, nil)
+	id := uuid.New()
+	repo.getResult = model.Server{ID: id, Name: "Original", OwnerID: testUser}
+	repo.updateErr = model.ErrNameTaken
+
+	w := patchServer(t, r, testUser, id.String(), map[string]string{"name": "Taken"}, nil)
+	if w.Code != http.StatusConflict {
+		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
+// -- banner --
+
+func TestUpdateServer_BannerUpload_IsServedBackPublicly(t *testing.T) {
+	r, repo := newRouter(t, oneMB, nil)
+	id := uuid.New()
+	repo.getResult = model.Server{ID: id, Name: "Con Banner", OwnerID: testUser}
+
+	w := patchServer(t, r, testUser, id.String(), nil, map[string][]byte{"banner": pngBytes()})
+	if w.Code != http.StatusOK {
+		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
+	}
+	if got := decodeServer(t, w); got.BannerURL == nil {
+		t.Error("banner_url = nil, want it set")
+	}
+
+	// No X-User-Id: banner URLs must be publicly reachable.
+	get := getAsUser(t, r, "", "/v1/servers/"+id.String()+"/banner")
+	if get.Code != http.StatusOK {
+		t.Fatalf("banner not publicly servable: code=%d body=%s", get.Code, get.Body.String())
+	}
+}
+
+func TestUpdateServer_RemoveBanner_ClearsItAndDeletesFromStore(t *testing.T) {
+	r, repo := newRouter(t, oneMB, nil)
+	id := uuid.New()
+	repo.getResult = model.Server{ID: id, Name: "Con Banner", OwnerID: testUser}
+	if w := patchServer(t, r, testUser, id.String(), nil, map[string][]byte{"banner": pngBytes()}); w.Code != http.StatusOK {
+		t.Fatalf("setup: code=%d", w.Code)
+	}
+
+	// Simulate the server row now carrying the banner set above, as GetByID
+	// would return it on the next request.
+	bannerURL := "/v1/servers/" + id.String() + "/banner"
+	repo.getResult.BannerURL = &bannerURL
+
+	w := patchServer(t, r, testUser, id.String(), map[string]string{"remove_banner": "true"}, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
+	}
+	if got := decodeServer(t, w); got.BannerURL != nil {
+		t.Errorf("banner_url = %v, want nil", got.BannerURL)
+	}
+
+	get := getAsUser(t, r, "", "/v1/servers/"+id.String()+"/banner")
+	if get.Code != http.StatusNotFound {
+		t.Errorf("banner still servable after removal: code=%d", get.Code)
+	}
+}
+
+func TestGetBanner_NoBannerSet_Returns404(t *testing.T) {
+	r, _ := newRouter(t, oneMB, nil)
+	w := getAsUser(t, r, "", "/v1/servers/"+uuid.New().String()+"/banner")
+	if w.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", w.Code)
+	}
+}
+
+func TestGetBanner_InvalidServerID_Returns400(t *testing.T) {
+	r, _ := newRouter(t, oneMB, nil)
+	w := getAsUser(t, r, testUser, "/v1/servers/not-a-uuid/banner")
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", w.Code)
+	}
+}
+
+// GET /icon must also be reachable without credentials.
+func TestGetIcon_NoAuth_IsStillServed(t *testing.T) {
+	r, _ := newRouter(t, oneMB, nil)
+	s := decodeServer(t, postCreate(t, r, testUser, "Con Default", nil))
+
+	w := getAsUser(t, r, "", "/v1/servers/"+s.ID+"/icon")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (icon must be public)", w.Code)
+	}
+}
