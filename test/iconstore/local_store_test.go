@@ -45,6 +45,21 @@ func TestLocalStore_SavesFileWithDetectedExtension(t *testing.T) {
 	}
 }
 
+func TestLocalStore_SavesBannerWithBannerURL(t *testing.T) {
+	st := newStore(t)
+	url, err := st.Save("srv1-banner", png(64))
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if url != "/v1/servers/srv1/banner" {
+		t.Errorf("url = %q, want /v1/servers/srv1/banner", url)
+	}
+	_, contentType, err := st.Get("srv1-banner")
+	if err != nil || contentType != "image/png" {
+		t.Errorf("Get contentType = %q err=%v", contentType, err)
+	}
+}
+
 func TestLocalStore_ReplacingAnIconRemovesTheOldExtension(t *testing.T) {
 	st := newStore(t)
 	if _, err := st.Save("srv1", png(64)); err != nil {
