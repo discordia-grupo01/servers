@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/discordia-grupo01/servers/internal/model"
 )
@@ -63,7 +64,14 @@ func NewLocalStore(dir string, maxBytes int64) (*LocalStore, error) {
 	return &LocalStore{Dir: dir, MaxBytes: maxBytes}, nil
 }
 
-func URLPath(id string) string { return "/v1/servers/" + id + "/icon" }
+const bannerIDSuffix = "-banner"
+
+func URLPath(id string) string {
+	if serverID, ok := strings.CutSuffix(id, bannerIDSuffix); ok {
+		return "/v1/servers/" + serverID + "/banner"
+	}
+	return "/v1/servers/" + id + "/icon"
+}
 
 func (s *LocalStore) Save(id string, data []byte) (string, error) {
 	ext, _, err := ValidateIcon(data, s.MaxBytes)
