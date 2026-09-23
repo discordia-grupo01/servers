@@ -71,6 +71,36 @@ func TestUpdateServer_IconChange_IsServedBackAfterwards(t *testing.T) {
 	}
 }
 
+func TestUpdateServer_IconChangedTwice_AlwaysServesTheLatestOne(t *testing.T) {
+	r, repo := newRouter(t, oneMB, nil)
+	id := uuid.New()
+	repo.getResult = model.Server{ID: id, Name: "Con Icono", OwnerID: testUser}
+
+	firstIcon := pngBytes()
+	if w := patchServer(t, r, testUser, id.String(), nil, map[string][]byte{"icon": firstIcon}); w.Code != http.StatusOK {
+		t.Fatalf("first update: code=%d body=%s", w.Code, w.Body.String())
+	}
+	firstGet := getAsUser(t, r, testUser, "/v1/servers/"+id.String()+"/icon")
+	if firstGet.Code != http.StatusOK || firstGet.Body.String() != string(firstIcon) {
+		t.Fatalf("first icon not served correctly: code=%d", firstGet.Code)
+	}
+
+	secondIcon := append([]byte("\xff\xd8\xff\xe0"), make([]byte, 64)...) // JPEG, distinto contenido
+	if w := patchServer(t, r, testUser, id.String(), nil, map[string][]byte{"icon": secondIcon}); w.Code != http.StatusOK {
+		t.Fatalf("second update: code=%d body=%s", w.Code, w.Body.String())
+	}
+	secondGet := getAsUser(t, r, testUser, "/v1/servers/"+id.String()+"/icon")
+	if secondGet.Code != http.StatusOK {
+		t.Fatalf("second icon not servable: code=%d", secondGet.Code)
+	}
+	if secondGet.Body.String() != string(secondIcon) {
+		t.Error("GET /icon served the old content after a second update")
+	}
+	if secondGet.Header().Get("Content-Type") != "image/jpeg" {
+		t.Errorf("content-type = %q, want image/jpeg", secondGet.Header().Get("Content-Type"))
+	}
+}
+
 // CA2: a non-owner can't edit the server's config, and nothing is persisted.
 func TestUpdateServer_NotOwner_Returns403(t *testing.T) {
 	r, repo := newRouter(t, oneMB, nil)

@@ -163,7 +163,7 @@ func TestCreateServer_WithIcon_SetsIconURL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if srv.IconURL == nil || *srv.IconURL != "/v1/servers/"+srv.ID.String()+"/icon" {
+	if srv.IconURL == nil || *srv.IconURL != "/v1/servers/"+srv.ID.String()+"/icon?v=fakehash" {
 		t.Errorf("icon_url = %v", srv.IconURL)
 	}
 }
