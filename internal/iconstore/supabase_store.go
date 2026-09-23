@@ -67,7 +67,7 @@ func (s *SupabaseStore) Save(id string, data []byte) (string, error) {
 		return "", fmt.Errorf("iconstore: supabase storage upload failed (%d): %s", resp.StatusCode, body)
 	}
 
-	return s.publicURL(id), nil
+	return withVersion(s.publicURL(id), data), nil
 }
 
 func (s *SupabaseStore) Delete(id string) error {
