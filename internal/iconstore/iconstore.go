@@ -44,17 +44,29 @@ func ValidateIcon(data []byte, maxBytes int64) (ext string, contentType string, 
 
 type Store interface {
 	Save(id string, data []byte) (url string, err error)
-	Delete(id string) error
-	Get(id string) (data []byte, contentType string, err error)
+	Delete(key string) error
+	Get(key string) (data []byte, contentType string, err error)
 	GenerateDefault() (data []byte, err error)
 }
 
-// withVersion le agrega a `url` un query param "?v=<hash>" derivado del
-// contenido (`data`) que se acaba de guardar, para que la URL cambie si y
-// solo si el contenido realmente cambio.
-func withVersion(url string, data []byte) string {
+func contentHash(data []byte) string {
 	sum := sha256.Sum256(data)
-	return fmt.Sprintf("%s?v=%s", url, hex.EncodeToString(sum[:8]))
+	return hex.EncodeToString(sum[:8])
+}
+
+func StorageKey(id, hash string) string {
+	return id + "-" + hash
+}
+
+func withVersion(url, hash string) string {
+	return fmt.Sprintf("%s?v=%s", url, hash)
+}
+func HashFromURL(url string) (hash string, ok bool) {
+	_, v, found := strings.Cut(url, "?v=")
+	if !found || v == "" {
+		return "", false
+	}
+	return v, true
 }
 
 type LocalStore struct {
@@ -88,19 +100,17 @@ func (s *LocalStore) Save(id string, data []byte) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := s.Delete(id); err != nil {
-		return "", err
-	}
-	dst := filepath.Join(s.Dir, id+ext)
+	hash := contentHash(data)
+	dst := filepath.Join(s.Dir, StorageKey(id, hash)+ext)
 	if err := os.WriteFile(dst, data, 0o644); err != nil {
 		return "", fmt.Errorf("iconstore: cannot write %s: %w", dst, err)
 	}
-	return withVersion(URLPath(id), data), nil
+	return withVersion(URLPath(id), hash), nil
 }
 
-func (s *LocalStore) Delete(id string) error {
+func (s *LocalStore) Delete(key string) error {
 	for _, ext := range contentTypeExt {
-		p := filepath.Join(s.Dir, id+ext)
+		p := filepath.Join(s.Dir, key+ext)
 		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("iconstore: cannot delete %s: %w", p, err)
 		}
@@ -108,9 +118,9 @@ func (s *LocalStore) Delete(id string) error {
 	return nil
 }
 
-func (s *LocalStore) Get(id string) ([]byte, string, error) {
+func (s *LocalStore) Get(key string) ([]byte, string, error) {
 	for contentType, ext := range contentTypeExt {
-		p := filepath.Join(s.Dir, id+ext)
+		p := filepath.Join(s.Dir, key+ext)
 		data, err := os.ReadFile(p)
 		if err == nil {
 			return data, contentType, nil

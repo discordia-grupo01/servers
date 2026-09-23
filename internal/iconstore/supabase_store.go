@@ -47,8 +47,10 @@ func (s *SupabaseStore) Save(id string, data []byte) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	hash := contentHash(data)
+	key := StorageKey(id, hash)
 
-	req, err := http.NewRequest(http.MethodPut, s.objectURL(id), bytes.NewReader(data))
+	req, err := http.NewRequest(http.MethodPut, s.objectURL(key), bytes.NewReader(data))
 	if err != nil {
 		return "", fmt.Errorf("iconstore: cannot build upload request: %w", err)
 	}
@@ -67,7 +69,7 @@ func (s *SupabaseStore) Save(id string, data []byte) (string, error) {
 		return "", fmt.Errorf("iconstore: supabase storage upload failed (%d): %s", resp.StatusCode, body)
 	}
 
-	return withVersion(s.publicURL(id), data), nil
+	return withVersion(s.publicURL(id), hash), nil
 }
 
 func (s *SupabaseStore) Delete(id string) error {
@@ -90,8 +92,8 @@ func (s *SupabaseStore) Delete(id string) error {
 	return nil
 }
 
-func (s *SupabaseStore) Get(id string) ([]byte, string, error) {
-	req, err := http.NewRequest(http.MethodGet, s.objectURL(id), nil)
+func (s *SupabaseStore) Get(key string) ([]byte, string, error) {
+	req, err := http.NewRequest(http.MethodGet, s.objectURL(key), nil)
 	if err != nil {
 		return nil, "", fmt.Errorf("iconstore: cannot build download request: %w", err)
 	}

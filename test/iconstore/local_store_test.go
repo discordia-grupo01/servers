@@ -20,6 +20,15 @@ func newStore(t *testing.T) *iconstore.LocalStore {
 	return st
 }
 
+func mustHash(t *testing.T, url string) string {
+	t.Helper()
+	hash, ok := iconstore.HashFromURL(url)
+	if !ok {
+		t.Fatalf("url %q has no ?v=<hash>", url)
+	}
+	return hash
+}
+
 func TestNewLocalStore_FailsWhenDirCannotBeUsed(t *testing.T) {
 	f := filepath.Join(t.TempDir(), "afile")
 	if err := os.WriteFile(f, []byte("x"), 0o644); err != nil {
@@ -41,7 +50,8 @@ func TestLocalStore_SavesFileWithDetectedExtension(t *testing.T) {
 	if !strings.HasPrefix(url, "/v1/servers/srv1/icon?v=") {
 		t.Errorf("url = %q, want prefix /v1/servers/srv1/icon?v=", url)
 	}
-	_, contentType, err := st.Get("srv1")
+	hash := mustHash(t, url)
+	_, contentType, err := st.Get(iconstore.StorageKey("srv1", hash))
 	if err != nil || contentType != "image/png" {
 		t.Errorf("Get contentType = %q err=%v", contentType, err)
 	}
@@ -56,7 +66,8 @@ func TestLocalStore_SavesBannerWithBannerURL(t *testing.T) {
 	if !strings.HasPrefix(url, "/v1/servers/srv1/banner?v=") {
 		t.Errorf("url = %q, want prefix /v1/servers/srv1/banner?v=", url)
 	}
-	_, contentType, err := st.Get("srv1-banner")
+	hash := mustHash(t, url)
+	_, contentType, err := st.Get(iconstore.StorageKey("srv1-banner", hash))
 	if err != nil || contentType != "image/png" {
 		t.Errorf("Get contentType = %q err=%v", contentType, err)
 	}
@@ -102,35 +113,76 @@ func TestLocalStore_Save_ReturnsTheSameVersionWhenContentIsUnchanged(t *testing.
 	}
 }
 
-func TestLocalStore_ReplacingAnIconRemovesTheOldExtension(t *testing.T) {
+// actual fix for the race condition: the old implementation
+// overwrote the same file/object on every Save, so a Get racing a Save (or,
+// in production, a storage backend/CDN that isn't strictly consistent on
+// overwrites -- which is how Supabase Storage is fronted) could return
+// stale or half-written data. Now every Save writes a brand-new,
+// content-hashed key that never existed before, so a previous version stays
+// readable under its own key for as long as nothing explicitly deletes it,
+// and the new version is readable the instant Save returns -- there is no
+// shared mutable resource left for a concurrent Get and Save to race over.
+func TestLocalStore_TwoSuccessiveSaves_BothVersionsStayIndependentlyReadable(t *testing.T) {
 	st := newStore(t)
-	if _, err := st.Save("srv1", png(64)); err != nil {
+
+	firstURL, err := st.Save("srv1", png(64))
+	if err != nil {
+		t.Fatalf("first Save: %v", err)
+	}
+	secondURL, err := st.Save("srv1", jpeg(64))
+	if err != nil {
+		t.Fatalf("second Save: %v", err)
+	}
+
+	firstKey := iconstore.StorageKey("srv1", mustHash(t, firstURL))
+	secondKey := iconstore.StorageKey("srv1", mustHash(t, secondURL))
+
+	if _, ct, err := st.Get(firstKey); err != nil || ct != "image/png" {
+		t.Errorf("first version no longer readable after a second Save: err=%v contentType=%q", err, ct)
+	}
+	if _, ct, err := st.Get(secondKey); err != nil || ct != "image/jpeg" {
+		t.Errorf("second version not readable: err=%v contentType=%q", err, ct)
+	}
+}
+
+func TestLocalStore_Delete_RemovesTheGivenKeyOnly(t *testing.T) {
+	st := newStore(t)
+	firstURL, err := st.Save("srv1", png(64))
+	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.Save("srv1", jpeg(64)); err != nil {
+	secondURL, err := st.Save("srv1", jpeg(64))
+	if err != nil {
 		t.Fatal(err)
 	}
-	_, contentType, err := st.Get("srv1")
-	if err != nil || contentType != "image/jpeg" {
-		t.Errorf("current icon contentType = %q err=%v, want image/jpeg", contentType, err)
+	firstKey := iconstore.StorageKey("srv1", mustHash(t, firstURL))
+	secondKey := iconstore.StorageKey("srv1", mustHash(t, secondURL))
+
+	if err := st.Delete(firstKey); err != nil {
+		t.Fatalf("Delete: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(st.Dir, "srv1.png")); !os.IsNotExist(err) {
-		t.Error("the old .png was not removed")
+	if _, _, err := st.Get(firstKey); !errors.Is(err, model.ErrIconNotFound) {
+		t.Error("deleted key is still readable")
+	}
+	if _, _, err := st.Get(secondKey); err != nil {
+		t.Errorf("Delete of one key must not remove a different key: %v", err)
 	}
 }
 
 func TestLocalStore_DeleteIsIdempotent(t *testing.T) {
 	st := newStore(t)
-	if _, err := st.Save("srv1", png(64)); err != nil {
+	url, err := st.Save("srv1", png(64))
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := st.Delete("srv1"); err != nil {
+	key := iconstore.StorageKey("srv1", mustHash(t, url))
+	if err := st.Delete(key); err != nil {
 		t.Fatalf("first Delete: %v", err)
 	}
-	if err := st.Delete("srv1"); err != nil {
+	if err := st.Delete(key); err != nil {
 		t.Fatalf("second Delete should be a no-op: %v", err)
 	}
-	if _, _, err := st.Get("srv1"); !errors.Is(err, model.ErrIconNotFound) {
+	if _, _, err := st.Get(key); !errors.Is(err, model.ErrIconNotFound) {
 		t.Error("Get still resolves after Delete")
 	}
 }
@@ -142,5 +194,25 @@ func TestLocalStore_InvalidSaveWritesNoFile(t *testing.T) {
 	}
 	if _, _, err := st.Get("srv2"); !errors.Is(err, model.ErrIconNotFound) {
 		t.Error("a file was written for an invalid icon")
+	}
+}
+
+func TestHashFromURL_RoundTripsWithStorageKey(t *testing.T) {
+	url, err := newStore(t).Save("srv1", png(64))
+	if err != nil {
+		t.Fatal(err)
+	}
+	hash, ok := iconstore.HashFromURL(url)
+	if !ok {
+		t.Fatalf("HashFromURL could not parse %q", url)
+	}
+	if !strings.Contains(url, hash) {
+		t.Errorf("hash %q not found in url %q", hash, url)
+	}
+}
+
+func TestHashFromURL_NoVersionQuery_ReturnsNotOK(t *testing.T) {
+	if _, ok := iconstore.HashFromURL("/v1/servers/srv1/icon"); ok {
+		t.Error("a URL without ?v= must not resolve to a hash")
 	}
 }
