@@ -40,6 +40,10 @@ func (fakeServerUseCases) UpdateServer(context.Context, service.UpdateServerPara
 	return model.Server{}, nil
 }
 
+func (fakeServerUseCases) GetServerImageURLs(context.Context, uuid.UUID) (iconURL, bannerURL *string, err error) {
+	return nil, nil, nil
+}
+
 type fakeRoleUseCases struct{}
 
 func (fakeRoleUseCases) CreateRole(context.Context, role_service.CreateRoleParams) (role.Role, error) {
