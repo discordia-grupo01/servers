@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/discordia-grupo01/servers/internal/iconstore"
@@ -36,8 +37,9 @@ func TestLocalStore_SavesFileWithDetectedExtension(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Save: %v", err)
 	}
-	if url != "/v1/servers/srv1/icon" {
-		t.Errorf("url = %q", url)
+	// La URL lleva un "?v=" que cambia en cada Save
+	if !strings.HasPrefix(url, "/v1/servers/srv1/icon?v=") {
+		t.Errorf("url = %q, want prefix /v1/servers/srv1/icon?v=", url)
 	}
 	_, contentType, err := st.Get("srv1")
 	if err != nil || contentType != "image/png" {
@@ -51,12 +53,52 @@ func TestLocalStore_SavesBannerWithBannerURL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Save: %v", err)
 	}
-	if url != "/v1/servers/srv1/banner" {
-		t.Errorf("url = %q, want /v1/servers/srv1/banner", url)
+	if !strings.HasPrefix(url, "/v1/servers/srv1/banner?v=") {
+		t.Errorf("url = %q, want prefix /v1/servers/srv1/banner?v=", url)
 	}
 	_, contentType, err := st.Get("srv1-banner")
 	if err != nil || contentType != "image/png" {
 		t.Errorf("Get contentType = %q err=%v", contentType, err)
+	}
+}
+
+func TestLocalStore_Save_ReturnsAFreshVersionWhenContentChanges(t *testing.T) {
+	st := newStore(t)
+
+	first, err := st.Save("srv1-banner", png(64))
+	if err != nil {
+		t.Fatalf("first Save: %v", err)
+	}
+	second, err := st.Save("srv1-banner", jpeg(64))
+	if err != nil {
+		t.Fatalf("second Save: %v", err)
+	}
+
+	if first == second {
+		t.Errorf("two saves returned the same URL (%q): a client caching by URL would never fetch the new content", first)
+	}
+
+	base := "/v1/servers/srv1/banner?v="
+	if !strings.HasPrefix(first, base) || !strings.HasPrefix(second, base) {
+		t.Errorf("first=%q second=%q, want both to start with %q", first, second, base)
+	}
+}
+
+func TestLocalStore_Save_ReturnsTheSameVersionWhenContentIsUnchanged(t *testing.T) {
+	st := newStore(t)
+	data := png(64)
+
+	first, err := st.Save("srv1-banner", data)
+	if err != nil {
+		t.Fatalf("first Save: %v", err)
+	}
+	second, err := st.Save("srv1-banner", data)
+	if err != nil {
+		t.Fatalf("second Save: %v", err)
+	}
+
+	if first != second {
+		t.Errorf("saving identical content twice produced different URLs: first=%q second=%q", first, second)
 	}
 }
 
