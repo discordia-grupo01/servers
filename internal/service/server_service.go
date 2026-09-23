@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/discordia-grupo01/servers/internal/events"
+	"github.com/discordia-grupo01/servers/internal/iconstore"
 	"github.com/discordia-grupo01/servers/internal/model"
 )
 
@@ -19,6 +20,7 @@ type Repo interface {
 	ListForUser(ctx context.Context, userID string) ([]model.Server, error)
 	GetByID(ctx context.Context, id uuid.UUID) (model.Server, error)
 	UpdateServer(ctx context.Context, id uuid.UUID, name, nameKey string, iconURL, bannerURL *string) error
+	IconURLs(ctx context.Context, id uuid.UUID) (iconURL, bannerURL *string, err error)
 }
 
 type IconStore interface {
@@ -118,7 +120,9 @@ func (s *Service) CreateServer(ctx context.Context, p CreateServerParams) (model
 	srv.IconURL = &url
 
 	if err := s.repo.CreateServer(ctx, srv, categories, channels); err != nil {
-		_ = s.icons.Delete(id.String())
+		if hash, ok := iconstore.HashFromURL(url); ok {
+			_ = s.icons.Delete(iconstore.StorageKey(id.String(), hash))
+		}
 		return model.Server{}, err
 	}
 
@@ -147,6 +151,10 @@ func (s *Service) ListMyServers(ctx context.Context, userID string) ([]model.Ser
 
 func (s *Service) GetServer(ctx context.Context, id uuid.UUID) (model.Server, error) {
 	return s.repo.GetByID(ctx, id)
+}
+
+func (s *Service) GetServerImageURLs(ctx context.Context, id uuid.UUID) (iconURL, bannerURL *string, err error) {
+	return s.repo.IconURLs(ctx, id)
 }
 
 type UpdateServerParams struct {
@@ -180,8 +188,11 @@ func (s *Service) UpdateServer(ctx context.Context, p UpdateServerParams) (model
 		key = nameKey(name)
 	}
 
+	oldIconURL, oldBannerURL := srv.IconURL, srv.BannerURL
+
 	iconURL := srv.IconURL
-	if len(p.Icon) > 0 {
+	iconChanged := len(p.Icon) > 0
+	if iconChanged {
 		url, err := s.icons.Save(p.ServerID.String(), p.Icon)
 		if err != nil {
 			return model.Server{}, err
@@ -190,6 +201,7 @@ func (s *Service) UpdateServer(ctx context.Context, p UpdateServerParams) (model
 	}
 
 	bannerURL := srv.BannerURL
+	bannerChanged := len(p.Banner) > 0 || p.RemoveBanner
 	switch {
 	case len(p.Banner) > 0:
 		url, err := s.icons.Save(BannerObjectID(p.ServerID), p.Banner)
@@ -198,14 +210,22 @@ func (s *Service) UpdateServer(ctx context.Context, p UpdateServerParams) (model
 		}
 		bannerURL = &url
 	case p.RemoveBanner:
-		if err := s.icons.Delete(BannerObjectID(p.ServerID)); err != nil {
-			return model.Server{}, err
-		}
 		bannerURL = nil
 	}
 
 	if err := s.repo.UpdateServer(ctx, p.ServerID, name, key, iconURL, bannerURL); err != nil {
 		return model.Server{}, err
+	}
+
+	if iconChanged && oldIconURL != nil {
+		if hash, ok := iconstore.HashFromURL(*oldIconURL); ok {
+			_ = s.icons.Delete(iconstore.StorageKey(p.ServerID.String(), hash))
+		}
+	}
+	if bannerChanged && oldBannerURL != nil {
+		if hash, ok := iconstore.HashFromURL(*oldBannerURL); ok {
+			_ = s.icons.Delete(iconstore.StorageKey(BannerObjectID(p.ServerID), hash))
+		}
 	}
 
 	srv.Name, srv.NameKey, srv.IconURL, srv.BannerURL = name, key, iconURL, bannerURL

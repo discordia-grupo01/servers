@@ -55,10 +55,11 @@ func TestLocalStore_GenerateDefault_SaveableAndServable(t *testing.T) {
 		t.Fatalf("GenerateDefault: %v", err)
 	}
 
-	if _, err := st.Save("srv-default", data); err != nil {
+	url, err := st.Save("srv-default", data)
+	if err != nil {
 		t.Fatalf("Save(generated default): %v", err)
 	}
-	got, _, err := st.Get("srv-default")
+	got, _, err := st.Get(iconstore.StorageKey("srv-default", mustHash(t, url)))
 	if err != nil || len(got) == 0 {
 		t.Errorf("the generated default icon was not saved: err=%v", err)
 	}

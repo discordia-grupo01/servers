@@ -58,8 +58,43 @@ func TestUpdateServer_IconChange_SavesUnderServerID(t *testing.T) {
 	if icons.savedID != srv.ID.String() || string(icons.savedData) != string(data) {
 		t.Errorf("icon store got id=%q data=%q", icons.savedID, icons.savedData)
 	}
-	if got.IconURL == nil || *got.IconURL != "/v1/servers/"+srv.ID.String()+"/icon" {
+	if got.IconURL == nil || *got.IconURL != "/v1/servers/"+srv.ID.String()+"/icon?v=fakehash" {
 		t.Errorf("icon_url = %v", got.IconURL)
+	}
+}
+
+func TestUpdateServer_IconChange_DeletesThePreviousVersion(t *testing.T) {
+	oldIconURL := "/v1/servers/srv-1/icon?v=oldhash"
+	srv := serverToUpdate()
+	srv.IconURL = &oldIconURL
+	repo, icons := &fakeRepoHelper{getResult: srv}, &fakeIconsHelper{}
+
+	_, err := update(t, repo, icons, service.UpdateServerParams{
+		ServerID: srv.ID, ActorUserID: testOwner, Icon: []byte("new-icon-bytes"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !icons.deleteCalled {
+		t.Error("changing the icon must clean up the previous version (avoid orphaned files growing the bucket forever)")
+	}
+}
+
+func TestUpdateServer_NameOnlyChange_DoesNotDeleteTheIcon(t *testing.T) {
+	iconURL := "/v1/servers/srv-1/icon?v=currenthash"
+	srv := serverToUpdate()
+	srv.IconURL = &iconURL
+	repo, icons := &fakeRepoHelper{getResult: srv}, &fakeIconsHelper{}
+	newName := "New Name"
+
+	_, err := update(t, repo, icons, service.UpdateServerParams{
+		ServerID: srv.ID, ActorUserID: testOwner, Name: &newName,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if icons.deleteCalled {
+		t.Error("changing only the name must not delete the current icon")
 	}
 }
 
@@ -87,7 +122,7 @@ func TestUpdateServer_BannerChange_SavesUnderDistinctKey(t *testing.T) {
 }
 
 func TestUpdateServer_RemoveBanner_ClearsURLAndDeletesFromStore(t *testing.T) {
-	bannerURL := "/v1/servers/srv-1/banner"
+	bannerURL := "/v1/servers/srv-1/banner?v=deadbeef"
 	srv := serverToUpdate()
 	srv.BannerURL = &bannerURL
 	repo, icons := &fakeRepoHelper{getResult: srv}, &fakeIconsHelper{}

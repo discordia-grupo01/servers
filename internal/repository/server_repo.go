@@ -109,6 +109,19 @@ func (r *ServerRepository) GetByID(ctx context.Context, id uuid.UUID) (model.Ser
 	return s, nil
 }
 
+func (r *ServerRepository) IconURLs(ctx context.Context, id uuid.UUID) (iconURL, bannerURL *string, err error) {
+	err = r.pool.QueryRow(ctx, `
+		SELECT icon_url, banner_url FROM servers WHERE id = $1`, id,
+	).Scan(&iconURL, &bannerURL)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil, model.ErrServerNotFound
+		}
+		return nil, nil, fmt.Errorf("select server icon urls: %w", err)
+	}
+	return iconURL, bannerURL, nil
+}
+
 func (r *ServerRepository) channelsByServerID(ctx context.Context, serverID uuid.UUID) ([]model.Channel, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, server_id, name, kind, position, category_id, topic, created_at

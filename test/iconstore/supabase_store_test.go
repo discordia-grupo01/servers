@@ -67,7 +67,7 @@ func TestSupabaseStore_SaveThenGet_RoundTrips(t *testing.T) {
 		t.Errorf("url = %q, want prefix %q", url, want)
 	}
 
-	data, contentType, err := st.Get("srv1")
+	data, contentType, err := st.Get(iconstore.StorageKey("srv1", mustHash(t, url)))
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -102,7 +102,7 @@ func TestSupabaseStore_Save_ReturnsAFreshVersionWhenContentChanges(t *testing.T)
 	if !strings.HasPrefix(first, base) || !strings.HasPrefix(second, base) {
 		t.Errorf("first=%q second=%q, want both to start with %q", first, second, base)
 	}
-	if _, _, err := st.Get("srv1-banner"); err != nil {
+	if _, _, err := st.Get(iconstore.StorageKey("srv1-banner", mustHash(t, second))); err != nil {
 		t.Errorf("Get after two saves: %v", err)
 	}
 }
@@ -128,13 +128,39 @@ func TestSupabaseStore_Save_ReturnsTheSameVersionWhenContentIsUnchanged(t *testi
 	}
 }
 
-func TestSupabaseStore_Get_UnknownID_ReturnsErrIconNotFound(t *testing.T) {
+func TestSupabaseStore_TwoSuccessiveSaves_BothVersionsStayIndependentlyReadable(t *testing.T) {
 	srv := fakeSupabase(t, "test-service-key")
 	defer srv.Close()
 
 	st := iconstore.NewSupabaseStore(srv.URL, "icons", "test-service-key", max)
 
-	if _, _, err := st.Get("nope"); !errors.Is(err, model.ErrIconNotFound) {
+	firstURL, err := st.Save("srv1", png(64))
+	if err != nil {
+		t.Fatalf("first Save: %v", err)
+	}
+	secondURL, err := st.Save("srv1", jpeg(64))
+	if err != nil {
+		t.Fatalf("second Save: %v", err)
+	}
+
+	firstKey := iconstore.StorageKey("srv1", mustHash(t, firstURL))
+	secondKey := iconstore.StorageKey("srv1", mustHash(t, secondURL))
+
+	if _, ct, err := st.Get(firstKey); err != nil || ct != "image/png" {
+		t.Errorf("first version no longer readable after a second save: err=%v contentType=%q", err, ct)
+	}
+	if _, ct, err := st.Get(secondKey); err != nil || ct != "image/jpeg" {
+		t.Errorf("second version not readable: err=%v contentType=%q", err, ct)
+	}
+}
+
+func TestSupabaseStore_Get_UnknownKey_ReturnsErrIconNotFound(t *testing.T) {
+	srv := fakeSupabase(t, "test-service-key")
+	defer srv.Close()
+
+	st := iconstore.NewSupabaseStore(srv.URL, "icons", "test-service-key", max)
+
+	if _, _, err := st.Get("nope-deadbeef"); !errors.Is(err, model.ErrIconNotFound) {
 		t.Errorf("err = %v, want ErrIconNotFound", err)
 	}
 }
@@ -145,13 +171,15 @@ func TestSupabaseStore_Delete_ThenGet_ReturnsErrIconNotFound(t *testing.T) {
 
 	st := iconstore.NewSupabaseStore(srv.URL, "icons", "test-service-key", max)
 
-	if _, err := st.Save("srv1", png(64)); err != nil {
+	url, err := st.Save("srv1", png(64))
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := st.Delete("srv1"); err != nil {
+	key := iconstore.StorageKey("srv1", mustHash(t, url))
+	if err := st.Delete(key); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
-	if _, _, err := st.Get("srv1"); !errors.Is(err, model.ErrIconNotFound) {
+	if _, _, err := st.Get(key); !errors.Is(err, model.ErrIconNotFound) {
 		t.Errorf("err = %v, want ErrIconNotFound", err)
 	}
 }
@@ -165,7 +193,7 @@ func TestSupabaseStore_Save_InvalidIcon_DoesNotUpload(t *testing.T) {
 	if _, err := st.Save("srv2", gif(64)); !errors.Is(err, model.ErrIconUnsupportedType) {
 		t.Fatalf("err = %v", err)
 	}
-	if _, _, err := st.Get("srv2"); !errors.Is(err, model.ErrIconNotFound) {
+	if _, _, err := st.Get("srv2-deadbeef"); !errors.Is(err, model.ErrIconNotFound) {
 		t.Error("an invalid icon was uploaded anyway")
 	}
 }
