@@ -15,6 +15,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/apierr"
 	"github.com/discordia-grupo01/servers/internal/handler/categoryview"
 	"github.com/discordia-grupo01/servers/internal/handler/channelview"
+	"github.com/discordia-grupo01/servers/internal/iconstore"
 	"github.com/discordia-grupo01/servers/internal/middleware"
 	"github.com/discordia-grupo01/servers/internal/model"
 	"github.com/discordia-grupo01/servers/internal/service"
@@ -30,9 +31,10 @@ type ServerUseCases interface {
 	ListMyServers(ctx context.Context, userID string) ([]model.Server, error)
 	GetServer(ctx context.Context, id uuid.UUID) (model.Server, error)
 	UpdateServer(ctx context.Context, p service.UpdateServerParams) (model.Server, error)
+	GetServerImageURLs(ctx context.Context, id uuid.UUID) (iconURL, bannerURL *string, err error)
 }
 type IconStore interface {
-	Get(id string) (data []byte, contentType string, err error)
+	Get(key string) (data []byte, contentType string, err error)
 }
 
 type serverHandler struct {
@@ -184,10 +186,25 @@ func (h *serverHandler) getServer(c *gin.Context) {
 
 // GET /v1/servers/:serverId/icon
 func (h *serverHandler) getIcon(c *gin.Context) {
-	if _, ok := apierr.ParseUUIDParam(c, "serverId"); !ok {
+	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
+	if !ok {
 		return
 	}
-	data, contentType, err := h.icons.Get(c.Param("serverId"))
+	iconURL, _, err := h.uc.GetServerImageURLs(c.Request.Context(), serverID)
+	if err != nil {
+		apierr.WriteDomainError(c, err)
+		return
+	}
+	if iconURL == nil {
+		apierr.RespondError(c, http.StatusNotFound, "icon not found", nil)
+		return
+	}
+	hash, ok := iconstore.HashFromURL(*iconURL)
+	if !ok {
+		apierr.RespondError(c, http.StatusInternalServerError, "malformed icon url", nil)
+		return
+	}
+	data, contentType, err := h.icons.Get(iconstore.StorageKey(serverID.String(), hash))
 	if err != nil {
 		if errors.Is(err, model.ErrIconNotFound) {
 			apierr.RespondError(c, http.StatusNotFound, "icon not found", nil)
@@ -205,7 +222,21 @@ func (h *serverHandler) getBanner(c *gin.Context) {
 	if !ok {
 		return
 	}
-	data, contentType, err := h.icons.Get(service.BannerObjectID(serverID))
+	_, bannerURL, err := h.uc.GetServerImageURLs(c.Request.Context(), serverID)
+	if err != nil {
+		apierr.WriteDomainError(c, err)
+		return
+	}
+	if bannerURL == nil {
+		apierr.RespondError(c, http.StatusNotFound, "banner not found", nil)
+		return
+	}
+	hash, ok := iconstore.HashFromURL(*bannerURL)
+	if !ok {
+		apierr.RespondError(c, http.StatusInternalServerError, "malformed banner url", nil)
+		return
+	}
+	data, contentType, err := h.icons.Get(iconstore.StorageKey(service.BannerObjectID(serverID), hash))
 	if err != nil {
 		if errors.Is(err, model.ErrIconNotFound) {
 			apierr.RespondError(c, http.StatusNotFound, "banner not found", nil)
