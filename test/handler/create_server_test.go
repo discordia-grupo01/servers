@@ -53,7 +53,9 @@ func TestCreate_WithValidPNG_Returns201AndIconURL(t *testing.T) {
 		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
 	}
 	s := decodeServer(t, w)
-	if s.IconURL == nil || !strings.HasSuffix(*s.IconURL, "/icon") {
+	// La URL real lleva un "?v=..." al final (ver iconstore.go,
+	// withVersion), asi que ya no termina exactamente en "/icon".
+	if s.IconURL == nil || !strings.Contains(*s.IconURL, "/icon?v=") {
 		t.Errorf("icon_url = %v", s.IconURL)
 	}
 }
@@ -61,7 +63,7 @@ func TestCreate_WithValidPNG_Returns201AndIconURL(t *testing.T) {
 func TestCreate_WithoutIcon_GetsARandomDefaultIcon(t *testing.T) {
 	r, _ := newRouter(t, oneMB, nil)
 	s := decodeServer(t, postCreate(t, r, testUser, "Sin Icono", nil))
-	if s.IconURL == nil || !strings.HasSuffix(*s.IconURL, "/icon") {
+	if s.IconURL == nil || !strings.Contains(*s.IconURL, "/icon?v=") {
 		t.Errorf("icon_url = %v, want a generated default icon's URL", s.IconURL)
 	}
 }

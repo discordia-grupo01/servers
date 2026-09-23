@@ -1,6 +1,8 @@
 package iconstore
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"os"
@@ -47,6 +49,14 @@ type Store interface {
 	GenerateDefault() (data []byte, err error)
 }
 
+// withVersion le agrega a `url` un query param "?v=<hash>" derivado del
+// contenido (`data`) que se acaba de guardar, para que la URL cambie si y
+// solo si el contenido realmente cambio.
+func withVersion(url string, data []byte) string {
+	sum := sha256.Sum256(data)
+	return fmt.Sprintf("%s?v=%s", url, hex.EncodeToString(sum[:8]))
+}
+
 type LocalStore struct {
 	Dir      string
 	MaxBytes int64
@@ -85,7 +95,7 @@ func (s *LocalStore) Save(id string, data []byte) (string, error) {
 	if err := os.WriteFile(dst, data, 0o644); err != nil {
 		return "", fmt.Errorf("iconstore: cannot write %s: %w", dst, err)
 	}
-	return URLPath(id), nil
+	return withVersion(URLPath(id), data), nil
 }
 
 func (s *LocalStore) Delete(id string) error {
