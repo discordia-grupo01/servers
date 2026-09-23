@@ -28,6 +28,8 @@ type fakeRepoHelper struct {
 	getErr    error
 	getCalls  int
 
+	iconURLsCalls int
+
 	updateErr   error
 	updateCalls int
 }
@@ -38,6 +40,7 @@ func (f *fakeRepoHelper) CreateServer(_ context.Context, s model.Server, cats []
 		return f.err
 	}
 	f.gotServer, f.gotCats, f.gotChans = s, cats, ch
+	f.getResult = s
 	return nil
 }
 
@@ -58,9 +61,21 @@ func (f *fakeRepoHelper) GetByID(_ context.Context, _ uuid.UUID) (model.Server, 
 	return f.getResult, nil
 }
 
-func (f *fakeRepoHelper) UpdateServer(_ context.Context, _ uuid.UUID, _, _ string, _, _ *string) error {
+func (f *fakeRepoHelper) IconURLs(_ context.Context, _ uuid.UUID) (*string, *string, error) {
+	f.iconURLsCalls++
+	if f.getErr != nil {
+		return nil, nil, f.getErr
+	}
+	return f.getResult.IconURL, f.getResult.BannerURL, nil
+}
+
+func (f *fakeRepoHelper) UpdateServer(_ context.Context, _ uuid.UUID, name, nameKey string, iconURL, bannerURL *string) error {
 	f.updateCalls++
-	return f.updateErr
+	if f.updateErr != nil {
+		return f.updateErr
+	}
+	f.getResult.Name, f.getResult.NameKey, f.getResult.IconURL, f.getResult.BannerURL = name, nameKey, iconURL, bannerURL
+	return nil
 }
 
 type fakeIconsHelper struct {
@@ -79,7 +94,7 @@ func (f *fakeIconsHelper) Save(id string, data []byte) (string, error) {
 	if f.err != nil {
 		return "", f.err
 	}
-	return "/v1/servers/" + id + "/icon", nil
+	return "/v1/servers/" + id + "/icon?v=fakehash", nil
 }
 
 func (f *fakeIconsHelper) Delete(string) error { f.deleteCalled = true; return nil }

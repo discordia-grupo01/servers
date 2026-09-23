@@ -36,6 +36,8 @@ type fakeRepo struct {
 	getErr    error
 	getCalls  int
 
+	iconURLsCalls int
+
 	updateErr   error
 	updateCalls int
 }
@@ -46,6 +48,7 @@ func (f *fakeRepo) CreateServer(_ context.Context, s model.Server, _ []model.Cat
 		return f.err
 	}
 	f.created = s
+	f.getResult = s
 	return nil
 }
 
@@ -66,9 +69,21 @@ func (f *fakeRepo) GetByID(_ context.Context, _ uuid.UUID) (model.Server, error)
 	return f.getResult, nil
 }
 
-func (f *fakeRepo) UpdateServer(_ context.Context, _ uuid.UUID, _, _ string, _, _ *string) error {
+func (f *fakeRepo) IconURLs(_ context.Context, _ uuid.UUID) (*string, *string, error) {
+	f.iconURLsCalls++
+	if f.getErr != nil {
+		return nil, nil, f.getErr
+	}
+	return f.getResult.IconURL, f.getResult.BannerURL, nil
+}
+
+func (f *fakeRepo) UpdateServer(_ context.Context, _ uuid.UUID, name, nameKey string, iconURL, bannerURL *string) error {
 	f.updateCalls++
-	return f.updateErr
+	if f.updateErr != nil {
+		return f.updateErr
+	}
+	f.getResult.Name, f.getResult.NameKey, f.getResult.IconURL, f.getResult.BannerURL = name, nameKey, iconURL, bannerURL
+	return nil
 }
 
 type okPinger struct{}
