@@ -75,10 +75,10 @@ servers/
 │       └── ci.yml            gofmt, build, vet y test (con Postgres y RabbitMQ reales) en cada PR/push a main
 ├── .githooks/
 │   └── pre-commit             hook de gofmt local
-├── openapi.yaml               contrato de la API REST
+├── openapi.yaml               contrato de la API REST -- generado (make openapi), no se edita a mano
 ├── docker-compose.yml         levanta el servicio + Postgres para desarrollo local
 ├── Dockerfile                 build multi-stage para la imagen de produccion
-├── Makefile                   comandos run/test/build/migrate
+├── Makefile                   comandos run/test/build/migrate/openapi
 └── .env.example                estructura de variables de entorno (sin valores sensibles)
 ```
 
@@ -88,6 +88,7 @@ servers/
 - `make build` - compila el binario en `bin/api`.
 - `make db-reset` - recrea la base desde cero (borra el volumen).
 - `make migrate` - aplica `migrations/*.up.sql` en orden contra la BDD que indique `.env` (local o Supabase), vía `golang-migrate`. Trackea en la propia BDD cuales ya se aplicaron: correrlo de nuevo despues de la primera vez es seguro, solo aplica las migraciones nuevas.
+- `make openapi` - regenera `openapi.yaml` desde las anotaciones swag de los handlers (`internal/handler/**`). Necesita Go y Node. No hace falta correrlo a mano: el CI lo corre en cada push/PR y, si detecta que cambió, commitea `openapi.yaml` solo de vuelta a la rama.
 
 ## Tests
 ```bash
@@ -147,7 +148,18 @@ El proyecto de Supabase es **compartido entre todos los servicios de Discordia**
 3. Correr `make migrate` y despues `make run`. Confirmar con `GET /readyz` (200).
 
 ## Endpoints
-Ver [`openapi.yaml`](openapi.yaml).
+Ver [`openapi.yaml`](openapi.yaml) -- **generado automáticamente y actualizado
+solo**, no se edita a mano ni hace falta correr nada vos. Sale de las
+anotaciones `@Summary`/`@Param`/`@Success`/etc. (swag) arriba de cada handler
+en `internal/handler/**`. En cada push/PR, el CI corre `make openapi`
+(swag → swagger2openapi, de Swagger 2.0 a OpenAPI 3.0) y si el resultado
+cambió respecto a lo commiteado, lo commitea de vuelta a la rama solo (commit
+`docs(openapi): regenerar openapi.yaml`, con `[skip ci]` para no disparar un
+run nuevo). Si querés verlo vos antes de pushear, `make openapi` local hace
+lo mismo (necesita Go y Node).
+
+La tabla de abajo es una referencia rápida (puede quedar desactualizada
+antes que `openapi.yaml`, que es la fuente de verdad real).
 
 | Metodo | Ruta | Auth | Descripcion |
 |---|---|---|---|

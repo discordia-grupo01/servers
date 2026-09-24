@@ -35,7 +35,22 @@ func toResponse(t model.OwnershipTransfer) model.OwnershipTransferResponse {
 	}
 }
 
-// POST /v1/servers/:serverId/ownership-transfers
+// Initiate godoc
+// @Summary      Offer ownership to another member
+// @Description  Owner-only. Creates a pending transfer; nothing changes until the recipient responds. Rejects if to_user_id isn't a member, or a transfer is already pending for this server.
+// @Tags         ownership-transfers
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        serverId  path  string                                     true  "Server ID"
+// @Param        body      body  model.InitiateOwnershipTransferRequest     true  "Target member's user ID"
+// @Success      201  {object}  model.OwnershipTransferResponse
+// @Failure      400  {object}  apierr.ErrorResponse  "to_user_id required, not a member, or already the owner"
+// @Failure      401  {object}  apierr.ErrorResponse
+// @Failure      403  {object}  apierr.ErrorResponse  "not the owner"
+// @Failure      404  {object}  apierr.ErrorResponse
+// @Failure      409  {object}  apierr.ErrorResponse  "a transfer is already pending"
+// @Router       /v1/servers/{serverId}/ownership-transfers [post]
 func (h *Handler) Initiate(c *gin.Context) {
 	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
 	if !ok {
@@ -60,7 +75,18 @@ func (h *Handler) Initiate(c *gin.Context) {
 	c.JSON(http.StatusCreated, toResponse(t))
 }
 
-// GET /v1/servers/:serverId/ownership-transfers/pending
+// GetPending godoc
+// @Summary      Get the server's pending ownership transfer
+// @Description  Any member can view it. A transfer past its 24h TTL is rejected on read and reported as not found (see the Expirer sweep for the background equivalent).
+// @Tags         ownership-transfers
+// @Produce      json
+// @Security     BearerAuth
+// @Param        serverId  path  string  true  "Server ID"
+// @Success      200  {object}  model.OwnershipTransferResponse
+// @Failure      401  {object}  apierr.ErrorResponse
+// @Failure      403  {object}  apierr.ErrorResponse  "caller is not a member"
+// @Failure      404  {object}  apierr.ErrorResponse  "no pending transfer"
+// @Router       /v1/servers/{serverId}/ownership-transfers/pending [get]
 func (h *Handler) GetPending(c *gin.Context) {
 	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
 	if !ok {
@@ -78,7 +104,20 @@ func (h *Handler) GetPending(c *gin.Context) {
 	c.JSON(http.StatusOK, toResponse(t))
 }
 
-// POST /v1/servers/:serverId/ownership-transfers/:transferId/accept
+// Accept godoc
+// @Summary      Accept a pending ownership transfer
+// @Description  Recipient-only. On success the caller becomes the new owner and the previous owner becomes a regular member.
+// @Tags         ownership-transfers
+// @Produce      json
+// @Security     BearerAuth
+// @Param        serverId    path  string  true  "Server ID"
+// @Param        transferId  path  string  true  "Transfer ID"
+// @Success      200  {object}  model.OwnershipTransferResponse
+// @Failure      401  {object}  apierr.ErrorResponse
+// @Failure      403  {object}  apierr.ErrorResponse  "not the recipient"
+// @Failure      404  {object}  apierr.ErrorResponse
+// @Failure      409  {object}  apierr.ErrorResponse  "no longer pending (expired, cancelled, or already resolved)"
+// @Router       /v1/servers/{serverId}/ownership-transfers/{transferId}/accept [post]
 func (h *Handler) Accept(c *gin.Context) {
 	t, ok := h.respond(c, func(uc UseCases, ctx context.Context, p ownership_transfer_service.RespondParams) (model.OwnershipTransfer, error) {
 		return uc.AcceptTransfer(ctx, p)
@@ -89,7 +128,20 @@ func (h *Handler) Accept(c *gin.Context) {
 	c.JSON(http.StatusOK, toResponse(t))
 }
 
-// POST /v1/servers/:serverId/ownership-transfers/:transferId/reject
+// Reject godoc
+// @Summary      Reject a pending ownership transfer
+// @Description  Recipient-only. Ownership is left untouched; the original owner keeps it.
+// @Tags         ownership-transfers
+// @Produce      json
+// @Security     BearerAuth
+// @Param        serverId    path  string  true  "Server ID"
+// @Param        transferId  path  string  true  "Transfer ID"
+// @Success      200  {object}  model.OwnershipTransferResponse
+// @Failure      401  {object}  apierr.ErrorResponse
+// @Failure      403  {object}  apierr.ErrorResponse  "not the recipient"
+// @Failure      404  {object}  apierr.ErrorResponse
+// @Failure      409  {object}  apierr.ErrorResponse  "no longer pending"
+// @Router       /v1/servers/{serverId}/ownership-transfers/{transferId}/reject [post]
 func (h *Handler) Reject(c *gin.Context) {
 	t, ok := h.respond(c, func(uc UseCases, ctx context.Context, p ownership_transfer_service.RespondParams) (model.OwnershipTransfer, error) {
 		return uc.RejectTransfer(ctx, p)
@@ -100,7 +152,20 @@ func (h *Handler) Reject(c *gin.Context) {
 	c.JSON(http.StatusOK, toResponse(t))
 }
 
-// POST /v1/servers/:serverId/ownership-transfers/:transferId/cancel
+// Cancel godoc
+// @Summary      Cancel a pending ownership transfer
+// @Description  Initiator (owner) only. Withdraws it before the recipient responds, e.g. to offer it to someone else instead.
+// @Tags         ownership-transfers
+// @Produce      json
+// @Security     BearerAuth
+// @Param        serverId    path  string  true  "Server ID"
+// @Param        transferId  path  string  true  "Transfer ID"
+// @Success      200  {object}  model.OwnershipTransferResponse
+// @Failure      401  {object}  apierr.ErrorResponse
+// @Failure      403  {object}  apierr.ErrorResponse  "not the initiator"
+// @Failure      404  {object}  apierr.ErrorResponse
+// @Failure      409  {object}  apierr.ErrorResponse  "no longer pending"
+// @Router       /v1/servers/{serverId}/ownership-transfers/{transferId}/cancel [post]
 func (h *Handler) Cancel(c *gin.Context) {
 	t, ok := h.respond(c, func(uc UseCases, ctx context.Context, p ownership_transfer_service.RespondParams) (model.OwnershipTransfer, error) {
 		return uc.CancelTransfer(ctx, p)

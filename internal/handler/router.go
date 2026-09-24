@@ -55,19 +55,8 @@ func NewRouter(d Deps) *gin.Engine {
 		apierr.RespondError(c, http.StatusMethodNotAllowed, "method not allowed", nil)
 	})
 
-	r.GET("/livez", func(c *gin.Context) { c.String(http.StatusOK, "ok") })
-
-	r.GET("/readyz", func(c *gin.Context) {
-		if d.DB != nil {
-			ctx, cancel := context.WithTimeout(c.Request.Context(), dbPingTimeout)
-			defer cancel()
-			if err := d.DB.Ping(ctx); err != nil {
-				c.JSON(http.StatusServiceUnavailable, gin.H{"status": "unavailable", "detail": "database"})
-				return
-			}
-		}
-		c.JSON(http.StatusOK, gin.H{"status": "ready"})
-	})
+	r.GET("/livez", livez)
+	r.GET("/readyz", readyz(d.DB))
 
 	r.GET("/", func(c *gin.Context) { c.String(http.StatusOK, "discordia-servers up") })
 
@@ -116,4 +105,33 @@ func NewRouter(d Deps) *gin.Engine {
 	invitation.NewHandler(d.Invitations).Register(v1)
 
 	return r
+}
+
+// livez godoc
+// @Summary  Liveness check
+// @Tags     ops
+// @Success  200  "ok"
+// @Router   /livez [get]
+func livez(c *gin.Context) { c.String(http.StatusOK, "ok") }
+
+// readyz godoc
+// @Summary      Readiness check
+// @Description  Also pings the database when one is configured.
+// @Tags         ops
+// @Produce      json
+// @Success      200  "ready"
+// @Failure      503  "database unavailable"
+// @Router       /readyz [get]
+func readyz(db Pinger) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if db != nil {
+			ctx, cancel := context.WithTimeout(c.Request.Context(), dbPingTimeout)
+			defer cancel()
+			if err := db.Ping(ctx); err != nil {
+				c.JSON(http.StatusServiceUnavailable, gin.H{"status": "unavailable", "detail": "database"})
+				return
+			}
+		}
+		c.JSON(http.StatusOK, gin.H{"status": "ready"})
+	}
 }

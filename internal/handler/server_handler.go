@@ -92,7 +92,20 @@ func extractUpload(c *gin.Context, field string) (data []byte, provided bool, ok
 	}
 }
 
-// POST /v1/servers
+// createServer godoc
+// @Summary      Create a server
+// @Description  Creates a server owned by the caller (identity from the JWT). Multipart form body.
+// @Tags         servers
+// @Accept       multipart/form-data
+// @Produce      json
+// @Security     BearerAuth
+// @Param        name  formData  string  true   "Server name"
+// @Param        icon  formData  file    false  "Server icon image"
+// @Success      201  {object}  serverResponse
+// @Failure      400  {object}  apierr.ErrorResponse  "invalid name, or icon too large/unreadable"
+// @Failure      401  {object}  apierr.ErrorResponse
+// @Failure      409  {object}  apierr.ErrorResponse  "name already taken"
+// @Router       /v1/servers [post]
 func (h *serverHandler) createServer(c *gin.Context) {
 	params := service.CreateServerParams{
 		Name:    c.PostForm("name"),
@@ -115,7 +128,25 @@ func (h *serverHandler) createServer(c *gin.Context) {
 	c.JSON(http.StatusCreated, toServerResponse(srv))
 }
 
-// PATCH /v1/servers/:serverId
+// updateServer godoc
+// @Summary      Edit a server
+// @Description  Owner-only. Multipart form, all fields optional: rename, replace the icon/banner, or remove the banner.
+// @Tags         servers
+// @Accept       multipart/form-data
+// @Produce      json
+// @Security     BearerAuth
+// @Param        serverId       path      string  true   "Server ID"
+// @Param        name           formData  string  false  "New server name"
+// @Param        icon           formData  file    false  "New icon image"
+// @Param        banner         formData  file    false  "New banner image"
+// @Param        remove_banner  formData  string  false  "Pass \"true\" to remove the current banner"
+// @Success      200  {object}  serverResponse
+// @Failure      400  {object}  apierr.ErrorResponse
+// @Failure      401  {object}  apierr.ErrorResponse
+// @Failure      403  {object}  apierr.ErrorResponse  "not the owner"
+// @Failure      404  {object}  apierr.ErrorResponse
+// @Failure      409  {object}  apierr.ErrorResponse  "name already taken"
+// @Router       /v1/servers/{serverId} [patch]
 func (h *serverHandler) updateServer(c *gin.Context) {
 	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
 	if !ok {
@@ -155,7 +186,15 @@ func (h *serverHandler) updateServer(c *gin.Context) {
 	c.JSON(http.StatusOK, toServerResponse(srv))
 }
 
-// GET /v1/servers
+// listMyServers godoc
+// @Summary      List my servers
+// @Description  Servers the caller is a member of.
+// @Tags         servers
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200  {array}   serverResponse
+// @Failure      401  {object}  apierr.ErrorResponse
+// @Router       /v1/servers [get]
 func (h *serverHandler) listMyServers(c *gin.Context) {
 	servers, err := h.uc.ListMyServers(c.Request.Context(), middleware.UserID(c))
 	if err != nil {
@@ -170,7 +209,17 @@ func (h *serverHandler) listMyServers(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// GET /v1/servers/:serverId
+// getServer godoc
+// @Summary      Get a server
+// @Description  Full detail of one server, including its channels and categories.
+// @Tags         servers
+// @Produce      json
+// @Security     BearerAuth
+// @Param        serverId  path  string  true  "Server ID"
+// @Success      200  {object}  serverResponse
+// @Failure      400  {object}  apierr.ErrorResponse  "malformed serverId"
+// @Failure      404  {object}  apierr.ErrorResponse
+// @Router       /v1/servers/{serverId} [get]
 func (h *serverHandler) getServer(c *gin.Context) {
 	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
 	if !ok {
@@ -184,7 +233,16 @@ func (h *serverHandler) getServer(c *gin.Context) {
 	c.JSON(http.StatusOK, toServerResponse(srv))
 }
 
-// GET /v1/servers/:serverId/icon
+// getIcon godoc
+// @Summary      Get a server's icon
+// @Description  Public (no JWT required) -- binary image, so a plain `<img src>` can load it.
+// @Tags         servers
+// @Produce      png
+// @Param        serverId  path  string  true  "Server ID"
+// @Success      200  {file}    file  "the icon image"
+// @Failure      400  {object}  apierr.ErrorResponse
+// @Failure      404  {object}  apierr.ErrorResponse  "server, or icon, not found"
+// @Router       /v1/servers/{serverId}/icon [get]
 func (h *serverHandler) getIcon(c *gin.Context) {
 	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
 	if !ok {
@@ -216,7 +274,16 @@ func (h *serverHandler) getIcon(c *gin.Context) {
 	c.Data(http.StatusOK, contentType, data)
 }
 
-// GET /v1/servers/:serverId/banner
+// getBanner godoc
+// @Summary      Get a server's banner
+// @Description  Public (no JWT required) -- binary image, so a plain `<img src>` can load it.
+// @Tags         servers
+// @Produce      png
+// @Param        serverId  path  string  true  "Server ID"
+// @Success      200  {file}    file  "the banner image"
+// @Failure      400  {object}  apierr.ErrorResponse
+// @Failure      404  {object}  apierr.ErrorResponse  "server has no banner, or not found"
+// @Router       /v1/servers/{serverId}/banner [get]
 func (h *serverHandler) getBanner(c *gin.Context) {
 	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
 	if !ok {
