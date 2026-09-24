@@ -199,12 +199,12 @@ func (h *serverHandler) getIcon(c *gin.Context) {
 		apierr.RespondError(c, http.StatusNotFound, "icon not found", nil)
 		return
 	}
-	hash, ok := iconstore.HashFromURL(*iconURL)
-	if !ok {
-		apierr.RespondError(c, http.StatusInternalServerError, "malformed icon url", nil)
-		return
+
+	key := serverID.String()
+	if hash, ok := iconstore.HashFromURL(*iconURL); ok {
+		key = iconstore.StorageKey(serverID.String(), hash)
 	}
-	data, contentType, err := h.icons.Get(iconstore.StorageKey(serverID.String(), hash))
+	data, contentType, err := h.icons.Get(key)
 	if err != nil {
 		if errors.Is(err, model.ErrIconNotFound) {
 			apierr.RespondError(c, http.StatusNotFound, "icon not found", nil)
@@ -231,12 +231,12 @@ func (h *serverHandler) getBanner(c *gin.Context) {
 		apierr.RespondError(c, http.StatusNotFound, "banner not found", nil)
 		return
 	}
-	hash, ok := iconstore.HashFromURL(*bannerURL)
-	if !ok {
-		apierr.RespondError(c, http.StatusInternalServerError, "malformed banner url", nil)
-		return
+
+	key := service.BannerObjectID(serverID)
+	if hash, ok := iconstore.HashFromURL(*bannerURL); ok {
+		key = iconstore.StorageKey(key, hash)
 	}
-	data, contentType, err := h.icons.Get(iconstore.StorageKey(service.BannerObjectID(serverID), hash))
+	data, contentType, err := h.icons.Get(key)
 	if err != nil {
 		if errors.Is(err, model.ErrIconNotFound) {
 			apierr.RespondError(c, http.StatusNotFound, "banner not found", nil)
