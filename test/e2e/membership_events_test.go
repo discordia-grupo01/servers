@@ -22,6 +22,7 @@ import (
 	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
 
+	"github.com/discordia-grupo01/events-contract/membership"
 	"github.com/discordia-grupo01/servers/internal/events"
 	"github.com/discordia-grupo01/servers/internal/handler"
 	"github.com/discordia-grupo01/servers/internal/iconstore"
@@ -129,7 +130,7 @@ func setupE2E(t *testing.T) (*gin.Engine, <-chan amqp.Delivery) {
 	if err != nil {
 		t.Fatalf("QueueDeclare: %v", err)
 	}
-	for _, key := range []string{events.RoutingKeyMemberJoined, events.RoutingKeyMemberLeft} {
+	for _, key := range []string{membership.RoutingKeyMemberJoined, membership.RoutingKeyMemberLeft} {
 		if err := ch.QueueBind(q.Name, key, "discordia.events", false, nil); err != nil {
 			t.Fatalf("QueueBind %s: %v", key, err)
 		}
@@ -142,21 +143,24 @@ func setupE2E(t *testing.T) (*gin.Engine, <-chan amqp.Delivery) {
 	return router, deliveries
 }
 
-func waitForEvent(t *testing.T, deliveries <-chan amqp.Delivery, wantRoutingKey string) events.MembershipEvent {
+// membership.MemberJoined and MemberLeft share the same wire shape, so
+// decoding into MemberJoined here is fine regardless of wantRoutingKey --
+// the routing key check above is what actually verifies which event fired.
+func waitForEvent(t *testing.T, deliveries <-chan amqp.Delivery, wantRoutingKey string) membership.MemberJoined {
 	t.Helper()
 	select {
 	case msg := <-deliveries:
 		if msg.RoutingKey != wantRoutingKey {
 			t.Fatalf("routing key = %q, want %q", msg.RoutingKey, wantRoutingKey)
 		}
-		var evt events.MembershipEvent
+		var evt membership.MemberJoined
 		if err := json.Unmarshal(msg.Body, &evt); err != nil {
 			t.Fatalf("unmarshal delivered payload: %v", err)
 		}
 		return evt
 	case <-time.After(5 * time.Second):
 		t.Fatalf("timed out waiting for a %q event", wantRoutingKey)
-		return events.MembershipEvent{}
+		return membership.MemberJoined{}
 	}
 }
 
@@ -208,7 +212,7 @@ func TestMembershipEvents_EndToEnd(t *testing.T) {
 		t.Fatalf("decode server: %v", err)
 	}
 
-	ownerEvt := waitForEvent(t, deliveries, events.RoutingKeyMemberJoined)
+	ownerEvt := waitForEvent(t, deliveries, membership.RoutingKeyMemberJoined)
 	if ownerEvt.ServerID != srv.ID || ownerEvt.UserID != owner {
 		t.Fatalf("owner join event = %+v, want server_id=%s user_id=%s", ownerEvt, srv.ID, owner)
 	}
@@ -229,7 +233,7 @@ func TestMembershipEvents_EndToEnd(t *testing.T) {
 		t.Fatalf("join: code=%d body=%s", w.Code, w.Body.String())
 	}
 
-	joinEvt := waitForEvent(t, deliveries, events.RoutingKeyMemberJoined)
+	joinEvt := waitForEvent(t, deliveries, membership.RoutingKeyMemberJoined)
 	if joinEvt.ServerID != srv.ID || joinEvt.UserID != joiner {
 		t.Fatalf("join event = %+v, want server_id=%s user_id=%s", joinEvt, srv.ID, joiner)
 	}
@@ -242,7 +246,7 @@ func TestMembershipEvents_EndToEnd(t *testing.T) {
 		t.Fatalf("leave: code=%d body=%s", w.Code, w.Body.String())
 	}
 
-	leaveEvt := waitForEvent(t, deliveries, events.RoutingKeyMemberLeft)
+	leaveEvt := waitForEvent(t, deliveries, membership.RoutingKeyMemberLeft)
 	if leaveEvt.ServerID != srv.ID || leaveEvt.UserID != joiner {
 		t.Fatalf("leave event = %+v, want server_id=%s user_id=%s", leaveEvt, srv.ID, joiner)
 	}

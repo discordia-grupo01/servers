@@ -14,6 +14,8 @@ import (
 	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
 
+	"github.com/discordia-grupo01/events-contract/envelope"
+	"github.com/discordia-grupo01/events-contract/membership"
 	"github.com/discordia-grupo01/servers/internal/events"
 )
 
@@ -59,25 +61,24 @@ func TestAMQPPublisher_Publish_DeliversToRealBroker(t *testing.T) {
 	}
 
 	publisher := events.NewAMQPPublisher(url)
-	want := events.MembershipEvent{
-		EventID:    "test-event-id",
-		ServerID:   "11111111-1111-1111-1111-111111111111",
-		UserID:     "user-integration",
-		OccurredAt: time.Now().UTC().Truncate(time.Second),
+	want := membership.MemberJoined{
+		Meta:     envelope.Meta{EventID: "test-event-id", OccurredAt: time.Now().UTC().Truncate(time.Second)},
+		ServerID: "11111111-1111-1111-1111-111111111111",
+		UserID:   "user-integration",
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := publisher.Publish(ctx, events.RoutingKeyMemberJoined, want); err != nil {
+	if err := publisher.Publish(ctx, membership.RoutingKeyMemberJoined, want); err != nil {
 		t.Fatalf("Publish() error = %v, want nil", err)
 	}
 
 	select {
 	case msg := <-deliveries:
-		if msg.RoutingKey != events.RoutingKeyMemberJoined {
-			t.Errorf("routing key = %q, want %q", msg.RoutingKey, events.RoutingKeyMemberJoined)
+		if msg.RoutingKey != membership.RoutingKeyMemberJoined {
+			t.Errorf("routing key = %q, want %q", msg.RoutingKey, membership.RoutingKeyMemberJoined)
 		}
-		var got events.MembershipEvent
+		var got membership.MemberJoined
 		if err := json.Unmarshal(msg.Body, &got); err != nil {
 			t.Fatalf("unmarshal delivered payload: %v", err)
 		}
@@ -138,13 +139,12 @@ func TestAMQPPublisher_Publish_ConcurrentCallsAllDeliverIndependently(t *testing
 			defer wg.Done()
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			evt := events.MembershipEvent{
-				EventID:    fmt.Sprintf("concurrent-%d", i),
-				ServerID:   "11111111-1111-1111-1111-111111111111",
-				UserID:     fmt.Sprintf("user-%d", i),
-				OccurredAt: time.Now().UTC().Truncate(time.Second),
+			evt := membership.MemberJoined{
+				Meta:     envelope.Meta{EventID: fmt.Sprintf("concurrent-%d", i), OccurredAt: time.Now().UTC().Truncate(time.Second)},
+				ServerID: "11111111-1111-1111-1111-111111111111",
+				UserID:   fmt.Sprintf("user-%d", i),
 			}
-			if err := publisher.Publish(ctx, events.RoutingKeyMemberJoined, evt); err != nil {
+			if err := publisher.Publish(ctx, membership.RoutingKeyMemberJoined, evt); err != nil {
 				t.Errorf("Publish() call %d error = %v, want nil", i, err)
 			}
 		}(i)
@@ -155,7 +155,7 @@ func TestAMQPPublisher_Publish_ConcurrentCallsAllDeliverIndependently(t *testing
 	for len(seen) < n {
 		select {
 		case msg := <-deliveries:
-			var got events.MembershipEvent
+			var got membership.MemberJoined
 			if err := json.Unmarshal(msg.Body, &got); err != nil {
 				t.Fatalf("unmarshal delivered payload: %v", err)
 			}
@@ -289,7 +289,7 @@ func TestAMQPPublisher_Publish_ReconnectsAfterConnectionIsDropped(t *testing.T) 
 	if err != nil {
 		t.Fatalf("QueueDeclare: %v", err)
 	}
-	if err := ch.QueueBind(q.Name, events.RoutingKeyMemberJoined, "discordia.events", false, nil); err != nil {
+	if err := ch.QueueBind(q.Name, membership.RoutingKeyMemberJoined, "discordia.events", false, nil); err != nil {
 		t.Fatalf("QueueBind: %v", err)
 	}
 	deliveries, err := ch.Consume(q.Name, "", true, true, false, false, nil)
@@ -301,19 +301,18 @@ func TestAMQPPublisher_Publish_ReconnectsAfterConnectionIsDropped(t *testing.T) 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	before := events.MembershipEvent{
-		EventID:    "before-drop-" + uuid.NewString(),
-		ServerID:   "11111111-1111-1111-1111-111111111111",
-		UserID:     "user-before",
-		OccurredAt: time.Now().UTC().Truncate(time.Second),
+	before := membership.MemberJoined{
+		Meta:     envelope.Meta{EventID: "before-drop-" + uuid.NewString(), OccurredAt: time.Now().UTC().Truncate(time.Second)},
+		ServerID: "11111111-1111-1111-1111-111111111111",
+		UserID:   "user-before",
 	}
-	if err := publisher.Publish(ctx, events.RoutingKeyMemberJoined, before); err != nil {
+	if err := publisher.Publish(ctx, membership.RoutingKeyMemberJoined, before); err != nil {
 		t.Fatalf("Publish() (before drop) error = %v, want nil", err)
 	}
 
 	select {
 	case msg := <-deliveries:
-		var got events.MembershipEvent
+		var got membership.MemberJoined
 		if err := json.Unmarshal(msg.Body, &got); err != nil {
 			t.Fatalf("unmarshal delivered payload: %v", err)
 		}
@@ -328,21 +327,20 @@ func TestAMQPPublisher_Publish_ReconnectsAfterConnectionIsDropped(t *testing.T) 
 	closeManagedConnection(t, base, user, pass, events.ConnectionName)
 	time.Sleep(300 * time.Millisecond) // let the close reach the client side
 
-	after := events.MembershipEvent{
-		EventID:    "after-drop-" + uuid.NewString(),
-		ServerID:   "11111111-1111-1111-1111-111111111111",
-		UserID:     "user-after",
-		OccurredAt: time.Now().UTC().Truncate(time.Second),
+	after := membership.MemberJoined{
+		Meta:     envelope.Meta{EventID: "after-drop-" + uuid.NewString(), OccurredAt: time.Now().UTC().Truncate(time.Second)},
+		ServerID: "11111111-1111-1111-1111-111111111111",
+		UserID:   "user-after",
 	}
 	ctx2, cancel2 := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel2()
-	if err := publisher.Publish(ctx2, events.RoutingKeyMemberJoined, after); err != nil {
+	if err := publisher.Publish(ctx2, membership.RoutingKeyMemberJoined, after); err != nil {
 		t.Fatalf("Publish() (after drop) error = %v, want nil", err)
 	}
 
 	select {
 	case msg := <-deliveries:
-		var got events.MembershipEvent
+		var got membership.MemberJoined
 		if err := json.Unmarshal(msg.Body, &got); err != nil {
 			t.Fatalf("unmarshal delivered payload: %v", err)
 		}

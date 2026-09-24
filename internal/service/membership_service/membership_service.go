@@ -6,6 +6,8 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/discordia-grupo01/events-contract/envelope"
+	"github.com/discordia-grupo01/events-contract/membership"
 	"github.com/discordia-grupo01/servers/internal/events"
 	"github.com/discordia-grupo01/servers/internal/model"
 )
@@ -89,10 +91,9 @@ func (s *MembershipService) ListMembers(ctx context.Context, p ListMembersParams
 }
 
 func (s *MembershipService) publishMemberLeft(ctx context.Context, serverID uuid.UUID, userID string) {
-	_ = s.events.Publish(ctx, events.RoutingKeyMemberLeft, events.MembershipEvent{
-		EventID:    uuid.NewString(),
-		ServerID:   serverID.String(),
-		UserID:     userID,
-		OccurredAt: s.now(),
+	_ = s.events.Publish(ctx, membership.RoutingKeyMemberLeft, membership.MemberLeft{
+		Meta:     envelope.Meta{EventID: uuid.NewString(), OccurredAt: s.now()},
+		ServerID: serverID.String(),
+		UserID:   userID,
 	})
 }

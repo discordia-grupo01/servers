@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/discordia-grupo01/servers/internal/events"
+	"github.com/discordia-grupo01/events-contract/membership"
 	"github.com/discordia-grupo01/servers/internal/model"
 	"github.com/discordia-grupo01/servers/internal/service/membership_service"
 )
@@ -204,12 +204,12 @@ func TestLeaveServer_Success_PublishesMemberLeft(t *testing.T) {
 		t.Fatalf("published events = %d, want 1", len(pub.published))
 	}
 	got := pub.published[0]
-	if got.routingKey != events.RoutingKeyMemberLeft {
-		t.Errorf("routing key = %q, want %q", got.routingKey, events.RoutingKeyMemberLeft)
+	if got.routingKey != membership.RoutingKeyMemberLeft {
+		t.Errorf("routing key = %q, want %q", got.routingKey, membership.RoutingKeyMemberLeft)
 	}
-	evt, ok := got.payload.(events.MembershipEvent)
+	evt, ok := got.payload.(membership.MemberLeft)
 	if !ok {
-		t.Fatalf("payload type = %T, want events.MembershipEvent", got.payload)
+		t.Fatalf("payload type = %T, want membership.MemberLeft", got.payload)
 	}
 	if evt.EventID == "" {
 		t.Error("event_id must not be empty")

@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/discordia-grupo01/servers/internal/events"
+	"github.com/discordia-grupo01/events-contract/membership"
 	"github.com/discordia-grupo01/servers/internal/model"
 	"github.com/discordia-grupo01/servers/internal/service/invitation"
 )
@@ -519,12 +519,12 @@ func TestJoin_Success_PublishesMemberJoined(t *testing.T) {
 		t.Fatalf("published events = %d, want 1", len(pub.published))
 	}
 	got := pub.published[0]
-	if got.routingKey != events.RoutingKeyMemberJoined {
-		t.Errorf("routing key = %q, want %q", got.routingKey, events.RoutingKeyMemberJoined)
+	if got.routingKey != membership.RoutingKeyMemberJoined {
+		t.Errorf("routing key = %q, want %q", got.routingKey, membership.RoutingKeyMemberJoined)
 	}
-	evt, ok := got.payload.(events.MembershipEvent)
+	evt, ok := got.payload.(membership.MemberJoined)
 	if !ok {
-		t.Fatalf("payload type = %T, want events.MembershipEvent", got.payload)
+		t.Fatalf("payload type = %T, want membership.MemberJoined", got.payload)
 	}
 	if evt.EventID == "" {
 		t.Error("event_id must not be empty")

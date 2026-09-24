@@ -10,6 +10,8 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/discordia-grupo01/events-contract/envelope"
+	"github.com/discordia-grupo01/events-contract/membership"
 	"github.com/discordia-grupo01/servers/internal/events"
 	"github.com/discordia-grupo01/servers/internal/iconstore"
 	"github.com/discordia-grupo01/servers/internal/model"
@@ -134,11 +136,10 @@ func (s *Service) CreateServer(ctx context.Context, p CreateServerParams) (model
 }
 
 func (s *Service) publishMemberJoined(ctx context.Context, serverID uuid.UUID, ownerID string, occurredAt time.Time) {
-	_ = s.events.Publish(ctx, events.RoutingKeyMemberJoined, events.MembershipEvent{
-		EventID:    uuid.NewString(),
-		ServerID:   serverID.String(),
-		UserID:     ownerID,
-		OccurredAt: occurredAt,
+	_ = s.events.Publish(ctx, membership.RoutingKeyMemberJoined, membership.MemberJoined{
+		Meta:     envelope.Meta{EventID: uuid.NewString(), OccurredAt: occurredAt},
+		ServerID: serverID.String(),
+		UserID:   ownerID,
 	})
 }
 

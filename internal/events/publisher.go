@@ -7,10 +7,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/discordia-grupo01/events-contract/broker"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
-
-const exchangeName = "discordia.events"
 
 // dialTimeout bounds how long a connection attempt can take. Publish() may
 // call connect() synchronously from an HTTP handler's goroutine, so this
@@ -63,7 +62,7 @@ func (p *AMQPPublisher) connect() error {
 		conn.Close()
 		return err
 	}
-	if err := ch.ExchangeDeclare(exchangeName, "topic", true, false, false, false, nil); err != nil {
+	if err := ch.ExchangeDeclare(broker.ExchangeName, broker.ExchangeType, true, false, false, false, nil); err != nil {
 		ch.Close()
 		conn.Close()
 		return err
@@ -97,14 +96,14 @@ func (p *AMQPPublisher) Publish(ctx context.Context, routingKey string, payload 
 	}
 
 	msg := amqp.Publishing{ContentType: "application/json", Body: body}
-	if err := ch.PublishWithContext(ctx, exchangeName, routingKey, false, false, msg); err != nil {
+	if err := ch.PublishWithContext(ctx, broker.ExchangeName, routingKey, false, false, msg); err != nil {
 		log.Printf("events: warning: publish %q failed, reconnecting: %v", routingKey, err)
 		p.dropChannel()
 		if err := p.connect(); err != nil {
 			log.Printf("events: warning: reconnect after failed publish %q also failed: %v", routingKey, err)
 			return nil
 		}
-		if err := p.currentChannel().PublishWithContext(ctx, exchangeName, routingKey, false, false, msg); err != nil {
+		if err := p.currentChannel().PublishWithContext(ctx, broker.ExchangeName, routingKey, false, false, msg); err != nil {
 			log.Printf("events: warning: publish %q failed again after reconnect: %v", routingKey, err)
 		}
 	}
