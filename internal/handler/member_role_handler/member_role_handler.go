@@ -36,7 +36,22 @@ type assignRoleRequest struct {
 	RoleID string `json:"role_id"`
 }
 
-// POST /v1/servers/:serverId/members/:userId/roles
+// AssignRole godoc
+// @Summary      Assign a role to a member
+// @Description  Owner-only. Idempotent: assigning a role the member already has succeeds without changing anything.
+// @Tags         member-roles
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        serverId  path  string              true  "Server ID"
+// @Param        userId    path  string              true  "Target member's user ID"
+// @Param        body      body  assignRoleRequest   true  "ID of the role to assign"
+// @Success      200  {object}  roleview.Response
+// @Failure      400  {object}  apierr.ErrorResponse
+// @Failure      401  {object}  apierr.ErrorResponse
+// @Failure      403  {object}  apierr.ErrorResponse  "not the owner"
+// @Failure      404  {object}  apierr.ErrorResponse
+// @Router       /v1/servers/{serverId}/members/{userId}/roles [post]
 func (h *Handler) AssignRole(c *gin.Context) {
 	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
 	if !ok {
@@ -68,7 +83,19 @@ func (h *Handler) AssignRole(c *gin.Context) {
 	c.JSON(http.StatusOK, roleview.ToResponse(rl))
 }
 
-// DELETE /v1/servers/:serverId/members/:userId/roles/:roleId
+// RemoveRole godoc
+// @Summary      Remove a role from a member
+// @Description  Owner-only. Idempotent.
+// @Tags         member-roles
+// @Security     BearerAuth
+// @Param        serverId  path  string  true  "Server ID"
+// @Param        userId    path  string  true  "Target member's user ID"
+// @Param        roleId    path  string  true  "Role ID"
+// @Success      204  "no content"
+// @Failure      401  {object}  apierr.ErrorResponse
+// @Failure      403  {object}  apierr.ErrorResponse  "not the owner"
+// @Failure      404  {object}  apierr.ErrorResponse
+// @Router       /v1/servers/{serverId}/members/{userId}/roles/{roleId} [delete]
 func (h *Handler) RemoveRole(c *gin.Context) {
 	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
 	if !ok {
@@ -93,7 +120,17 @@ func (h *Handler) RemoveRole(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// GET /v1/servers/:serverId/members/:userId/roles
+// ListMemberRoles godoc
+// @Summary      List a member's roles
+// @Tags         member-roles
+// @Produce      json
+// @Security     BearerAuth
+// @Param        serverId  path  string  true  "Server ID"
+// @Param        userId    path  string  true  "Target member's user ID"
+// @Success      200  {array}   roleview.Response
+// @Failure      401  {object}  apierr.ErrorResponse
+// @Failure      404  {object}  apierr.ErrorResponse
+// @Router       /v1/servers/{serverId}/members/{userId}/roles [get]
 func (h *Handler) ListMemberRoles(c *gin.Context) {
 	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
 	if !ok {
@@ -120,7 +157,18 @@ type memberPermissionsResponse struct {
 	Permissions []string `json:"permissions"`
 }
 
-// GET /v1/servers/:serverId/members/:userId/permissions
+// GetMemberPermissions godoc
+// @Summary      Get a member's effective permissions
+// @Description  Union of the permissions of every role assigned to the member.
+// @Tags         member-roles
+// @Produce      json
+// @Security     BearerAuth
+// @Param        serverId  path  string  true  "Server ID"
+// @Param        userId    path  string  true  "Target member's user ID"
+// @Success      200  {object}  memberPermissionsResponse
+// @Failure      401  {object}  apierr.ErrorResponse
+// @Failure      404  {object}  apierr.ErrorResponse
+// @Router       /v1/servers/{serverId}/members/{userId}/permissions [get]
 func (h *Handler) GetMemberPermissions(c *gin.Context) {
 	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
 	if !ok {

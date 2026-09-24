@@ -20,7 +20,19 @@ func New(uc UseCases) *Handler {
 	return &Handler{uc: uc}
 }
 
-// DELETE /v1/servers/:serverId/members/:userId
+// LeaveServer godoc
+// @Summary      Leave a server
+// @Description  Self-leave only: userId must be the caller's own. The owner cannot leave (transfer ownership or delete the server first).
+// @Tags         membership
+// @Security     BearerAuth
+// @Param        serverId  path  string  true  "Server ID"
+// @Param        userId    path  string  true  "Must match the caller's own user ID"
+// @Success      204  "no content"
+// @Failure      401  {object}  apierr.ErrorResponse
+// @Failure      403  {object}  apierr.ErrorResponse  "userId is not the caller"
+// @Failure      404  {object}  apierr.ErrorResponse
+// @Failure      409  {object}  apierr.ErrorResponse  "the owner cannot leave; transfer ownership or delete the server first"
+// @Router       /v1/servers/{serverId}/members/{userId} [delete]
 func (h *Handler) LeaveServer(c *gin.Context) {
 	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
 	if !ok {
@@ -39,7 +51,21 @@ func (h *Handler) LeaveServer(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// GET /v1/servers/:serverId/members?limit=&offset=
+// ListMembers godoc
+// @Summary      List a server's members
+// @Description  Caller must already be a member. Paginated.
+// @Tags         membership
+// @Produce      json
+// @Security     BearerAuth
+// @Param        serverId  path   string  true   "Server ID"
+// @Param        limit     query  int     false  "Page size" default(50)
+// @Param        offset    query  int     false  "Items to skip" default(0)
+// @Success      200  {object}  model.MemberListResponse
+// @Failure      400  {object}  apierr.ErrorResponse  "invalid limit/offset"
+// @Failure      401  {object}  apierr.ErrorResponse
+// @Failure      403  {object}  apierr.ErrorResponse  "caller is not a member"
+// @Failure      404  {object}  apierr.ErrorResponse
+// @Router       /v1/servers/{serverId}/members [get]
 func (h *Handler) ListMembers(c *gin.Context) {
 	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
 	if !ok {

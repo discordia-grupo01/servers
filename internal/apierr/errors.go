@@ -15,13 +15,16 @@ import (
 	"github.com/discordia-grupo01/servers/internal/model"
 )
 
-type errorBody struct {
-	Error errorDetail `json:"error"`
+// ErrorResponse is the service's standard error body, exported (rather than
+// kept package-private) so swag can reference it in `@Failure` annotations
+// across handler packages.
+type ErrorResponse struct {
+	Error ErrorDetail `json:"error"`
 }
 
-type errorDetail struct {
-	Code    int            `json:"code"`
-	Message string         `json:"message"`
+type ErrorDetail struct {
+	Code    int            `json:"code" example:"404"`
+	Message string         `json:"message" example:"server not found"`
 	Details map[string]any `json:"details"`
 }
 
@@ -31,7 +34,7 @@ func RespondError(c *gin.Context, status int, message string, details map[string
 	if details == nil {
 		details = map[string]any{}
 	}
-	c.JSON(status, errorBody{Error: errorDetail{Code: status, Message: message, Details: details}})
+	c.JSON(status, ErrorResponse{Error: ErrorDetail{Code: status, Message: message, Details: details}})
 }
 
 // FieldErr builds a {"field","reason"} details map for validation errors.
