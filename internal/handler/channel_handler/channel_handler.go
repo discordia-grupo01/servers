@@ -50,7 +50,21 @@ type createChannelRequest struct {
 	CategoryID *string `json:"category_id"`
 }
 
-// POST /v1/servers/:serverId/channels
+// CreateChannel godoc
+// @Summary      Create a channel
+// @Description  Owner-only. `kind` is "text" or "voice"; `category_id` may be omitted/null for "no category".
+// @Tags         channels
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        serverId  path  string                 true  "Server ID"
+// @Param        body      body  createChannelRequest   true  "Channel name, kind and optional category"
+// @Success      201  {object}  channelview.Response
+// @Failure      400  {object}  apierr.ErrorResponse
+// @Failure      401  {object}  apierr.ErrorResponse
+// @Failure      403  {object}  apierr.ErrorResponse  "not the owner"
+// @Failure      404  {object}  apierr.ErrorResponse
+// @Router       /v1/servers/{serverId}/channels [post]
 func (h *Handler) CreateChannel(c *gin.Context) {
 	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
 	if !ok {
@@ -87,7 +101,21 @@ type updateChannelRequest struct {
 	Topic *string `json:"topic"`
 }
 
-// PATCH /v1/channels/:channelId
+// UpdateChannel godoc
+// @Summary      Edit a channel
+// @Description  Owner-only. `name`/`topic` omitted leave the field unchanged.
+// @Tags         channels
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        channelId  path  string                 true  "Channel ID"
+// @Param        body       body  updateChannelRequest   true  "Fields to update"
+// @Success      200  {object}  channelview.Response
+// @Failure      400  {object}  apierr.ErrorResponse
+// @Failure      401  {object}  apierr.ErrorResponse
+// @Failure      403  {object}  apierr.ErrorResponse  "not the owner"
+// @Failure      404  {object}  apierr.ErrorResponse
+// @Router       /v1/channels/{channelId} [patch]
 func (h *Handler) UpdateChannel(c *gin.Context) {
 	channelID, ok := apierr.ParseUUIDParam(c, "channelId")
 	if !ok {
@@ -113,7 +141,17 @@ func (h *Handler) UpdateChannel(c *gin.Context) {
 	c.JSON(http.StatusOK, channelview.ToResponse(ch))
 }
 
-// DELETE /v1/channels/:channelId
+// DeleteChannel godoc
+// @Summary      Delete a channel
+// @Description  Owner-only.
+// @Tags         channels
+// @Security     BearerAuth
+// @Param        channelId  path  string  true  "Channel ID"
+// @Success      204  "no content"
+// @Failure      401  {object}  apierr.ErrorResponse
+// @Failure      403  {object}  apierr.ErrorResponse  "not the owner"
+// @Failure      404  {object}  apierr.ErrorResponse
+// @Router       /v1/channels/{channelId} [delete]
 func (h *Handler) DeleteChannel(c *gin.Context) {
 	channelID, ok := apierr.ParseUUIDParam(c, "channelId")
 	if !ok {
@@ -135,7 +173,21 @@ type moveChannelRequest struct {
 	CategoryID *string `json:"category_id"`
 }
 
-// PATCH /v1/channels/:channelId/category
+// MoveToCategory godoc
+// @Summary      Move a channel to a category
+// @Description  Owner-only. `category_id` omitted/null moves it to "sin categoria".
+// @Tags         channels
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        channelId  path  string               true  "Channel ID"
+// @Param        body       body  moveChannelRequest   true  "Target category (or null)"
+// @Success      200  {object}  channelview.Response
+// @Failure      400  {object}  apierr.ErrorResponse
+// @Failure      401  {object}  apierr.ErrorResponse
+// @Failure      403  {object}  apierr.ErrorResponse  "not the owner"
+// @Failure      404  {object}  apierr.ErrorResponse
+// @Router       /v1/channels/{channelId}/category [patch]
 func (h *Handler) MoveToCategory(c *gin.Context) {
 	channelID, ok := apierr.ParseUUIDParam(c, "channelId")
 	if !ok {
@@ -170,7 +222,20 @@ type reorderChannelsRequest struct {
 	ChannelIDs []string `json:"channel_ids"`
 }
 
-// PATCH /v1/servers/:serverId/channels/reorder
+// Reorder godoc
+// @Summary      Reorder channels within a category
+// @Description  Owner-only. `channel_ids` is the full, final order for that category (or for "sin categoria" if `category_id` is omitted/null).
+// @Tags         channels
+// @Accept       json
+// @Security     BearerAuth
+// @Param        serverId  path  string                    true  "Server ID"
+// @Param        body      body  reorderChannelsRequest    true  "Category and the channel IDs in their new order"
+// @Success      200  "ok"
+// @Failure      400  {object}  apierr.ErrorResponse
+// @Failure      401  {object}  apierr.ErrorResponse
+// @Failure      403  {object}  apierr.ErrorResponse  "not the owner"
+// @Failure      404  {object}  apierr.ErrorResponse
+// @Router       /v1/servers/{serverId}/channels/reorder [patch]
 func (h *Handler) Reorder(c *gin.Context) {
 	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
 	if !ok {

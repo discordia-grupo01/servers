@@ -34,7 +34,21 @@ type createCategoryRequest struct {
 	Name string `json:"name"`
 }
 
-// POST /v1/servers/:serverId/categories
+// CreateCategory godoc
+// @Summary      Create a category
+// @Description  Owner-only.
+// @Tags         categories
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        serverId  path  string                  true  "Server ID"
+// @Param        body      body  createCategoryRequest   true  "Category name"
+// @Success      201  {object}  categoryview.Response
+// @Failure      400  {object}  apierr.ErrorResponse
+// @Failure      401  {object}  apierr.ErrorResponse
+// @Failure      403  {object}  apierr.ErrorResponse  "not the owner"
+// @Failure      404  {object}  apierr.ErrorResponse
+// @Router       /v1/servers/{serverId}/categories [post]
 func (h *Handler) CreateCategory(c *gin.Context) {
 	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
 	if !ok {
@@ -63,7 +77,21 @@ type updateCategoryRequest struct {
 	Name string `json:"name"`
 }
 
-// PATCH /v1/categories/:categoryId
+// UpdateCategory godoc
+// @Summary      Rename a category
+// @Description  Owner-only.
+// @Tags         categories
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        categoryId  path  string                  true  "Category ID"
+// @Param        body        body  updateCategoryRequest   true  "New category name"
+// @Success      200  {object}  categoryview.Response
+// @Failure      400  {object}  apierr.ErrorResponse
+// @Failure      401  {object}  apierr.ErrorResponse
+// @Failure      403  {object}  apierr.ErrorResponse  "not the owner"
+// @Failure      404  {object}  apierr.ErrorResponse
+// @Router       /v1/categories/{categoryId} [patch]
 func (h *Handler) UpdateCategory(c *gin.Context) {
 	categoryID, ok := apierr.ParseUUIDParam(c, "categoryId")
 	if !ok {
@@ -92,7 +120,20 @@ type reorderCategoriesRequest struct {
 	CategoryIDs []string `json:"category_ids"`
 }
 
-// PATCH /v1/servers/:serverId/categories/reorder
+// Reorder godoc
+// @Summary      Reorder a server's categories
+// @Description  Owner-only. `category_ids` is the full, final order.
+// @Tags         categories
+// @Accept       json
+// @Security     BearerAuth
+// @Param        serverId  path  string                      true  "Server ID"
+// @Param        body      body  reorderCategoriesRequest    true  "Category IDs in their new order"
+// @Success      200  "ok"
+// @Failure      400  {object}  apierr.ErrorResponse
+// @Failure      401  {object}  apierr.ErrorResponse
+// @Failure      403  {object}  apierr.ErrorResponse  "not the owner"
+// @Failure      404  {object}  apierr.ErrorResponse
+// @Router       /v1/servers/{serverId}/categories/reorder [patch]
 func (h *Handler) Reorder(c *gin.Context) {
 	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
 	if !ok {
