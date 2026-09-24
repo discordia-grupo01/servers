@@ -27,6 +27,15 @@ import (
 	"github.com/discordia-grupo01/servers/internal/service/role_service"
 )
 
+// @title        Discordia - Servers
+// @version      1.0.0
+// @description  Servers service: servers, channels, categories, roles, member roles, membership, invitations, ownership transfer.
+// @description  All /v1/** routes require identity: the JWT is validated by Kong at the gateway, and this service takes the user id from the X-User-Id header (or from the "sub" claim of the token Kong forwards).
+// @BasePath     /
+// @securityDefinitions.apikey  BearerAuth
+// @in                          header
+// @name                        Authorization
+// @description                 Type "Bearer" followed by a space and the JWT (already validated by Kong; this service trusts the forwarded identity).
 func main() {
 	cfg, err := config.Load()
 	if err != nil {

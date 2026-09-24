@@ -38,7 +38,21 @@ type createRoleRequest struct {
 	Color string `json:"color"`
 }
 
-// POST /v1/servers/:serverId/roles
+// CreateRole godoc
+// @Summary      Create a role
+// @Description  Owner-only.
+// @Tags         roles
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        serverId  path  string             true  "Server ID"
+// @Param        body      body  createRoleRequest  true  "Role name and color"
+// @Success      201  {object}  roleview.Response
+// @Failure      400  {object}  apierr.ErrorResponse
+// @Failure      401  {object}  apierr.ErrorResponse
+// @Failure      403  {object}  apierr.ErrorResponse  "not the owner"
+// @Failure      404  {object}  apierr.ErrorResponse
+// @Router       /v1/servers/{serverId}/roles [post]
 func (h *Handler) CreateRole(c *gin.Context) {
 	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
 	if !ok {
@@ -64,7 +78,16 @@ func (h *Handler) CreateRole(c *gin.Context) {
 	c.JSON(http.StatusCreated, roleview.ToResponse(rl))
 }
 
-// GET /v1/servers/:serverId/roles
+// ListRoles godoc
+// @Summary      List a server's roles
+// @Tags         roles
+// @Produce      json
+// @Security     BearerAuth
+// @Param        serverId  path  string  true  "Server ID"
+// @Success      200  {array}   roleview.Response
+// @Failure      401  {object}  apierr.ErrorResponse
+// @Failure      404  {object}  apierr.ErrorResponse
+// @Router       /v1/servers/{serverId}/roles [get]
 func (h *Handler) ListRoles(c *gin.Context) {
 	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
 	if !ok {
@@ -84,7 +107,16 @@ func (h *Handler) ListRoles(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// GET /v1/roles/:roleId
+// GetRole godoc
+// @Summary      Get a role
+// @Tags         roles
+// @Produce      json
+// @Security     BearerAuth
+// @Param        roleId  path  string  true  "Role ID"
+// @Success      200  {object}  roleview.Response
+// @Failure      401  {object}  apierr.ErrorResponse
+// @Failure      404  {object}  apierr.ErrorResponse
+// @Router       /v1/roles/{roleId} [get]
 func (h *Handler) GetRole(c *gin.Context) {
 	roleID, ok := apierr.ParseUUIDParam(c, "roleId")
 	if !ok {
@@ -105,7 +137,21 @@ type updateRolePermissionsRequest struct {
 	Color       *string  `json:"color"`
 }
 
-// PATCH /v1/roles/:roleId
+// UpdateRolePermissions godoc
+// @Summary      Edit a role
+// @Description  Owner-only. Any of `permissions`/`name`/`color` may be omitted to leave it unchanged.
+// @Tags         roles
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        roleId  path  string                          true  "Role ID"
+// @Param        body    body  updateRolePermissionsRequest    true  "Fields to update"
+// @Success      200  {object}  roleview.Response
+// @Failure      400  {object}  apierr.ErrorResponse
+// @Failure      401  {object}  apierr.ErrorResponse
+// @Failure      403  {object}  apierr.ErrorResponse  "not the owner"
+// @Failure      404  {object}  apierr.ErrorResponse
+// @Router       /v1/roles/{roleId} [patch]
 func (h *Handler) UpdateRolePermissions(c *gin.Context) {
 	roleID, ok := apierr.ParseUUIDParam(c, "roleId")
 	if !ok {
@@ -136,7 +182,20 @@ type setDefaultRoleRequest struct {
 	RoleID string `json:"role_id"`
 }
 
-// PUT /v1/servers/:serverId/default-role
+// SetDefaultRole godoc
+// @Summary      Set the server's default role
+// @Description  Owner-only. The default role is assigned automatically to new members.
+// @Tags         roles
+// @Accept       json
+// @Security     BearerAuth
+// @Param        serverId  path  string                  true  "Server ID"
+// @Param        body      body  setDefaultRoleRequest    true  "ID of the role to use as default"
+// @Success      204  "no content"
+// @Failure      400  {object}  apierr.ErrorResponse
+// @Failure      401  {object}  apierr.ErrorResponse
+// @Failure      403  {object}  apierr.ErrorResponse  "not the owner"
+// @Failure      404  {object}  apierr.ErrorResponse
+// @Router       /v1/servers/{serverId}/default-role [put]
 func (h *Handler) SetDefaultRole(c *gin.Context) {
 	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
 	if !ok {
@@ -166,7 +225,17 @@ func (h *Handler) SetDefaultRole(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// DELETE /v1/roles/:roleId
+// DeleteRole godoc
+// @Summary      Delete a role
+// @Description  Owner-only.
+// @Tags         roles
+// @Security     BearerAuth
+// @Param        roleId  path  string  true  "Role ID"
+// @Success      204  "no content"
+// @Failure      401  {object}  apierr.ErrorResponse
+// @Failure      403  {object}  apierr.ErrorResponse  "not the owner"
+// @Failure      404  {object}  apierr.ErrorResponse
+// @Router       /v1/roles/{roleId} [delete]
 func (h *Handler) DeleteRole(c *gin.Context) {
 	roleID, ok := apierr.ParseUUIDParam(c, "roleId")
 	if !ok {
