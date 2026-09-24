@@ -5,7 +5,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/discordia-grupo01/servers/internal/iconstore"
@@ -62,12 +61,14 @@ func TestSupabaseStore_SaveThenGet_RoundTrips(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Save: %v", err)
 	}
-	want := srv.URL + "/storage/v1/object/public/icons/srv1?v="
-	if !strings.HasPrefix(url, want) {
-		t.Errorf("url = %q, want prefix %q", url, want)
+
+	hash := mustHash(t, url)
+	want := srv.URL + "/storage/v1/object/public/icons/srv1-" + hash + "?v=" + hash
+	if url != want {
+		t.Errorf("url = %q, want %q", url, want)
 	}
 
-	data, contentType, err := st.Get(iconstore.StorageKey("srv1", mustHash(t, url)))
+	data, contentType, err := st.Get(iconstore.StorageKey("srv1", hash))
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -98,11 +99,17 @@ func TestSupabaseStore_Save_ReturnsAFreshVersionWhenContentChanges(t *testing.T)
 		t.Errorf("two saves returned the same URL (%q): a client or CDN caching by URL would never fetch the new content", first)
 	}
 
-	base := srv.URL + "/storage/v1/object/public/icons/srv1-banner?v="
-	if !strings.HasPrefix(first, base) || !strings.HasPrefix(second, base) {
-		t.Errorf("first=%q second=%q, want both to start with %q", first, second, base)
+	firstHash := mustHash(t, first)
+	secondHash := mustHash(t, second)
+	wantFirst := srv.URL + "/storage/v1/object/public/icons/srv1-banner-" + firstHash + "?v=" + firstHash
+	wantSecond := srv.URL + "/storage/v1/object/public/icons/srv1-banner-" + secondHash + "?v=" + secondHash
+	if first != wantFirst {
+		t.Errorf("first = %q, want %q", first, wantFirst)
 	}
-	if _, _, err := st.Get(iconstore.StorageKey("srv1-banner", mustHash(t, second))); err != nil {
+	if second != wantSecond {
+		t.Errorf("second = %q, want %q", second, wantSecond)
+	}
+	if _, _, err := st.Get(iconstore.StorageKey("srv1-banner", secondHash)); err != nil {
 		t.Errorf("Get after two saves: %v", err)
 	}
 }
