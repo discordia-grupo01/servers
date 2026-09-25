@@ -39,6 +39,7 @@ func newInviteRepo(t *testing.T) (*repository.InvitationRepository, *pgxpool.Poo
 	for _, f := range []string{
 		"0001_init.up.sql", "0002_invitations.up.sql",
 		"0003_roles.up.sql", "0004_member_roles.up.sql", "0005_default_role.up.sql",
+		"0011_outbox_events.up.sql",
 	} {
 		schema, err := os.ReadFile("../../migrations/" + f)
 		if err != nil {
@@ -271,7 +272,7 @@ func TestInviteRepo_RedeemIncrementsUsesAndAddsMember(t *testing.T) {
 		t.Fatalf("CreateInvitation: %v", err)
 	}
 
-	gotServer, err := repo.RedeemInvitation(ctx, inv.Code, "newcomer", time.Now().UTC())
+	gotServer, err := repo.RedeemInvitation(ctx, inv.Code, "newcomer", time.Now().UTC(), testBuildEvent)
 	if err != nil {
 		t.Fatalf("RedeemInvitation: %v", err)
 	}
@@ -287,7 +288,7 @@ func TestInviteRepo_RedeemIncrementsUsesAndAddsMember(t *testing.T) {
 		t.Errorf("uses = %d, want 1", after.Uses)
 	}
 
-	if _, err := repo.RedeemInvitation(ctx, inv.Code, "another", time.Now().UTC()); !errors.Is(err, model.ErrInvitationExhausted) {
+	if _, err := repo.RedeemInvitation(ctx, inv.Code, "another", time.Now().UTC(), testBuildEvent); !errors.Is(err, model.ErrInvitationExhausted) {
 		t.Fatalf("err = %v, want ErrInvitationExhausted", err)
 	}
 }
@@ -304,7 +305,7 @@ func TestInviteRepo_RedeemForExistingMemberDoesNotConsumeUse(t *testing.T) {
 		t.Fatalf("CreateInvitation: %v", err)
 	}
 
-	if _, err := repo.RedeemInvitation(ctx, inv.Code, owner, time.Now().UTC()); !errors.Is(err, model.ErrAlreadyMember) {
+	if _, err := repo.RedeemInvitation(ctx, inv.Code, owner, time.Now().UTC(), testBuildEvent); !errors.Is(err, model.ErrAlreadyMember) {
 		t.Fatalf("err = %v, want ErrAlreadyMember", err)
 	}
 	after, _ := repo.InvitationByCode(ctx, inv.Code)
@@ -326,7 +327,7 @@ func TestInviteRepo_RedeemExpiredInvitation(t *testing.T) {
 		t.Fatalf("CreateInvitation: %v", err)
 	}
 
-	if _, err := repo.RedeemInvitation(ctx, inv.Code, "late", time.Now().UTC()); !errors.Is(err, model.ErrInvitationExhausted) {
+	if _, err := repo.RedeemInvitation(ctx, inv.Code, "late", time.Now().UTC(), testBuildEvent); !errors.Is(err, model.ErrInvitationExhausted) {
 		t.Fatalf("err = %v, want ErrInvitationExhausted", err)
 	}
 }
@@ -349,7 +350,7 @@ func TestInviteRepo_Revoke(t *testing.T) {
 	if !got.IsRevoked() {
 		t.Error("invitation is not marked as revoked")
 	}
-	if _, err := repo.RedeemInvitation(ctx, inv.Code, "nope", time.Now().UTC()); !errors.Is(err, model.ErrInvitationExhausted) {
+	if _, err := repo.RedeemInvitation(ctx, inv.Code, "nope", time.Now().UTC(), testBuildEvent); !errors.Is(err, model.ErrInvitationExhausted) {
 		t.Fatalf("err = %v, want ErrInvitationExhausted after revoke", err)
 	}
 }
@@ -378,7 +379,7 @@ func TestInviteRepo_RedeemAssignsDefaultRole(t *testing.T) {
 		t.Fatalf("CreateInvitation: %v", err)
 	}
 
-	if _, err := repo.RedeemInvitation(ctx, inv.Code, "newcomer", time.Now().UTC()); err != nil {
+	if _, err := repo.RedeemInvitation(ctx, inv.Code, "newcomer", time.Now().UTC(), testBuildEvent); err != nil {
 		t.Fatalf("RedeemInvitation: %v", err)
 	}
 
@@ -405,7 +406,7 @@ func TestInviteRepo_RedeemWithoutDefaultRoleAssignsNothing(t *testing.T) {
 		t.Fatalf("CreateInvitation: %v", err)
 	}
 
-	if _, err := repo.RedeemInvitation(ctx, inv.Code, "newcomer", time.Now().UTC()); err != nil {
+	if _, err := repo.RedeemInvitation(ctx, inv.Code, "newcomer", time.Now().UTC(), testBuildEvent); err != nil {
 		t.Fatalf("RedeemInvitation: %v", err)
 	}
 

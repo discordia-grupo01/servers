@@ -11,6 +11,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/handler"
 	"github.com/discordia-grupo01/servers/internal/iconstore"
 	"github.com/discordia-grupo01/servers/internal/middleware"
+	"github.com/discordia-grupo01/servers/internal/outbox"
 	"github.com/discordia-grupo01/servers/internal/repository"
 	"github.com/discordia-grupo01/servers/internal/repository/category_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/channel_repo"
@@ -77,13 +78,14 @@ func main() {
 	categoryRepo := category_repo.NewCategoryRepository(pool)
 	channelRepo := channel_repo.NewChannelRepository(pool)
 
-	svc := service.New(serverRepo, icons, publisher)
+	svc := service.New(serverRepo, icons)
 	roleSvc := role_service.New(serverRepo, roleRepo)
 	memberRoleSvc := member_role_service.New(serverRepo, roleRepo, memberRepo)
-	membershipSvc := membership_service.New(serverRepo, memberRepo, publisher)
+	membershipSvc := membership_service.New(serverRepo, memberRepo)
 	transferSvc := ownership_transfer_service.New(serverRepo, memberRepo, transferRepo)
 	go ownership_transfer_service.NewExpirer(transferRepo).Start(ctx)
-	invSvc := invitation.NewService(repository.NewInvitationRepository(pool), publisher)
+	go outbox.NewPoller(pool, publisher).Start(ctx)
+	invSvc := invitation.NewService(repository.NewInvitationRepository(pool))
 	categorySvc := category_service.New(serverRepo, categoryRepo)
 	channelSvc := channel_service.New(serverRepo, categoryRepo, channelRepo)
 

@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"regexp"
 	"testing"
@@ -506,25 +507,20 @@ func TestJoin_RedeemRaceReportsExhausted(t *testing.T) {
 func TestJoin_Success_PublishesMemberJoined(t *testing.T) {
 	inv := activeInvitation(uuid.New())
 	repo := joinRepo(inv)
-	pub := &fakePublisher{}
 
-	res, err := newInviteServiceWithPublisher(repo, pub).JoinServer(context.Background(), invitation.JoinParams{
+	res, err := newInviteService(repo).JoinServer(context.Background(), invitation.JoinParams{
 		Code: inv.Code, UserID: joinerID,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if len(pub.published) != 1 {
-		t.Fatalf("published events = %d, want 1", len(pub.published))
+	if repo.gotOutboxEvent.RoutingKey != membership.RoutingKeyMemberJoined {
+		t.Errorf("routing key = %q, want %q", repo.gotOutboxEvent.RoutingKey, membership.RoutingKeyMemberJoined)
 	}
-	got := pub.published[0]
-	if got.routingKey != membership.RoutingKeyMemberJoined {
-		t.Errorf("routing key = %q, want %q", got.routingKey, membership.RoutingKeyMemberJoined)
-	}
-	evt, ok := got.payload.(membership.MemberJoined)
-	if !ok {
-		t.Fatalf("payload type = %T, want membership.MemberJoined", got.payload)
+	var evt membership.MemberJoined
+	if err := json.Unmarshal(repo.gotOutboxEvent.Payload, &evt); err != nil {
+		t.Fatalf("unmarshal outbox payload: %v", err)
 	}
 	if evt.EventID == "" {
 		t.Error("event_id must not be empty")
@@ -545,16 +541,15 @@ func TestJoin_RedeemFails_DoesNotPublish(t *testing.T) {
 	inv := activeInvitation(uuid.New())
 	repo := joinRepo(inv)
 	repo.redeemErr = errors.New("db down")
-	pub := &fakePublisher{}
 
-	_, err := newInviteServiceWithPublisher(repo, pub).JoinServer(context.Background(), invitation.JoinParams{
+	_, err := newInviteService(repo).JoinServer(context.Background(), invitation.JoinParams{
 		Code: inv.Code, UserID: joinerID,
 	})
 	if err == nil {
 		t.Fatal("expected an error from RedeemInvitation")
 	}
-	if len(pub.published) != 0 {
-		t.Errorf("published = %d events, want 0 when the DB write fails", len(pub.published))
+	if repo.gotOutboxEvent.RoutingKey != "" {
+		t.Errorf("gotOutboxEvent.RoutingKey = %q, want empty when the DB write fails", repo.gotOutboxEvent.RoutingKey)
 	}
 }
 
@@ -563,16 +558,15 @@ func TestJoin_AlreadyMember_DoesNotPublish(t *testing.T) {
 	inv := activeInvitation(uuid.New())
 	repo := joinRepo(inv)
 	repo.member = true
-	pub := &fakePublisher{}
 
-	_, err := newInviteServiceWithPublisher(repo, pub).JoinServer(context.Background(), invitation.JoinParams{
+	_, err := newInviteService(repo).JoinServer(context.Background(), invitation.JoinParams{
 		Code: inv.Code, UserID: joinerID,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(pub.published) != 0 {
-		t.Errorf("published = %d events, want 0 for an already-member join", len(pub.published))
+	if repo.gotOutboxEvent.RoutingKey != "" {
+		t.Errorf("gotOutboxEvent.RoutingKey = %q, want empty for an already-member join", repo.gotOutboxEvent.RoutingKey)
 	}
 }
 
@@ -582,15 +576,14 @@ func TestJoin_RedeemRaceAlreadyMember_DoesNotPublish(t *testing.T) {
 	inv := activeInvitation(uuid.New())
 	repo := joinRepo(inv)
 	repo.redeemErr = model.ErrAlreadyMember
-	pub := &fakePublisher{}
 
-	_, err := newInviteServiceWithPublisher(repo, pub).JoinServer(context.Background(), invitation.JoinParams{
+	_, err := newInviteService(repo).JoinServer(context.Background(), invitation.JoinParams{
 		Code: inv.Code, UserID: joinerID,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(pub.published) != 0 {
-		t.Errorf("published = %d events, want 0", len(pub.published))
+	if repo.gotOutboxEvent.RoutingKey != "" {
+		t.Errorf("gotOutboxEvent.RoutingKey = %q, want empty", repo.gotOutboxEvent.RoutingKey)
 	}
 }

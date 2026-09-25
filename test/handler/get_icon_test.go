@@ -10,7 +10,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	"github.com/discordia-grupo01/servers/internal/events"
 	"github.com/discordia-grupo01/servers/internal/handler"
 	"github.com/discordia-grupo01/servers/internal/iconstore"
 	"github.com/discordia-grupo01/servers/internal/middleware"
@@ -77,7 +76,7 @@ func TestGetIcon_PreMigrationURLWithoutVersionHash_IsStillServed(t *testing.T) {
 	repo := &fakeRepo{getResult: model.Server{ID: id, IconURL: &oldStyleURL}}
 
 	r := handler.NewRouter(handler.Deps{
-		Servers: service.New(repo, icons, events.NewAMQPPublisher("")),
+		Servers: service.New(repo, icons),
 		Icons:   icons,
 		Auth:    middleware.AuthConfig{UserIDHeader: "X-User-Id"},
 		DB:      okPinger{},

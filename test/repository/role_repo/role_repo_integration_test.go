@@ -12,9 +12,17 @@ import (
 
 	"github.com/discordia-grupo01/servers/internal/model"
 	"github.com/discordia-grupo01/servers/internal/model/role"
+	"github.com/discordia-grupo01/servers/internal/outbox"
 	"github.com/discordia-grupo01/servers/internal/repository"
 	"github.com/discordia-grupo01/servers/internal/repository/role_repo"
 )
+
+// testOutboxEvent is a valid placeholder for CreateServer's outbox event in
+// tests that don't care about its content, only that the call as a whole
+// succeeds -- payload can't be nil (outbox_events.payload is NOT NULL).
+func testOutboxEvent() outbox.Event {
+	return outbox.Event{RoutingKey: "test.event", Payload: []byte("{}")}
+}
 
 func newRepo(t *testing.T) (*role_repo.RoleRepository, *repository.ServerRepository, *pgxpool.Pool) {
 	t.Helper()
@@ -43,6 +51,7 @@ func newRepo(t *testing.T) (*role_repo.RoleRepository, *repository.ServerReposit
 		"../../../migrations/0003_roles.up.sql",
 		"../../../migrations/0004_member_roles.up.sql",
 		"../../../migrations/0005_default_role.up.sql",
+		"../../../migrations/0011_outbox_events.up.sql",
 	} {
 		schema, err := os.ReadFile(file)
 		if err != nil {
@@ -70,7 +79,7 @@ func TestRoleRepo_Create_ThenGetByID_ReturnsIt(t *testing.T) {
 	roles, servers, _ := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, nil, chans); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 
@@ -101,10 +110,10 @@ func TestRoleRepo_ListByServer_ReturnsOnlyThatServersRoles(t *testing.T) {
 	ctx := context.Background()
 	srvA, chA := serverFixture("owner-" + uuid.NewString())
 	srvB, chB := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srvA, nil, chA); err != nil {
+	if err := servers.CreateServer(ctx, srvA, nil, chA, testOutboxEvent()); err != nil {
 		t.Fatalf("seed server A: %v", err)
 	}
-	if err := servers.CreateServer(ctx, srvB, nil, chB); err != nil {
+	if err := servers.CreateServer(ctx, srvB, nil, chB, testOutboxEvent()); err != nil {
 		t.Fatalf("seed server B: %v", err)
 	}
 
@@ -139,7 +148,7 @@ func TestRoleRepo_Create_RoleOfDeletedServer_Fails(t *testing.T) {
 // packages might have created, so a test run leaves the database exactly as
 // clean as it found it -- both before it starts and after it finishes.
 func dropAllTestTables(ctx context.Context, pool *pgxpool.Pool) {
-	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS member_roles, roles, server_bans, invitations, server_members, channels, servers CASCADE`)
+	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS outbox_events, member_roles, roles, server_bans, invitations, server_members, channels, servers CASCADE`)
 }
 
 func env(k, def string) string {

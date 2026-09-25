@@ -11,8 +11,23 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/discordia-grupo01/servers/internal/model"
+	"github.com/discordia-grupo01/servers/internal/outbox"
 	"github.com/discordia-grupo01/servers/internal/repository"
 )
+
+// testOutboxEvent is a valid placeholder for CreateServer/RedeemInvitation's
+// outbox event in tests that don't care about its content, only that the
+// call as a whole succeeds -- payload can't be nil (outbox_events.payload
+// is NOT NULL).
+func testOutboxEvent() outbox.Event {
+	return outbox.Event{RoutingKey: "test.event", Payload: []byte("{}")}
+}
+
+// testBuildEvent is RedeemInvitation's buildEvent callback for tests that
+// don't care about the resolved server_id or the event content.
+func testBuildEvent(uuid.UUID) (outbox.Event, error) {
+	return testOutboxEvent(), nil
+}
 
 func newRepo(t *testing.T) (*repository.ServerRepository, *pgxpool.Pool) {
 	t.Helper()
@@ -44,6 +59,7 @@ func newRepo(t *testing.T) (*repository.ServerRepository, *pgxpool.Pool) {
 		"../../migrations/0007_categories.up.sql",
 		"../../migrations/0009_server_banner.up.sql",
 		"../../migrations/0010_native_categories.up.sql",
+		"../../migrations/0011_outbox_events.up.sql",
 	} {
 		schema, err := os.ReadFile(path)
 		if err != nil {
@@ -60,7 +76,7 @@ func newRepo(t *testing.T) (*repository.ServerRepository, *pgxpool.Pool) {
 // packages might have created, so a test run leaves the database exactly as
 // clean as it found it -- both before it starts and after it finishes.
 func dropAllTestTables(ctx context.Context, pool *pgxpool.Pool) {
-	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS member_roles, roles, server_bans, invitations, server_members, categories, channels, servers CASCADE`)
+	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS outbox_events, member_roles, roles, server_bans, invitations, server_members, categories, channels, servers CASCADE`)
 }
 
 func serverFixture(name, owner string) (model.Server, []model.Channel) {
@@ -80,7 +96,7 @@ func TestRepo_CreateServer_PersistsServerChannelsAndOwnerMembership(t *testing.T
 	owner := "owner-" + uuid.NewString()
 	srv, chans := serverFixture("Persist Test", owner)
 
-	if err := repo.CreateServer(ctx, srv, nil, chans); err != nil {
+	if err := repo.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
 		t.Fatalf("CreateServer: %v", err)
 	}
 
@@ -123,7 +139,7 @@ func TestRepo_CreateServer_PersistsNativeCategoriesAndChannelCategoryID(t *testi
 		{ID: uuid.New(), ServerID: id, Name: "General", Kind: model.ChannelVoice, CategoryID: &voiceCatID, CreatedAt: now},
 	}
 
-	if err := repo.CreateServer(ctx, srv, categories, chans); err != nil {
+	if err := repo.CreateServer(ctx, srv, categories, chans, testOutboxEvent()); err != nil {
 		t.Fatalf("CreateServer: %v", err)
 	}
 
@@ -158,7 +174,7 @@ func TestRepo_GetByID_ReturnsServerWithItsChannels(t *testing.T) {
 	repo, _ := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("Get By ID", "owner-"+uuid.NewString())
-	if err := repo.CreateServer(ctx, srv, nil, chans); err != nil {
+	if err := repo.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
@@ -193,10 +209,10 @@ func TestRepo_CreateServer_DuplicateIDFails(t *testing.T) {
 	ctx := context.Background()
 	srv, chans := serverFixture("Dup ID", "owner-"+uuid.NewString())
 
-	if err := repo.CreateServer(ctx, srv, nil, chans); err != nil {
+	if err := repo.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
 		t.Fatalf("first insert: %v", err)
 	}
-	if err := repo.CreateServer(ctx, srv, nil, chans); err == nil {
+	if err := repo.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err == nil {
 		t.Error("expected an error for a duplicate id")
 	}
 }
@@ -207,13 +223,13 @@ func TestRepo_CreateServer_SameNameKeySameOwnerReturnsNameTaken(t *testing.T) {
 	owner := "owner-" + uuid.NewString()
 
 	first, firstCh := serverFixture("Comunidad", owner)
-	if err := repo.CreateServer(ctx, first, nil, firstCh); err != nil {
+	if err := repo.CreateServer(ctx, first, nil, firstCh, testOutboxEvent()); err != nil {
 		t.Fatalf("first insert: %v", err)
 	}
 
 	second, secondCh := serverFixture("COMUNIDAD", owner) // distinto Name/ID
 	second.NameKey = first.NameKey                        // mismo name_key
-	if err := repo.CreateServer(ctx, second, nil, secondCh); !errors.Is(err, model.ErrNameTaken) {
+	if err := repo.CreateServer(ctx, second, nil, secondCh, testOutboxEvent()); !errors.Is(err, model.ErrNameTaken) {
 		t.Fatalf("err = %v, want ErrNameTaken", err)
 	}
 }
@@ -223,13 +239,13 @@ func TestRepo_CreateServer_SameNameKeyDifferentOwnerIsAllowed(t *testing.T) {
 	ctx := context.Background()
 
 	a, aCh := serverFixture("Comunidad", "owner-"+uuid.NewString())
-	if err := repo.CreateServer(ctx, a, nil, aCh); err != nil {
+	if err := repo.CreateServer(ctx, a, nil, aCh, testOutboxEvent()); err != nil {
 		t.Fatalf("first insert: %v", err)
 	}
 
 	b, bCh := serverFixture("Comunidad", "owner-"+uuid.NewString())
 	b.NameKey = a.NameKey
-	if err := repo.CreateServer(ctx, b, nil, bCh); err != nil {
+	if err := repo.CreateServer(ctx, b, nil, bCh, testOutboxEvent()); err != nil {
 		t.Errorf("same name_key / different owner should be allowed: %v", err)
 	}
 }
@@ -240,11 +256,11 @@ func TestRepo_ListForUser_ReturnsOwnedServersWithChannels(t *testing.T) {
 	owner := "owner-" + uuid.NewString()
 
 	a, aCh := serverFixture("Server A", owner)
-	if err := repo.CreateServer(ctx, a, nil, aCh); err != nil {
+	if err := repo.CreateServer(ctx, a, nil, aCh, testOutboxEvent()); err != nil {
 		t.Fatalf("create A: %v", err)
 	}
 	b, bCh := serverFixture("Server B", owner)
-	if err := repo.CreateServer(ctx, b, nil, bCh); err != nil {
+	if err := repo.CreateServer(ctx, b, nil, bCh, testOutboxEvent()); err != nil {
 		t.Fatalf("create B: %v", err)
 	}
 
@@ -267,11 +283,11 @@ func TestRepo_ListForUser_OnlyReturnsServersTheUserBelongsTo(t *testing.T) {
 	ctx := context.Background()
 
 	mine, mineCh := serverFixture("Mine", "owner-"+uuid.NewString())
-	if err := repo.CreateServer(ctx, mine, nil, mineCh); err != nil {
+	if err := repo.CreateServer(ctx, mine, nil, mineCh, testOutboxEvent()); err != nil {
 		t.Fatalf("create mine: %v", err)
 	}
 	other, otherCh := serverFixture("Not Mine", "someone-else-"+uuid.NewString())
-	if err := repo.CreateServer(ctx, other, nil, otherCh); err != nil {
+	if err := repo.CreateServer(ctx, other, nil, otherCh, testOutboxEvent()); err != nil {
 		t.Fatalf("create other: %v", err)
 	}
 
@@ -289,7 +305,7 @@ func TestRepo_ListForUser_IncludesServersJoinedNotOwned(t *testing.T) {
 	ctx := context.Background()
 
 	srv, ch := serverFixture("Joined Server", "owner-"+uuid.NewString())
-	if err := repo.CreateServer(ctx, srv, nil, ch); err != nil {
+	if err := repo.CreateServer(ctx, srv, nil, ch, testOutboxEvent()); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
@@ -314,7 +330,7 @@ func TestRepo_UpdateServer_ChangesNameIconAndBanner(t *testing.T) {
 	repo, _ := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("Before Update", "owner-"+uuid.NewString())
-	if err := repo.CreateServer(ctx, srv, nil, chans); err != nil {
+	if err := repo.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
@@ -342,7 +358,7 @@ func TestRepo_UpdateServer_BannerNil_ClearsIt(t *testing.T) {
 	repo, _ := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("Has Banner", "owner-"+uuid.NewString())
-	if err := repo.CreateServer(ctx, srv, nil, chans); err != nil {
+	if err := repo.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 	bannerURL := "/v1/servers/" + srv.ID.String() + "/banner"
@@ -378,11 +394,11 @@ func TestRepo_UpdateServer_NameKeyCollisionWithAnotherOwnedServer_ReturnsNameTak
 	owner := "owner-" + uuid.NewString()
 
 	a, aCh := serverFixture("Server A", owner)
-	if err := repo.CreateServer(ctx, a, nil, aCh); err != nil {
+	if err := repo.CreateServer(ctx, a, nil, aCh, testOutboxEvent()); err != nil {
 		t.Fatalf("create A: %v", err)
 	}
 	b, bCh := serverFixture("Server B", owner)
-	if err := repo.CreateServer(ctx, b, nil, bCh); err != nil {
+	if err := repo.CreateServer(ctx, b, nil, bCh, testOutboxEvent()); err != nil {
 		t.Fatalf("create B: %v", err)
 	}
 

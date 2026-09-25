@@ -54,6 +54,16 @@ Con `docker compose up` se levanta también el servicio (`api`) contra la base.
 | SUPABASE_SERVICE_KEY | - (vacio) | `service_role` key del proyecto (Project Settings > API) -- nunca la `anon` key, esta se salta las políticas RLS del bucket. |
 | RABBITMQ_URL | - (vacio) | Conexion al broker para publicar eventos de dominio (exchange `discordia.events`, ver ADR-07). Vacia = publisher en no-op, el servicio funciona igual sin RabbitMQ. |
 
+Publicar un evento nunca pasa directo por RabbitMQ desde el request: el
+handler escribe una fila en `outbox_events` en la misma transacción que el
+cambio de negocio (crear server, sacar un miembro, etc.), y un poller
+(`internal/outbox`, arrancado en `main.go`, cada `outbox.PollInterval`) es
+el único que efectivamente publica -- así un crash o una caída de RabbitMQ
+entre el commit y el publish nunca pierde el evento silenciosamente, solo
+lo retrasa. El mensaje además se publica con `DeliveryMode: amqp.Persistent`
+(`internal/events/publisher.go`), para que RabbitMQ tampoco lo pierda si el
+broker se reinicia con el mensaje todavía sin consumir.
+
 Las `DATABASE_*` no tienen default: si falta alguna, el servicio no arranca (no se usa una credencial adivinada). Los valores reales van en el `.env`; `.env.example` trae los del Postgres local.
 
 ## Estructura de carpetas
@@ -68,7 +78,8 @@ servers/
 │   ├── repository/            acceso a datos (Postgres, etc.)
 │   ├── model/                 structs de dominio / DTOs
 │   ├── middleware/            middlewares de Gin (auth, logging, etc.)
-│   └── events/                 publisher de eventos hacia RabbitMQ (exchange discordia.events)
+│   ├── events/                 publisher de eventos hacia RabbitMQ (exchange discordia.events)
+│   └── outbox/                 outbox transaccional: Insert (misma tx que el write de negocio) + Poller
 ├── migrations/                migraciones de BDD (ej. golang-migrate)
 ├── .github/
 │   └── workflows/

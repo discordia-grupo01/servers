@@ -12,13 +12,13 @@ import (
 
 	"github.com/discordia-grupo01/events-contract/envelope"
 	"github.com/discordia-grupo01/events-contract/membership"
-	"github.com/discordia-grupo01/servers/internal/events"
 	"github.com/discordia-grupo01/servers/internal/iconstore"
 	"github.com/discordia-grupo01/servers/internal/model"
+	"github.com/discordia-grupo01/servers/internal/outbox"
 )
 
 type Repo interface {
-	CreateServer(ctx context.Context, srv model.Server, categories []model.Category, channels []model.Channel) error
+	CreateServer(ctx context.Context, srv model.Server, categories []model.Category, channels []model.Channel, memberJoinedEvent outbox.Event) error
 	ListForUser(ctx context.Context, userID string) ([]model.Server, error)
 	GetByID(ctx context.Context, id uuid.UUID) (model.Server, error)
 	UpdateServer(ctx context.Context, id uuid.UUID, name, nameKey string, iconURL, bannerURL *string) error
@@ -32,13 +32,12 @@ type IconStore interface {
 }
 
 type Service struct {
-	repo   Repo
-	icons  IconStore
-	events events.Publisher
+	repo  Repo
+	icons IconStore
 }
 
-func New(repo Repo, icons IconStore, publisher events.Publisher) *Service {
-	return &Service{repo: repo, icons: icons, events: publisher}
+func New(repo Repo, icons IconStore) *Service {
+	return &Service{repo: repo, icons: icons}
 }
 
 func validateServerName(raw string) (string, error) {
@@ -121,26 +120,25 @@ func (s *Service) CreateServer(ctx context.Context, p CreateServerParams) (model
 	}
 	srv.IconURL = &url
 
-	if err := s.repo.CreateServer(ctx, srv, categories, channels); err != nil {
+	memberJoinedEvent, err := outbox.New(membership.RoutingKeyMemberJoined, membership.MemberJoined{
+		Meta:     envelope.Meta{EventID: uuid.NewString(), OccurredAt: now},
+		ServerID: id.String(),
+		UserID:   p.OwnerID,
+	})
+	if err != nil {
+		return model.Server{}, err
+	}
+
+	if err := s.repo.CreateServer(ctx, srv, categories, channels, memberJoinedEvent); err != nil {
 		if hash, ok := iconstore.HashFromURL(url); ok {
 			_ = s.icons.Delete(iconstore.StorageKey(id.String(), hash))
 		}
 		return model.Server{}, err
 	}
 
-	s.publishMemberJoined(ctx, srv.ID, srv.OwnerID, srv.CreatedAt)
-
 	srv.Categories = categories
 	srv.Channels = channels
 	return srv, nil
-}
-
-func (s *Service) publishMemberJoined(ctx context.Context, serverID uuid.UUID, ownerID string, occurredAt time.Time) {
-	_ = s.events.Publish(ctx, membership.RoutingKeyMemberJoined, membership.MemberJoined{
-		Meta:     envelope.Meta{EventID: uuid.NewString(), OccurredAt: occurredAt},
-		ServerID: serverID.String(),
-		UserID:   ownerID,
-	})
 }
 
 func (s *Service) ListMyServers(ctx context.Context, userID string) ([]model.Server, error) {

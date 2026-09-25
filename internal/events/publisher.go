@@ -3,6 +3,7 @@ package events
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -76,6 +77,17 @@ func (p *AMQPPublisher) connect() error {
 }
 
 func (p *AMQPPublisher) Publish(ctx context.Context, routingKey string, payload any) error {
+	if err := p.publish(ctx, routingKey, payload); err != nil {
+		log.Printf("events: warning: could not publish %q: %v", routingKey, err)
+	}
+	return nil
+}
+
+func (p *AMQPPublisher) PublishOrError(ctx context.Context, routingKey string, payload any) error {
+	return p.publish(ctx, routingKey, payload)
+}
+
+func (p *AMQPPublisher) publish(ctx context.Context, routingKey string, payload any) error {
 	if p.url == "" {
 		return nil
 	}
@@ -83,28 +95,24 @@ func (p *AMQPPublisher) Publish(ctx context.Context, routingKey string, payload 
 	ch := p.currentChannel()
 	if ch == nil {
 		if err := p.connect(); err != nil {
-			log.Printf("events: warning: could not publish %q, RabbitMQ unreachable: %v", routingKey, err)
-			return nil
+			return fmt.Errorf("rabbitmq unreachable: %w", err)
 		}
 		ch = p.currentChannel()
 	}
 
 	body, err := json.Marshal(payload)
 	if err != nil {
-		log.Printf("events: warning: could not marshal payload for %q: %v", routingKey, err)
-		return nil
+		return fmt.Errorf("marshal payload: %w", err)
 	}
 
-	msg := amqp.Publishing{ContentType: "application/json", Body: body}
+	msg := amqp.Publishing{ContentType: "application/json", Body: body, DeliveryMode: amqp.Persistent}
 	if err := ch.PublishWithContext(ctx, broker.ExchangeName, routingKey, false, false, msg); err != nil {
-		log.Printf("events: warning: publish %q failed, reconnecting: %v", routingKey, err)
 		p.dropChannel()
 		if err := p.connect(); err != nil {
-			log.Printf("events: warning: reconnect after failed publish %q also failed: %v", routingKey, err)
-			return nil
+			return fmt.Errorf("reconnect after failed publish: %w", err)
 		}
 		if err := p.currentChannel().PublishWithContext(ctx, broker.ExchangeName, routingKey, false, false, msg); err != nil {
-			log.Printf("events: warning: publish %q failed again after reconnect: %v", routingKey, err)
+			return fmt.Errorf("publish failed again after reconnect: %w", err)
 		}
 	}
 	return nil

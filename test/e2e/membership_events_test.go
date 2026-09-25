@@ -27,6 +27,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/handler"
 	"github.com/discordia-grupo01/servers/internal/iconstore"
 	"github.com/discordia-grupo01/servers/internal/middleware"
+	"github.com/discordia-grupo01/servers/internal/outbox"
 	"github.com/discordia-grupo01/servers/internal/repository"
 	"github.com/discordia-grupo01/servers/internal/repository/member_repo"
 	"github.com/discordia-grupo01/servers/internal/service"
@@ -56,7 +57,8 @@ func setupE2E(t *testing.T) (*gin.Engine, <-chan amqp.Delivery) {
 		t.Skip("DATABASE_HOST and RABBITMQ_URL both required: skipping end-to-end test")
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
 	dsn := "host=" + dbHost +
 		" port=" + env("DATABASE_PORT", "5432") +
 		" dbname=" + env("DATABASE_NAME", "discordia_servicio") +
@@ -71,7 +73,7 @@ func setupE2E(t *testing.T) (*gin.Engine, <-chan amqp.Delivery) {
 	t.Cleanup(pool.Close)
 
 	dropTables := func() {
-		_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS member_roles, roles, ownership_transfers, categories, server_bans, invitations, server_members, channels, servers CASCADE`)
+		_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS outbox_events, member_roles, roles, ownership_transfers, categories, server_bans, invitations, server_members, channels, servers CASCADE`)
 	}
 	t.Cleanup(dropTables)
 	dropTables()
@@ -81,7 +83,7 @@ func setupE2E(t *testing.T) (*gin.Engine, <-chan amqp.Delivery) {
 		"0003_roles.up.sql", "0004_member_roles.up.sql", "0005_default_role.up.sql",
 		"0006_ownership_transfers.up.sql", "0007_categories.up.sql",
 		"0008_ownership_transfer_cancelled_status.up.sql", "0009_server_banner.up.sql",
-		"0010_native_categories.up.sql",
+		"0010_native_categories.up.sql", "0011_outbox_events.up.sql",
 	} {
 		schema, err := os.ReadFile("../../migrations/" + f)
 		if err != nil {
@@ -95,6 +97,7 @@ func setupE2E(t *testing.T) (*gin.Engine, <-chan amqp.Delivery) {
 	publisher := events.NewAMQPPublisher(rmqURL)
 	serverRepo := repository.NewServerRepository(pool)
 	memberRepo := member_repo.NewMemberRepository(pool)
+	go outbox.NewPoller(pool, publisher).Start(ctx)
 
 	icons, err := iconstore.NewLocalStore(t.TempDir(), 1<<20)
 	if err != nil {
@@ -103,10 +106,10 @@ func setupE2E(t *testing.T) (*gin.Engine, <-chan amqp.Delivery) {
 
 	gin.SetMode(gin.TestMode)
 	router := handler.NewRouter(handler.Deps{
-		Servers:     service.New(serverRepo, icons, publisher),
+		Servers:     service.New(serverRepo, icons),
 		Icons:       icons,
-		Membership:  membership_service.New(serverRepo, memberRepo, publisher),
-		Invitations: invitation.NewService(repository.NewInvitationRepository(pool), publisher),
+		Membership:  membership_service.New(serverRepo, memberRepo),
+		Invitations: invitation.NewService(repository.NewInvitationRepository(pool)),
 		Auth:        middleware.AuthConfig{UserIDHeader: "X-User-Id"},
 		DB:          pool,
 	})

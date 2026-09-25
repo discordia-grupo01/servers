@@ -8,22 +8,20 @@ import (
 
 	"github.com/discordia-grupo01/events-contract/envelope"
 	"github.com/discordia-grupo01/events-contract/membership"
-	"github.com/discordia-grupo01/servers/internal/events"
 	"github.com/discordia-grupo01/servers/internal/model"
+	"github.com/discordia-grupo01/servers/internal/outbox"
 )
 
 type MembershipService struct {
 	servers Servers
 	members Members
-	events  events.Publisher
 	now     func() time.Time
 }
 
-func New(servers Servers, members Members, publisher events.Publisher) *MembershipService {
+func New(servers Servers, members Members) *MembershipService {
 	return &MembershipService{
 		servers: servers,
 		members: members,
-		events:  publisher,
 		now:     func() time.Time { return time.Now().UTC() },
 	}
 }
@@ -44,14 +42,22 @@ func (s *MembershipService) LeaveServer(ctx context.Context, p LeaveParams) erro
 		return model.ErrOwnerCannotLeave
 	}
 
-	removed, err := s.members.RemoveMember(ctx, p.ServerID, p.ActorUserID)
+	memberLeftEvent, err := outbox.New(membership.RoutingKeyMemberLeft, membership.MemberLeft{
+		Meta:     envelope.Meta{EventID: uuid.NewString(), OccurredAt: s.now()},
+		ServerID: p.ServerID.String(),
+		UserID:   p.ActorUserID,
+	})
+	if err != nil {
+		return err
+	}
+
+	removed, err := s.members.RemoveMember(ctx, p.ServerID, p.ActorUserID, memberLeftEvent)
 	if err != nil {
 		return err
 	}
 	if !removed {
 		return model.ErrMemberNotFound
 	}
-	s.publishMemberLeft(ctx, p.ServerID, p.ActorUserID)
 	return nil
 }
 
@@ -88,12 +94,4 @@ func (s *MembershipService) ListMembers(ctx context.Context, p ListMembersParams
 	}
 
 	return s.members.ListMembers(ctx, p.ServerID, limit, offset)
-}
-
-func (s *MembershipService) publishMemberLeft(ctx context.Context, serverID uuid.UUID, userID string) {
-	_ = s.events.Publish(ctx, membership.RoutingKeyMemberLeft, membership.MemberLeft{
-		Meta:     envelope.Meta{EventID: uuid.NewString(), OccurredAt: s.now()},
-		ServerID: serverID.String(),
-		UserID:   userID,
-	})
 }
