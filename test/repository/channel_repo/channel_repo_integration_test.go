@@ -11,10 +11,18 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/discordia-grupo01/servers/internal/model"
+	"github.com/discordia-grupo01/servers/internal/outbox"
 	"github.com/discordia-grupo01/servers/internal/repository"
 	"github.com/discordia-grupo01/servers/internal/repository/category_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/channel_repo"
 )
+
+// testOutboxEvent is a valid placeholder for CreateServer's outbox event in
+// tests that don't care about its content, only that the call as a whole
+// succeeds -- payload can't be nil (outbox_events.payload is NOT NULL).
+func testOutboxEvent() outbox.Event {
+	return outbox.Event{RoutingKey: "test.event", Payload: []byte("{}")}
+}
 
 func newRepo(t *testing.T) (*channel_repo.ChannelRepository, *category_repo.CategoryRepository, *repository.ServerRepository) {
 	t.Helper()
@@ -42,6 +50,7 @@ func newRepo(t *testing.T) (*channel_repo.ChannelRepository, *category_repo.Cate
 		"../../../migrations/0001_init.up.sql",
 		"../../../migrations/0007_categories.up.sql",
 		"../../../migrations/0010_native_categories.up.sql",
+		"../../../migrations/0011_outbox_events.up.sql",
 	} {
 		schema, err := os.ReadFile(file)
 		if err != nil {
@@ -71,7 +80,7 @@ func TestChannelRepo_Create_ThenGetByID_ReturnsIt(t *testing.T) {
 	channels, _, servers := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, nil, chans); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 
@@ -101,7 +110,7 @@ func TestChannelRepo_Create_DuplicateNameNoCategory_ErrChannelNameTaken(t *testi
 	channels, _, servers := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, nil, chans); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 
@@ -118,7 +127,7 @@ func TestChannelRepo_Create_DuplicateNameSameCategory_ErrChannelNameTaken(t *tes
 	channels, categories, servers := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, nil, chans); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 	cat := model.Category{ID: uuid.New(), ServerID: srv.ID, Name: "Texto", CreatedAt: time.Now().UTC().Truncate(time.Millisecond)}
@@ -139,7 +148,7 @@ func TestChannelRepo_Create_SameNameDifferentCategory_Allowed(t *testing.T) {
 	channels, categories, servers := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, nil, chans); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 	catA := model.Category{ID: uuid.New(), ServerID: srv.ID, Name: "A", CreatedAt: time.Now().UTC().Truncate(time.Millisecond)}
@@ -163,7 +172,7 @@ func TestChannelRepo_Update_ChangesNameAndTopic(t *testing.T) {
 	channels, _, servers := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, nil, chans); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 	ch := channelFixture(srv.ID, "general", nil)
@@ -197,7 +206,7 @@ func TestChannelRepo_Delete_RemovesIt(t *testing.T) {
 	channels, _, servers := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, nil, chans); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 	ch := channelFixture(srv.ID, "general", nil)
@@ -225,7 +234,7 @@ func TestChannelRepo_MoveToCategory_UpdatesCategoryID(t *testing.T) {
 	channels, categories, servers := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, nil, chans); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 	cat := model.Category{ID: uuid.New(), ServerID: srv.ID, Name: "Texto", CreatedAt: time.Now().UTC().Truncate(time.Millisecond)}
@@ -264,7 +273,7 @@ func TestChannelRepo_ListByServerAndCategory_ScopesCorrectly(t *testing.T) {
 	channels, categories, servers := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, nil, chans); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 	cat := model.Category{ID: uuid.New(), ServerID: srv.ID, Name: "Texto", CreatedAt: time.Now().UTC().Truncate(time.Millisecond)}
@@ -302,7 +311,7 @@ func TestChannelRepo_ReorderPositions_UpdatesInOrder(t *testing.T) {
 	channels, _, servers := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, nil, chans); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 	a := channelFixture(srv.ID, "a", nil)
@@ -328,7 +337,7 @@ func TestChannelRepo_ReorderPositions_UpdatesInOrder(t *testing.T) {
 }
 
 func dropAllTestTables(ctx context.Context, pool *pgxpool.Pool) {
-	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS member_roles, roles, server_bans, invitations, server_members, categories, channels, servers CASCADE`)
+	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS outbox_events, member_roles, roles, server_bans, invitations, server_members, categories, channels, servers CASCADE`)
 }
 
 func env(k, def string) string {

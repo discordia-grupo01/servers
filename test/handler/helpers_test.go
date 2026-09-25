@@ -12,11 +12,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	"github.com/discordia-grupo01/servers/internal/events"
 	"github.com/discordia-grupo01/servers/internal/handler"
 	"github.com/discordia-grupo01/servers/internal/iconstore"
 	"github.com/discordia-grupo01/servers/internal/middleware"
 	"github.com/discordia-grupo01/servers/internal/model"
+	"github.com/discordia-grupo01/servers/internal/outbox"
 	"github.com/discordia-grupo01/servers/internal/service"
 )
 
@@ -42,7 +42,7 @@ type fakeRepo struct {
 	updateCalls int
 }
 
-func (f *fakeRepo) CreateServer(_ context.Context, s model.Server, _ []model.Category, _ []model.Channel) error {
+func (f *fakeRepo) CreateServer(_ context.Context, s model.Server, _ []model.Category, _ []model.Channel, _ outbox.Event) error {
 	f.calls++
 	if f.err != nil {
 		return f.err
@@ -122,7 +122,7 @@ func newRouter(t *testing.T, maxIcon int64, repoErr error) (*gin.Engine, *fakeRe
 		t.Fatal(err)
 	}
 	r := handler.NewRouter(handler.Deps{
-		Servers: service.New(repo, icons, events.NewAMQPPublisher("")),
+		Servers: service.New(repo, icons),
 		Icons:   icons,
 		Auth:    middleware.AuthConfig{UserIDHeader: "X-User-Id"},
 		DB:      okPinger{},

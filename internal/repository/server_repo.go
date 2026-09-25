@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/discordia-grupo01/servers/internal/model"
+	"github.com/discordia-grupo01/servers/internal/outbox"
 )
 
 const pgUniqueViolation = "23505"
@@ -26,8 +27,11 @@ func NewServerRepository(pool *pgxpool.Pool) *ServerRepository {
 
 // CreateServer inserts the server together with its native categories
 // (categories comes first, so channels below can FK into them), its default
-// channels and the owner's membership row, all in one transaction.
-func (r *ServerRepository) CreateServer(ctx context.Context, srv model.Server, categories []model.Category, channels []model.Channel) error {
+// channels, the owner's membership row and the outbox event for that
+// membership, all in one transaction -- so the MemberJoined event is
+// durable the instant the server exists, never dependent on a subsequent
+// RabbitMQ publish succeeding.
+func (r *ServerRepository) CreateServer(ctx context.Context, srv model.Server, categories []model.Category, channels []model.Channel, memberJoinedEvent outbox.Event) error {
 	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO servers (id, name, name_key, icon_url, owner_id, created_at)
@@ -74,7 +78,8 @@ func (r *ServerRepository) CreateServer(ctx context.Context, srv model.Server, c
 		); err != nil {
 			return fmt.Errorf("insert owner membership: %w", err)
 		}
-		return nil
+
+		return outbox.Insert(ctx, tx, memberJoinedEvent)
 	})
 }
 
