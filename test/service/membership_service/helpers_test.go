@@ -5,8 +5,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/discordia-grupo01/servers/internal/events"
 	"github.com/discordia-grupo01/servers/internal/model"
+	"github.com/discordia-grupo01/servers/internal/outbox"
 	"github.com/discordia-grupo01/servers/internal/service/membership_service"
 )
 
@@ -28,10 +28,11 @@ func (f *fakeServers) GetByID(context.Context, uuid.UUID) (model.Server, error) 
 }
 
 type fakeMembers struct {
-	removed     bool
-	removeErr   error
-	removeCalls int
-	removedUser string
+	removed        bool
+	removeErr      error
+	removeCalls    int
+	removedUser    string
+	gotOutboxEvent outbox.Event
 
 	isMember    bool
 	isMemberErr error
@@ -43,11 +44,14 @@ type fakeMembers struct {
 	gotOffset  int
 }
 
-func (f *fakeMembers) RemoveMember(_ context.Context, _ uuid.UUID, userID string) (bool, error) {
+func (f *fakeMembers) RemoveMember(_ context.Context, _ uuid.UUID, userID string, evt outbox.Event) (bool, error) {
 	f.removeCalls++
 	f.removedUser = userID
 	if f.removeErr != nil {
 		return false, f.removeErr
+	}
+	if f.removed {
+		f.gotOutboxEvent = evt
 	}
 	return f.removed, nil
 }
@@ -75,30 +79,8 @@ func memberServer() model.Server {
 }
 
 func newService(servers *fakeServers, members *fakeMembers) *membership_service.MembershipService {
-	return membership_service.New(servers, members, &fakePublisher{})
+	return membership_service.New(servers, members)
 }
-
-func newServiceWithPublisher(servers *fakeServers, members *fakeMembers, pub *fakePublisher) *membership_service.MembershipService {
-	return membership_service.New(servers, members, pub)
-}
-
-// fakePublisher records every event handed to it, for tests that assert on
-// what gets published.
-type fakePublisher struct {
-	published []publishedEvent
-}
-
-type publishedEvent struct {
-	routingKey string
-	payload    any
-}
-
-func (f *fakePublisher) Publish(_ context.Context, routingKey string, payload any) error {
-	f.published = append(f.published, publishedEvent{routingKey: routingKey, payload: payload})
-	return nil
-}
-
-var _ events.Publisher = (*fakePublisher)(nil)
 
 func leaveParams(srv model.Server, actor string) membership_service.LeaveParams {
 	return membership_service.LeaveParams{ServerID: srv.ID, ActorUserID: actor, TargetUserID: actor}

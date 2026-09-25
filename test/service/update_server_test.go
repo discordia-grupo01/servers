@@ -18,7 +18,7 @@ func serverToUpdate() model.Server {
 
 func update(t *testing.T, repo *fakeRepoHelper, icons *fakeIconsHelper, p service.UpdateServerParams) (model.Server, error) {
 	t.Helper()
-	return service.New(repo, icons, &fakePublisher{}).UpdateServer(context.Background(), p)
+	return service.New(repo, icons).UpdateServer(context.Background(), p)
 }
 
 // CA1: a valid edit by the owner persists and is reflected back.

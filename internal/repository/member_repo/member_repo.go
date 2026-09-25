@@ -7,10 +7,12 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/discordia-grupo01/servers/internal/model"
 	"github.com/discordia-grupo01/servers/internal/model/role"
+	"github.com/discordia-grupo01/servers/internal/outbox"
 )
 
 type MemberRepository struct {
@@ -85,15 +87,26 @@ func (r *MemberRepository) ListMembers(ctx context.Context, serverID uuid.UUID, 
 	return members, total, nil
 }
 
-func (r *MemberRepository) RemoveMember(ctx context.Context, serverID uuid.UUID, userID string) (bool, error) {
-	tag, err := r.pool.Exec(ctx,
-		`DELETE FROM server_members WHERE server_id = $1 AND user_id = $2`,
-		serverID, userID,
-	)
+func (r *MemberRepository) RemoveMember(ctx context.Context, serverID uuid.UUID, userID string, memberLeftEvent outbox.Event) (bool, error) {
+	var removed bool
+	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx,
+			`DELETE FROM server_members WHERE server_id = $1 AND user_id = $2`,
+			serverID, userID,
+		)
+		if err != nil {
+			return fmt.Errorf("remove member: %w", err)
+		}
+		removed = tag.RowsAffected() > 0
+		if !removed {
+			return nil
+		}
+		return outbox.Insert(ctx, tx, memberLeftEvent)
+	})
 	if err != nil {
-		return false, fmt.Errorf("remove member: %w", err)
+		return false, err
 	}
-	return tag.RowsAffected() > 0, nil
+	return removed, nil
 }
 
 func (r *MemberRepository) RemoveRole(ctx context.Context, serverID uuid.UUID, userID string, roleID uuid.UUID) error {

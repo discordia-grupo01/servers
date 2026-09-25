@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/discordia-grupo01/servers/internal/model"
+	"github.com/discordia-grupo01/servers/internal/outbox"
 )
 
 const uqInvitationsCode = "invitations_code_key"
@@ -132,7 +133,7 @@ func (r *InvitationRepository) RevokeInvitation(ctx context.Context, code string
 	return nil
 }
 
-func (r *InvitationRepository) RedeemInvitation(ctx context.Context, code, userID string, now time.Time) (uuid.UUID, error) {
+func (r *InvitationRepository) RedeemInvitation(ctx context.Context, code, userID string, now time.Time, buildEvent func(serverID uuid.UUID) (outbox.Event, error)) (uuid.UUID, error) {
 	var serverID uuid.UUID
 	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
 		row := tx.QueryRow(ctx, `
@@ -179,7 +180,12 @@ func (r *InvitationRepository) RedeemInvitation(ctx context.Context, code, userI
 				return fmt.Errorf("assign default role: %w", err)
 			}
 		}
-		return nil
+
+		evt, err := buildEvent(serverID)
+		if err != nil {
+			return fmt.Errorf("build member joined event: %w", err)
+		}
+		return outbox.Insert(ctx, tx, evt)
 	})
 	if err != nil {
 		return uuid.Nil, err

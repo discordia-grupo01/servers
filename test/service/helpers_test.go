@@ -7,17 +7,19 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/discordia-grupo01/servers/internal/model"
+	"github.com/discordia-grupo01/servers/internal/outbox"
 	"github.com/discordia-grupo01/servers/internal/service"
 )
 
 const testOwner = "user-123"
 
 type fakeRepoHelper struct {
-	err       error
-	calls     int
-	gotServer model.Server
-	gotCats   []model.Category
-	gotChans  []model.Channel
+	err            error
+	calls          int
+	gotServer      model.Server
+	gotCats        []model.Category
+	gotChans       []model.Channel
+	gotOutboxEvent outbox.Event
 
 	listResult  []model.Server
 	listErr     error
@@ -34,12 +36,12 @@ type fakeRepoHelper struct {
 	updateCalls int
 }
 
-func (f *fakeRepoHelper) CreateServer(_ context.Context, s model.Server, cats []model.Category, ch []model.Channel) error {
+func (f *fakeRepoHelper) CreateServer(_ context.Context, s model.Server, cats []model.Category, ch []model.Channel, evt outbox.Event) error {
 	f.calls++
 	if f.err != nil {
 		return f.err
 	}
-	f.gotServer, f.gotCats, f.gotChans = s, cats, ch
+	f.gotServer, f.gotCats, f.gotChans, f.gotOutboxEvent = s, cats, ch, evt
 	f.getResult = s
 	return nil
 }
@@ -113,35 +115,21 @@ func (f *fakeIconsHelper) GenerateDefault() ([]byte, error) {
 func create(t *testing.T, p service.CreateServerParams) (model.Server, error, *fakeRepoHelper, *fakeIconsHelper) {
 	t.Helper()
 	repo, icons := &fakeRepoHelper{}, &fakeIconsHelper{}
-	srv, err := service.New(repo, icons, &fakePublisher{}).CreateServer(context.Background(), p)
+	srv, err := service.New(repo, icons).CreateServer(context.Background(), p)
 	return srv, err, repo, icons
 }
 
 func createRepoErr(t *testing.T, p service.CreateServerParams, repoErr error) (model.Server, error, *fakeRepoHelper, *fakeIconsHelper) {
 	t.Helper()
 	repo, icons := &fakeRepoHelper{err: repoErr}, &fakeIconsHelper{}
-	srv, err := service.New(repo, icons, &fakePublisher{}).CreateServer(context.Background(), p)
+	srv, err := service.New(repo, icons).CreateServer(context.Background(), p)
 	return srv, err, repo, icons
 }
 
 func createIconErr(t *testing.T, p service.CreateServerParams, iconErr error) (model.Server, error, *fakeRepoHelper, *fakeIconsHelper) {
 	t.Helper()
 	repo, icons := &fakeRepoHelper{}, &fakeIconsHelper{err: iconErr}
-	srv, err := service.New(repo, icons, &fakePublisher{}).CreateServer(context.Background(), p)
-	return srv, err, repo, icons
-}
-
-func createWithPublisher(t *testing.T, p service.CreateServerParams, pub *fakePublisher) (model.Server, error, *fakeRepoHelper, *fakeIconsHelper) {
-	t.Helper()
-	repo, icons := &fakeRepoHelper{}, &fakeIconsHelper{}
-	srv, err := service.New(repo, icons, pub).CreateServer(context.Background(), p)
-	return srv, err, repo, icons
-}
-
-func createRepoErrWithPublisher(t *testing.T, p service.CreateServerParams, repoErr error, pub *fakePublisher) (model.Server, error, *fakeRepoHelper, *fakeIconsHelper) {
-	t.Helper()
-	repo, icons := &fakeRepoHelper{err: repoErr}, &fakeIconsHelper{}
-	srv, err := service.New(repo, icons, pub).CreateServer(context.Background(), p)
+	srv, err := service.New(repo, icons).CreateServer(context.Background(), p)
 	return srv, err, repo, icons
 }
 

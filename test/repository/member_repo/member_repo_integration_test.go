@@ -12,10 +12,19 @@ import (
 
 	"github.com/discordia-grupo01/servers/internal/model"
 	"github.com/discordia-grupo01/servers/internal/model/role"
+	"github.com/discordia-grupo01/servers/internal/outbox"
 	"github.com/discordia-grupo01/servers/internal/repository"
 	"github.com/discordia-grupo01/servers/internal/repository/member_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/role_repo"
 )
+
+// testOutboxEvent is a valid placeholder for CreateServer/RemoveMember's
+// outbox event in tests that don't care about its content, only that the
+// call as a whole succeeds -- payload can't be nil (outbox_events.payload
+// is NOT NULL).
+func testOutboxEvent() outbox.Event {
+	return outbox.Event{RoutingKey: "test.event", Payload: []byte("{}")}
+}
 
 func newRepo(t *testing.T) (*member_repo.MemberRepository, *repository.ServerRepository, *role_repo.RoleRepository, *pgxpool.Pool) {
 	t.Helper()
@@ -44,6 +53,7 @@ func newRepo(t *testing.T) (*member_repo.MemberRepository, *repository.ServerRep
 		"../../../migrations/0003_roles.up.sql",
 		"../../../migrations/0004_member_roles.up.sql",
 		"../../../migrations/0005_default_role.up.sql",
+		"../../../migrations/0011_outbox_events.up.sql",
 	} {
 		schema, err := os.ReadFile(file)
 		if err != nil {
@@ -60,7 +70,7 @@ func seedServerWithMember(ctx context.Context, t *testing.T, servers *repository
 	t.Helper()
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	srv := model.Server{ID: uuid.New(), Name: "Test Server", NameKey: "test server", OwnerID: "owner-" + uuid.NewString(), CreatedAt: now}
-	if err := servers.CreateServer(ctx, srv, nil, nil); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, nil, testOutboxEvent()); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 
@@ -208,7 +218,7 @@ func TestMemberRepo_RemoveMember_ThenIsMemberFalse(t *testing.T) {
 	ctx := context.Background()
 	srv, member := seedServerWithMember(ctx, t, servers, pool)
 
-	removed, err := members.RemoveMember(ctx, srv.ID, member)
+	removed, err := members.RemoveMember(ctx, srv.ID, member, testOutboxEvent())
 	if err != nil || !removed {
 		t.Fatalf("RemoveMember = %v, %v; want true, nil", removed, err)
 	}
@@ -224,7 +234,7 @@ func TestMemberRepo_RemoveMember_NotAMember_ReturnsFalse(t *testing.T) {
 	ctx := context.Background()
 	srv, _ := seedServerWithMember(ctx, t, servers, pool)
 
-	removed, err := members.RemoveMember(ctx, srv.ID, "never-joined")
+	removed, err := members.RemoveMember(ctx, srv.ID, "never-joined", testOutboxEvent())
 	if err != nil || removed {
 		t.Errorf("RemoveMember(non-member) = %v, %v; want false, nil", removed, err)
 	}
@@ -240,7 +250,7 @@ func TestMemberRepo_RemoveMember_CascadesToMemberRoles(t *testing.T) {
 		t.Fatalf("AssignRole: %v", err)
 	}
 
-	if _, err := members.RemoveMember(ctx, srv.ID, member); err != nil {
+	if _, err := members.RemoveMember(ctx, srv.ID, member, testOutboxEvent()); err != nil {
 		t.Fatalf("RemoveMember: %v", err)
 	}
 
@@ -328,7 +338,7 @@ func TestMemberRepo_ListMembers_ReportsOwnerFlag(t *testing.T) {
 // packages might have created, so a test run leaves the database exactly as
 // clean as it found it -- both before it starts and after it finishes.
 func dropAllTestTables(ctx context.Context, pool *pgxpool.Pool) {
-	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS member_roles, roles, server_bans, invitations, server_members, channels, servers CASCADE`)
+	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS outbox_events, member_roles, roles, server_bans, invitations, server_members, channels, servers CASCADE`)
 }
 
 func env(k, def string) string {

@@ -11,9 +11,17 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/discordia-grupo01/servers/internal/model"
+	"github.com/discordia-grupo01/servers/internal/outbox"
 	"github.com/discordia-grupo01/servers/internal/repository"
 	"github.com/discordia-grupo01/servers/internal/repository/ownership_transfer_repo"
 )
+
+// testOutboxEvent is a valid placeholder for CreateServer's outbox event in
+// tests that don't care about its content, only that the call as a whole
+// succeeds -- payload can't be nil (outbox_events.payload is NOT NULL).
+func testOutboxEvent() outbox.Event {
+	return outbox.Event{RoutingKey: "test.event", Payload: []byte("{}")}
+}
 
 func newRepo(t *testing.T) (*ownership_transfer_repo.Repository, *repository.ServerRepository, *pgxpool.Pool) {
 	t.Helper()
@@ -41,6 +49,7 @@ func newRepo(t *testing.T) (*ownership_transfer_repo.Repository, *repository.Ser
 		"../../../migrations/0001_init.up.sql",
 		"../../../migrations/0006_ownership_transfers.up.sql",
 		"../../../migrations/0008_ownership_transfer_cancelled_status.up.sql",
+		"../../../migrations/0011_outbox_events.up.sql",
 	} {
 		schema, err := os.ReadFile(file)
 		if err != nil {
@@ -59,7 +68,7 @@ func seedServerWithMember(ctx context.Context, t *testing.T, servers *repository
 	t.Helper()
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	srv := model.Server{ID: uuid.New(), Name: "Test Server", NameKey: "test server", OwnerID: "owner-" + uuid.NewString(), CreatedAt: now}
-	if err := servers.CreateServer(ctx, srv, nil, nil); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, nil, testOutboxEvent()); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 
@@ -467,7 +476,7 @@ func TestOwnershipTransferRepo_ExpireStalePending_IgnoresFreshOnes(t *testing.T)
 }
 
 func dropAllTestTables(ctx context.Context, pool *pgxpool.Pool) {
-	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS ownership_transfers, member_roles, roles, server_bans, invitations, server_members, channels, servers CASCADE`)
+	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS outbox_events, ownership_transfers, member_roles, roles, server_bans, invitations, server_members, channels, servers CASCADE`)
 }
 
 func env(k, def string) string {

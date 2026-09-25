@@ -22,10 +22,12 @@ import (
 	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
 
+	"github.com/discordia-grupo01/events-contract/membership"
 	"github.com/discordia-grupo01/servers/internal/events"
 	"github.com/discordia-grupo01/servers/internal/handler"
 	"github.com/discordia-grupo01/servers/internal/iconstore"
 	"github.com/discordia-grupo01/servers/internal/middleware"
+	"github.com/discordia-grupo01/servers/internal/outbox"
 	"github.com/discordia-grupo01/servers/internal/repository"
 	"github.com/discordia-grupo01/servers/internal/repository/member_repo"
 	"github.com/discordia-grupo01/servers/internal/service"
@@ -55,7 +57,8 @@ func setupE2E(t *testing.T) (*gin.Engine, <-chan amqp.Delivery) {
 		t.Skip("DATABASE_HOST and RABBITMQ_URL both required: skipping end-to-end test")
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
 	dsn := "host=" + dbHost +
 		" port=" + env("DATABASE_PORT", "5432") +
 		" dbname=" + env("DATABASE_NAME", "discordia_servicio") +
@@ -70,7 +73,7 @@ func setupE2E(t *testing.T) (*gin.Engine, <-chan amqp.Delivery) {
 	t.Cleanup(pool.Close)
 
 	dropTables := func() {
-		_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS member_roles, roles, ownership_transfers, categories, server_bans, invitations, server_members, channels, servers CASCADE`)
+		_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS outbox_events, member_roles, roles, ownership_transfers, categories, server_bans, invitations, server_members, channels, servers CASCADE`)
 	}
 	t.Cleanup(dropTables)
 	dropTables()
@@ -80,7 +83,7 @@ func setupE2E(t *testing.T) (*gin.Engine, <-chan amqp.Delivery) {
 		"0003_roles.up.sql", "0004_member_roles.up.sql", "0005_default_role.up.sql",
 		"0006_ownership_transfers.up.sql", "0007_categories.up.sql",
 		"0008_ownership_transfer_cancelled_status.up.sql", "0009_server_banner.up.sql",
-		"0010_native_categories.up.sql",
+		"0010_native_categories.up.sql", "0011_outbox_events.up.sql",
 	} {
 		schema, err := os.ReadFile("../../migrations/" + f)
 		if err != nil {
@@ -94,6 +97,7 @@ func setupE2E(t *testing.T) (*gin.Engine, <-chan amqp.Delivery) {
 	publisher := events.NewAMQPPublisher(rmqURL)
 	serverRepo := repository.NewServerRepository(pool)
 	memberRepo := member_repo.NewMemberRepository(pool)
+	go outbox.NewPoller(pool, publisher).Start(ctx)
 
 	icons, err := iconstore.NewLocalStore(t.TempDir(), 1<<20)
 	if err != nil {
@@ -102,10 +106,10 @@ func setupE2E(t *testing.T) (*gin.Engine, <-chan amqp.Delivery) {
 
 	gin.SetMode(gin.TestMode)
 	router := handler.NewRouter(handler.Deps{
-		Servers:     service.New(serverRepo, icons, publisher),
+		Servers:     service.New(serverRepo, icons),
 		Icons:       icons,
-		Membership:  membership_service.New(serverRepo, memberRepo, publisher),
-		Invitations: invitation.NewService(repository.NewInvitationRepository(pool), publisher),
+		Membership:  membership_service.New(serverRepo, memberRepo),
+		Invitations: invitation.NewService(repository.NewInvitationRepository(pool)),
 		Auth:        middleware.AuthConfig{UserIDHeader: "X-User-Id"},
 		DB:          pool,
 	})
@@ -129,7 +133,7 @@ func setupE2E(t *testing.T) (*gin.Engine, <-chan amqp.Delivery) {
 	if err != nil {
 		t.Fatalf("QueueDeclare: %v", err)
 	}
-	for _, key := range []string{events.RoutingKeyMemberJoined, events.RoutingKeyMemberLeft} {
+	for _, key := range []string{membership.RoutingKeyMemberJoined, membership.RoutingKeyMemberLeft} {
 		if err := ch.QueueBind(q.Name, key, "discordia.events", false, nil); err != nil {
 			t.Fatalf("QueueBind %s: %v", key, err)
 		}
@@ -142,21 +146,24 @@ func setupE2E(t *testing.T) (*gin.Engine, <-chan amqp.Delivery) {
 	return router, deliveries
 }
 
-func waitForEvent(t *testing.T, deliveries <-chan amqp.Delivery, wantRoutingKey string) events.MembershipEvent {
+// membership.MemberJoined and MemberLeft share the same wire shape, so
+// decoding into MemberJoined here is fine regardless of wantRoutingKey --
+// the routing key check above is what actually verifies which event fired.
+func waitForEvent(t *testing.T, deliveries <-chan amqp.Delivery, wantRoutingKey string) membership.MemberJoined {
 	t.Helper()
 	select {
 	case msg := <-deliveries:
 		if msg.RoutingKey != wantRoutingKey {
 			t.Fatalf("routing key = %q, want %q", msg.RoutingKey, wantRoutingKey)
 		}
-		var evt events.MembershipEvent
+		var evt membership.MemberJoined
 		if err := json.Unmarshal(msg.Body, &evt); err != nil {
 			t.Fatalf("unmarshal delivered payload: %v", err)
 		}
 		return evt
 	case <-time.After(5 * time.Second):
 		t.Fatalf("timed out waiting for a %q event", wantRoutingKey)
-		return events.MembershipEvent{}
+		return membership.MemberJoined{}
 	}
 }
 
@@ -208,7 +215,7 @@ func TestMembershipEvents_EndToEnd(t *testing.T) {
 		t.Fatalf("decode server: %v", err)
 	}
 
-	ownerEvt := waitForEvent(t, deliveries, events.RoutingKeyMemberJoined)
+	ownerEvt := waitForEvent(t, deliveries, membership.RoutingKeyMemberJoined)
 	if ownerEvt.ServerID != srv.ID || ownerEvt.UserID != owner {
 		t.Fatalf("owner join event = %+v, want server_id=%s user_id=%s", ownerEvt, srv.ID, owner)
 	}
@@ -229,7 +236,7 @@ func TestMembershipEvents_EndToEnd(t *testing.T) {
 		t.Fatalf("join: code=%d body=%s", w.Code, w.Body.String())
 	}
 
-	joinEvt := waitForEvent(t, deliveries, events.RoutingKeyMemberJoined)
+	joinEvt := waitForEvent(t, deliveries, membership.RoutingKeyMemberJoined)
 	if joinEvt.ServerID != srv.ID || joinEvt.UserID != joiner {
 		t.Fatalf("join event = %+v, want server_id=%s user_id=%s", joinEvt, srv.ID, joiner)
 	}
@@ -242,7 +249,7 @@ func TestMembershipEvents_EndToEnd(t *testing.T) {
 		t.Fatalf("leave: code=%d body=%s", w.Code, w.Body.String())
 	}
 
-	leaveEvt := waitForEvent(t, deliveries, events.RoutingKeyMemberLeft)
+	leaveEvt := waitForEvent(t, deliveries, membership.RoutingKeyMemberLeft)
 	if leaveEvt.ServerID != srv.ID || leaveEvt.UserID != joiner {
 		t.Fatalf("leave event = %+v, want server_id=%s user_id=%s", leaveEvt, srv.ID, joiner)
 	}

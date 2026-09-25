@@ -2,12 +2,13 @@ package membership_service_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
 	"github.com/google/uuid"
 
-	"github.com/discordia-grupo01/servers/internal/events"
+	"github.com/discordia-grupo01/events-contract/membership"
 	"github.com/discordia-grupo01/servers/internal/model"
 	"github.com/discordia-grupo01/servers/internal/service/membership_service"
 )
@@ -193,23 +194,19 @@ func TestListMembers_Unauthenticated(t *testing.T) {
 // payload shape.
 func TestLeaveServer_Success_PublishesMemberLeft(t *testing.T) {
 	srv := memberServer()
-	pub := &fakePublisher{}
-	svc := newServiceWithPublisher(&fakeServers{server: srv}, &fakeMembers{removed: true}, pub)
+	members := &fakeMembers{removed: true}
+	svc := newService(&fakeServers{server: srv}, members)
 
 	if err := svc.LeaveServer(context.Background(), leaveParams(srv, testMember)); err != nil {
 		t.Fatalf("LeaveServer() error = %v, want nil", err)
 	}
 
-	if len(pub.published) != 1 {
-		t.Fatalf("published events = %d, want 1", len(pub.published))
+	if members.gotOutboxEvent.RoutingKey != membership.RoutingKeyMemberLeft {
+		t.Errorf("routing key = %q, want %q", members.gotOutboxEvent.RoutingKey, membership.RoutingKeyMemberLeft)
 	}
-	got := pub.published[0]
-	if got.routingKey != events.RoutingKeyMemberLeft {
-		t.Errorf("routing key = %q, want %q", got.routingKey, events.RoutingKeyMemberLeft)
-	}
-	evt, ok := got.payload.(events.MembershipEvent)
-	if !ok {
-		t.Fatalf("payload type = %T, want events.MembershipEvent", got.payload)
+	var evt membership.MemberLeft
+	if err := json.Unmarshal(members.gotOutboxEvent.Payload, &evt); err != nil {
+		t.Fatalf("unmarshal outbox payload: %v", err)
 	}
 	if evt.EventID == "" {
 		t.Error("event_id must not be empty")
@@ -228,28 +225,28 @@ func TestLeaveServer_Success_PublishesMemberLeft(t *testing.T) {
 // CB: the underlying RemoveMember write fails -> nothing gets published.
 func TestLeaveServer_RemoveMemberFails_DoesNotPublish(t *testing.T) {
 	srv := memberServer()
-	pub := &fakePublisher{}
-	svc := newServiceWithPublisher(&fakeServers{server: srv}, &fakeMembers{removeErr: errors.New("db down")}, pub)
+	members := &fakeMembers{removeErr: errors.New("db down")}
+	svc := newService(&fakeServers{server: srv}, members)
 
 	if err := svc.LeaveServer(context.Background(), leaveParams(srv, testMember)); err == nil {
 		t.Fatal("expected an error from RemoveMember")
 	}
-	if len(pub.published) != 0 {
-		t.Errorf("published = %d events, want 0 when the DB write fails", len(pub.published))
+	if members.gotOutboxEvent.RoutingKey != "" {
+		t.Errorf("gotOutboxEvent.RoutingKey = %q, want empty when the DB write fails", members.gotOutboxEvent.RoutingKey)
 	}
 }
 
 // CB: the user was not a member -> nothing gets published.
 func TestLeaveServer_NotAMember_DoesNotPublish(t *testing.T) {
 	srv := memberServer()
-	pub := &fakePublisher{}
-	svc := newServiceWithPublisher(&fakeServers{server: srv}, &fakeMembers{removed: false}, pub)
+	members := &fakeMembers{removed: false}
+	svc := newService(&fakeServers{server: srv}, members)
 
 	if err := svc.LeaveServer(context.Background(), leaveParams(srv, testMember)); !errors.Is(err, model.ErrMemberNotFound) {
 		t.Fatalf("err = %v, want ErrMemberNotFound", err)
 	}
-	if len(pub.published) != 0 {
-		t.Errorf("published = %d events, want 0", len(pub.published))
+	if members.gotOutboxEvent.RoutingKey != "" {
+		t.Errorf("gotOutboxEvent.RoutingKey = %q, want empty", members.gotOutboxEvent.RoutingKey)
 	}
 }
 
@@ -257,13 +254,13 @@ func TestLeaveServer_NotAMember_DoesNotPublish(t *testing.T) {
 // nothing gets published.
 func TestLeaveServer_OwnerConflict_DoesNotPublish(t *testing.T) {
 	srv := memberServer()
-	pub := &fakePublisher{}
-	svc := newServiceWithPublisher(&fakeServers{server: srv}, &fakeMembers{removed: true}, pub)
+	members := &fakeMembers{removed: true}
+	svc := newService(&fakeServers{server: srv}, members)
 
 	if err := svc.LeaveServer(context.Background(), leaveParams(srv, testOwner)); !errors.Is(err, model.ErrOwnerCannotLeave) {
 		t.Fatalf("err = %v, want ErrOwnerCannotLeave", err)
 	}
-	if len(pub.published) != 0 {
-		t.Errorf("published = %d events, want 0", len(pub.published))
+	if members.gotOutboxEvent.RoutingKey != "" {
+		t.Errorf("gotOutboxEvent.RoutingKey = %q, want empty", members.gotOutboxEvent.RoutingKey)
 	}
 }

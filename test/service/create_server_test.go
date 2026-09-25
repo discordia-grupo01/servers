@@ -1,11 +1,12 @@
 package service_test
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"unicode/utf8"
 
-	"github.com/discordia-grupo01/servers/internal/events"
+	"github.com/discordia-grupo01/events-contract/membership"
 	"github.com/discordia-grupo01/servers/internal/model"
 	"github.com/discordia-grupo01/servers/internal/service"
 )
@@ -175,22 +176,17 @@ func TestCreateServer_WithIcon_SetsIconURL(t *testing.T) {
 // otherwise the owner never shows up in "servidores en común" with anyone,
 // in any server they own.
 func TestCreateServer_Success_PublishesMemberJoinedForTheOwner(t *testing.T) {
-	pub := &fakePublisher{}
-	srv, err, _, _ := createWithPublisher(t, validParams("Mi Comunidad"), pub)
+	srv, err, repo, _ := create(t, validParams("Mi Comunidad"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if len(pub.published) != 1 {
-		t.Fatalf("published events = %d, want 1", len(pub.published))
+	if repo.gotOutboxEvent.RoutingKey != membership.RoutingKeyMemberJoined {
+		t.Errorf("routing key = %q, want %q", repo.gotOutboxEvent.RoutingKey, membership.RoutingKeyMemberJoined)
 	}
-	got := pub.published[0]
-	if got.routingKey != events.RoutingKeyMemberJoined {
-		t.Errorf("routing key = %q, want %q", got.routingKey, events.RoutingKeyMemberJoined)
-	}
-	evt, ok := got.payload.(events.MembershipEvent)
-	if !ok {
-		t.Fatalf("payload type = %T, want events.MembershipEvent", got.payload)
+	var evt membership.MemberJoined
+	if err := json.Unmarshal(repo.gotOutboxEvent.Payload, &evt); err != nil {
+		t.Fatalf("unmarshal outbox payload: %v", err)
 	}
 	if evt.EventID == "" {
 		t.Error("event_id must not be empty")
@@ -206,16 +202,16 @@ func TestCreateServer_Success_PublishesMemberJoinedForTheOwner(t *testing.T) {
 	}
 }
 
-// CB: the DB write fails (e.g. name taken) -> no membership row was created,
-// so nothing should be published.
+// CB: the DB write fails (e.g. name taken) -> the whole transaction (server,
+// membership row and outbox event) rolls back, so nothing should have been
+// recorded as persisted.
 func TestCreateServer_RepoFails_DoesNotPublish(t *testing.T) {
-	pub := &fakePublisher{}
-	_, err, _, _ := createRepoErrWithPublisher(t, validParams("Mi Comunidad"), model.ErrNameTaken, pub)
+	_, err, repo, _ := createRepoErr(t, validParams("Mi Comunidad"), model.ErrNameTaken)
 	if err == nil {
 		t.Fatal("expected an error from the repository")
 	}
-	if len(pub.published) != 0 {
-		t.Errorf("published = %d events, want 0 when the DB write fails", len(pub.published))
+	if repo.gotOutboxEvent.RoutingKey != "" {
+		t.Errorf("gotOutboxEvent.RoutingKey = %q, want empty (nothing recorded) when the DB write fails", repo.gotOutboxEvent.RoutingKey)
 	}
 }
 
