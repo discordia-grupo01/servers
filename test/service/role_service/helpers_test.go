@@ -89,8 +89,46 @@ func ownerServer() model.Server {
 	return model.Server{ID: uuid.New(), OwnerID: testOwner, Name: "Test Server"}
 }
 
+// fakeMembers covers the actor's standing (same semantics as the other
+// packages' fakeStandings) and HasRole for the "can't remove your own
+// ADMINISTRATOR" rule.
+type fakeMembers struct {
+	standing    role.Standing
+	standingErr error
+
+	hasRole      bool
+	hasRoleErr   error
+	hasRoleCalls int
+}
+
+func (f *fakeMembers) MemberStanding(_ context.Context, _ uuid.UUID, _ string) (role.Standing, error) {
+	if f.standingErr != nil {
+		return role.Standing{}, f.standingErr
+	}
+	return f.standing, nil
+}
+
+func (f *fakeMembers) HasRole(_ context.Context, _ uuid.UUID, _ string, _ uuid.UUID) (bool, error) {
+	f.hasRoleCalls++
+	if f.hasRoleErr != nil {
+		return false, f.hasRoleErr
+	}
+	return f.hasRole, nil
+}
+
+// adminStanding is a non-owner member holding ADMINISTRATOR through a role.
+func adminStanding() role.Standing {
+	return role.Standing{IsMember: true, Permissions: role.PermAdministrator}
+}
+
+const testAdmin = "admin-1"
+
 func newService(servers *fakeServers, roles *fakeRoles) *role_service.RoleService {
-	return role_service.New(servers, roles)
+	return newServiceWithMembers(servers, roles, &fakeMembers{})
+}
+
+func newServiceWithMembers(servers *fakeServers, roles *fakeRoles, members *fakeMembers) *role_service.RoleService {
+	return role_service.New(servers, roles, members)
 }
 
 func validCreateParams(serverID uuid.UUID) role_service.CreateRoleParams {

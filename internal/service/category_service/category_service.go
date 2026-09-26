@@ -30,12 +30,13 @@ type Repo interface {
 }
 
 type CategoryService struct {
-	servers Servers
-	repo    Repo
+	servers   Servers
+	repo      Repo
+	standings service.StandingReader
 }
 
-func New(servers Servers, repo Repo) *CategoryService {
-	return &CategoryService{servers: servers, repo: repo}
+func New(servers Servers, repo Repo, standings service.StandingReader) *CategoryService {
+	return &CategoryService{servers: servers, repo: repo, standings: standings}
 }
 
 func validateCategoryName(name string) (string, error) {
@@ -63,7 +64,11 @@ func (s *CategoryService) CreateCategory(ctx context.Context, p CreateCategoryPa
 	if err != nil {
 		return model.Category{}, err
 	}
-	if err := service.RequireManageChannels(srv, p.UserID); err != nil {
+	actor, err := service.ResolveStanding(ctx, s.standings, srv, p.UserID)
+	if err != nil {
+		return model.Category{}, err
+	}
+	if err := service.RequireManageChannels(actor); err != nil {
 		return model.Category{}, err
 	}
 
@@ -101,7 +106,11 @@ func (s *CategoryService) UpdateCategory(ctx context.Context, p UpdateCategoryPa
 	if err != nil {
 		return model.Category{}, err
 	}
-	if err := service.RequireManageChannels(srv, p.UserID); err != nil {
+	actor, err := service.ResolveStanding(ctx, s.standings, srv, p.UserID)
+	if err != nil {
+		return model.Category{}, err
+	}
+	if err := service.RequireManageChannels(actor); err != nil {
 		return model.Category{}, err
 	}
 
@@ -134,7 +143,11 @@ func (s *CategoryService) ReorderCategories(ctx context.Context, p ReorderCatego
 	if err != nil {
 		return err
 	}
-	if err := service.RequireManageChannels(srv, p.UserID); err != nil {
+	actor, err := service.ResolveStanding(ctx, s.standings, srv, p.UserID)
+	if err != nil {
+		return err
+	}
+	if err := service.RequireManageChannels(actor); err != nil {
 		return err
 	}
 

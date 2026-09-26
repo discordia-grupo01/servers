@@ -46,7 +46,7 @@ Con `docker compose up` se levanta también el servicio (`api`) contra la base.
 | DATABASE_PASSWORD | **(obligatoria)** | Password de conexion. |
 | DATABASE_SSLMODE | disable | `disable` en local; `require` cuando la BDD es Supabase (exige TLS). |
 | DATABASE_SCHEMA | - (vacio) | Vacio en local. En Supabase, el schema dedicado de este servicio dentro del proyecto compartido (ver seccion "Supabase" mas abajo). |
-| USER_ID_HEADER | X-User-Id | Header con el user id que inyecta Kong tras validar el JWT. |
+| USER_ID_HEADER | - (vacio) | Vacio = el usuario sale del `sub` del JWT (`Authorization: Bearer ...`), que es lo que llega via Kong. Solo para desarrollo local (curl/tests): con `X-User-Id` el servicio toma ese header como identidad del usuario. **Nunca setearlo en un entorno desplegado**: Kong no filtra ese header, asi que cualquier cliente podria hacerse pasar por otro usuario. |
 | ICON_DIR | ./data/icons | Directorio donde se guardan los iconos subidos (si no se usa Supabase Storage, ver debajo). |
 | ICON_MAX_BYTES | 5242880 | Tamano maximo (bytes) de un icono o banner. |
 | SUPABASE_STORAGE_URL | - (vacio) | URL del proyecto de Supabase (`https://xxxx.supabase.co`). Si esta + `SUPABASE_STORAGE_BUCKET` + `SUPABASE_SERVICE_KEY`, los iconos van a ese bucket en vez de a `ICON_DIR` (ver seccion "Supabase Storage" mas abajo). |

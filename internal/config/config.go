@@ -46,7 +46,7 @@ func Load() (Config, error) {
 		DatabaseSSLMode:  getenv("DATABASE_SSLMODE", "disable"),
 		DatabaseSchema:   os.Getenv("DATABASE_SCHEMA"),
 
-		UserIDHeader: getenv("USER_ID_HEADER", "X-User-Id"),
+		UserIDHeader: getenv("USER_ID_HEADER", ""),
 
 		IconDir:      getenv("ICON_DIR", "./data/icons"),
 		IconMaxBytes: getenvInt64("ICON_MAX_BYTES", 5*1024*1024),

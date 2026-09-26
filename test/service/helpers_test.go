@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/discordia-grupo01/servers/internal/model"
+	"github.com/discordia-grupo01/servers/internal/model/role"
 	"github.com/discordia-grupo01/servers/internal/outbox"
 	"github.com/discordia-grupo01/servers/internal/service"
 )
@@ -34,6 +35,18 @@ type fakeRepoHelper struct {
 
 	updateErr   error
 	updateCalls int
+
+	// standing is what MemberStanding returns for any non-owner caller; the
+	// zero value makes them a non-member (not an administrator).
+	standing    role.Standing
+	standingErr error
+}
+
+func (f *fakeRepoHelper) MemberStanding(_ context.Context, _ uuid.UUID, _ string) (role.Standing, error) {
+	if f.standingErr != nil {
+		return role.Standing{}, f.standingErr
+	}
+	return f.standing, nil
 }
 
 func (f *fakeRepoHelper) CreateServer(_ context.Context, s model.Server, cats []model.Category, ch []model.Channel, evt outbox.Event) error {
@@ -115,21 +128,21 @@ func (f *fakeIconsHelper) GenerateDefault() ([]byte, error) {
 func create(t *testing.T, p service.CreateServerParams) (model.Server, error, *fakeRepoHelper, *fakeIconsHelper) {
 	t.Helper()
 	repo, icons := &fakeRepoHelper{}, &fakeIconsHelper{}
-	srv, err := service.New(repo, icons).CreateServer(context.Background(), p)
+	srv, err := service.New(repo, icons, repo).CreateServer(context.Background(), p)
 	return srv, err, repo, icons
 }
 
 func createRepoErr(t *testing.T, p service.CreateServerParams, repoErr error) (model.Server, error, *fakeRepoHelper, *fakeIconsHelper) {
 	t.Helper()
 	repo, icons := &fakeRepoHelper{err: repoErr}, &fakeIconsHelper{}
-	srv, err := service.New(repo, icons).CreateServer(context.Background(), p)
+	srv, err := service.New(repo, icons, repo).CreateServer(context.Background(), p)
 	return srv, err, repo, icons
 }
 
 func createIconErr(t *testing.T, p service.CreateServerParams, iconErr error) (model.Server, error, *fakeRepoHelper, *fakeIconsHelper) {
 	t.Helper()
 	repo, icons := &fakeRepoHelper{}, &fakeIconsHelper{err: iconErr}
-	srv, err := service.New(repo, icons).CreateServer(context.Background(), p)
+	srv, err := service.New(repo, icons, repo).CreateServer(context.Background(), p)
 	return srv, err, repo, icons
 }
 

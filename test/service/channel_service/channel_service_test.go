@@ -60,13 +60,13 @@ func TestCreateChannel_InvalidKind_ErrKindInvalid(t *testing.T) {
 	}
 }
 
-func TestCreateChannel_NotOwner_ErrForbidden(t *testing.T) {
+func TestCreateChannel_NotAdmin_ErrForbidden(t *testing.T) {
 	svc := newService(&fakeServers{server: ownerServer()}, &fakeCategories{}, &fakeChannels{})
 	_, err := svc.CreateChannel(context.Background(), channel_service.CreateChannelParams{
 		ServerID: uuid.New(), Name: "general", Kind: "text", UserID: "someone-else",
 	})
-	if !errors.Is(err, model.ErrForbiddenNotOwner) {
-		t.Errorf("err = %v, want ErrForbiddenNotOwner", err)
+	if !errors.Is(err, model.ErrForbiddenNotAdmin) {
+		t.Errorf("err = %v, want ErrForbiddenNotAdmin", err)
 	}
 }
 
@@ -226,7 +226,7 @@ func TestUpdateChannel_OnlyTopic_KeepsExistingName(t *testing.T) {
 	}
 }
 
-func TestUpdateChannel_NotOwner_ErrForbidden(t *testing.T) {
+func TestUpdateChannel_NotAdmin_ErrForbidden(t *testing.T) {
 	srv := ownerServer()
 	ch := model.Channel{ID: uuid.New(), ServerID: srv.ID}
 	svc := newService(&fakeServers{server: srv}, &fakeCategories{}, &fakeChannels{getByIDChannel: ch})
@@ -234,8 +234,8 @@ func TestUpdateChannel_NotOwner_ErrForbidden(t *testing.T) {
 	_, err := svc.UpdateChannel(context.Background(), channel_service.UpdateChannelParams{
 		ChannelID: ch.ID, UserID: "someone-else",
 	})
-	if !errors.Is(err, model.ErrForbiddenNotOwner) {
-		t.Errorf("err = %v, want ErrForbiddenNotOwner", err)
+	if !errors.Is(err, model.ErrForbiddenNotAdmin) {
+		t.Errorf("err = %v, want ErrForbiddenNotAdmin", err)
 	}
 }
 
@@ -255,7 +255,7 @@ func TestDeleteChannel_Valid_CallsRepoDelete(t *testing.T) {
 	}
 }
 
-func TestDeleteChannel_NotOwner_ErrForbidden(t *testing.T) {
+func TestDeleteChannel_NotAdmin_ErrForbidden(t *testing.T) {
 	srv := ownerServer()
 	ch := model.Channel{ID: uuid.New(), ServerID: srv.ID}
 	svc := newService(&fakeServers{server: srv}, &fakeCategories{}, &fakeChannels{getByIDChannel: ch})
@@ -263,8 +263,8 @@ func TestDeleteChannel_NotOwner_ErrForbidden(t *testing.T) {
 	err := svc.DeleteChannel(context.Background(), channel_service.DeleteChannelParams{
 		ChannelID: ch.ID, UserID: "someone-else",
 	})
-	if !errors.Is(err, model.ErrForbiddenNotOwner) {
-		t.Errorf("err = %v, want ErrForbiddenNotOwner", err)
+	if !errors.Is(err, model.ErrForbiddenNotAdmin) {
+		t.Errorf("err = %v, want ErrForbiddenNotAdmin", err)
 	}
 }
 
@@ -373,14 +373,14 @@ func TestReorderChannels_ExtraChannel_ErrReorderInvalid(t *testing.T) {
 	}
 }
 
-func TestReorderChannels_NotOwner_ErrForbidden(t *testing.T) {
+func TestReorderChannels_NotAdmin_ErrForbidden(t *testing.T) {
 	srv := ownerServer()
 	svc := newService(&fakeServers{server: srv}, &fakeCategories{}, &fakeChannels{})
 
 	err := svc.ReorderChannels(context.Background(), channel_service.ReorderChannelsParams{
 		ServerID: srv.ID, UserID: "someone-else", ChannelIDs: []uuid.UUID{},
 	})
-	if !errors.Is(err, model.ErrForbiddenNotOwner) {
-		t.Errorf("err = %v, want ErrForbiddenNotOwner", err)
+	if !errors.Is(err, model.ErrForbiddenNotAdmin) {
+		t.Errorf("err = %v, want ErrForbiddenNotAdmin", err)
 	}
 }

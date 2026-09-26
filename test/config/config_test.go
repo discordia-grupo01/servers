@@ -24,7 +24,7 @@ func TestLoad_OK(t *testing.T) {
 	if c.Environment != "development" || c.Port != "8080" || c.Host != "0.0.0.0" {
 		t.Errorf("operational defaults wrong: %+v", c)
 	}
-	if c.UserIDHeader != "X-User-Id" || c.IconMaxBytes != 5*1024*1024 {
+	if c.UserIDHeader != "" || c.IconMaxBytes != 5*1024*1024 {
 		t.Errorf("config = %+v", c)
 	}
 	dsn := c.PostgresDSN()

@@ -50,13 +50,13 @@ func TestCreateCategory_ControlCharInName_ErrNameInvalidChars(t *testing.T) {
 	}
 }
 
-func TestCreateCategory_NotOwner_ErrForbidden(t *testing.T) {
+func TestCreateCategory_NotAdmin_ErrForbidden(t *testing.T) {
 	svc := newService(&fakeServers{server: ownerServer()}, &fakeCategories{})
 	_, err := svc.CreateCategory(context.Background(), category_service.CreateCategoryParams{
 		ServerID: uuid.New(), Name: "Texto", UserID: "someone-else",
 	})
-	if !errors.Is(err, model.ErrForbiddenNotOwner) {
-		t.Errorf("err = %v, want ErrForbiddenNotOwner", err)
+	if !errors.Is(err, model.ErrForbiddenNotAdmin) {
+		t.Errorf("err = %v, want ErrForbiddenNotAdmin", err)
 	}
 }
 
@@ -93,7 +93,7 @@ func TestUpdateCategory_EmptyName_ErrNameRequired(t *testing.T) {
 	}
 }
 
-func TestUpdateCategory_NotOwner_ErrForbidden(t *testing.T) {
+func TestUpdateCategory_NotAdmin_ErrForbidden(t *testing.T) {
 	srv := ownerServer()
 	cat := model.Category{ID: uuid.New(), ServerID: srv.ID}
 	svc := newService(&fakeServers{server: srv}, &fakeCategories{getByIDCategory: cat})
@@ -101,8 +101,8 @@ func TestUpdateCategory_NotOwner_ErrForbidden(t *testing.T) {
 	_, err := svc.UpdateCategory(context.Background(), category_service.UpdateCategoryParams{
 		CategoryID: cat.ID, UserID: "someone-else", Name: "new-name",
 	})
-	if !errors.Is(err, model.ErrForbiddenNotOwner) {
-		t.Errorf("err = %v, want ErrForbiddenNotOwner", err)
+	if !errors.Is(err, model.ErrForbiddenNotAdmin) {
+		t.Errorf("err = %v, want ErrForbiddenNotAdmin", err)
 	}
 }
 
@@ -140,14 +140,14 @@ func TestReorderCategories_MissingCategory_ErrReorderInvalid(t *testing.T) {
 	}
 }
 
-func TestReorderCategories_NotOwner_ErrForbidden(t *testing.T) {
+func TestReorderCategories_NotAdmin_ErrForbidden(t *testing.T) {
 	srv := ownerServer()
 	svc := newService(&fakeServers{server: srv}, &fakeCategories{})
 
 	err := svc.ReorderCategories(context.Background(), category_service.ReorderCategoriesParams{
 		ServerID: srv.ID, UserID: "someone-else", CategoryIDs: []uuid.UUID{},
 	})
-	if !errors.Is(err, model.ErrForbiddenNotOwner) {
-		t.Errorf("err = %v, want ErrForbiddenNotOwner", err)
+	if !errors.Is(err, model.ErrForbiddenNotAdmin) {
+		t.Errorf("err = %v, want ErrForbiddenNotAdmin", err)
 	}
 }

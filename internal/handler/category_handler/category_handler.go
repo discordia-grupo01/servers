@@ -36,7 +36,7 @@ type createCategoryRequest struct {
 
 // CreateCategory godoc
 // @Summary      Create a category
-// @Description  Owner-only.
+// @Description  Administrators only (the owner, or a member with ADMINISTRATOR).
 // @Tags         categories
 // @Accept       json
 // @Produce      json
@@ -46,7 +46,7 @@ type createCategoryRequest struct {
 // @Success      201  {object}  categoryview.Response
 // @Failure      400  {object}  apierr.ErrorResponse
 // @Failure      401  {object}  apierr.ErrorResponse
-// @Failure      403  {object}  apierr.ErrorResponse  "not the owner"
+// @Failure      403  {object}  apierr.ErrorResponse  "not a server administrator"
 // @Failure      404  {object}  apierr.ErrorResponse
 // @Router       /v1/servers/{serverId}/categories [post]
 func (h *Handler) CreateCategory(c *gin.Context) {
@@ -79,7 +79,7 @@ type updateCategoryRequest struct {
 
 // UpdateCategory godoc
 // @Summary      Rename a category
-// @Description  Owner-only.
+// @Description  Administrators only (the owner, or a member with ADMINISTRATOR).
 // @Tags         categories
 // @Accept       json
 // @Produce      json
@@ -89,7 +89,7 @@ type updateCategoryRequest struct {
 // @Success      200  {object}  categoryview.Response
 // @Failure      400  {object}  apierr.ErrorResponse
 // @Failure      401  {object}  apierr.ErrorResponse
-// @Failure      403  {object}  apierr.ErrorResponse  "not the owner"
+// @Failure      403  {object}  apierr.ErrorResponse  "not a server administrator"
 // @Failure      404  {object}  apierr.ErrorResponse
 // @Router       /v1/categories/{categoryId} [patch]
 func (h *Handler) UpdateCategory(c *gin.Context) {
@@ -122,7 +122,7 @@ type reorderCategoriesRequest struct {
 
 // Reorder godoc
 // @Summary      Reorder a server's categories
-// @Description  Owner-only. `category_ids` is the full, final order.
+// @Description  Administrators only (the owner, or a member with ADMINISTRATOR). `category_ids` is the full, final order.
 // @Tags         categories
 // @Accept       json
 // @Security     BearerAuth
@@ -131,7 +131,7 @@ type reorderCategoriesRequest struct {
 // @Success      200  "ok"
 // @Failure      400  {object}  apierr.ErrorResponse
 // @Failure      401  {object}  apierr.ErrorResponse
-// @Failure      403  {object}  apierr.ErrorResponse  "not the owner"
+// @Failure      403  {object}  apierr.ErrorResponse  "not a server administrator"
 // @Failure      404  {object}  apierr.ErrorResponse
 // @Router       /v1/servers/{serverId}/categories/reorder [patch]
 func (h *Handler) Reorder(c *gin.Context) {

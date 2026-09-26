@@ -12,7 +12,9 @@ import (
 	"github.com/discordia-grupo01/events-contract/envelope"
 	"github.com/discordia-grupo01/events-contract/membership"
 	"github.com/discordia-grupo01/servers/internal/model"
+	"github.com/discordia-grupo01/servers/internal/model/role"
 	"github.com/discordia-grupo01/servers/internal/outbox"
+	"github.com/discordia-grupo01/servers/internal/service"
 )
 
 const (
@@ -23,12 +25,32 @@ const (
 )
 
 type Service struct {
-	repo Repository
-	now  func() time.Time
+	repo      Repository
+	servers   service.ServerGetter
+	standings service.StandingReader
+	now       func() time.Time
 }
 
-func NewService(repo Repository) *Service {
-	return &Service{repo: repo, now: func() time.Time { return time.Now().UTC() }}
+func NewService(repo Repository, servers service.ServerGetter, standings service.StandingReader) *Service {
+	return &Service{
+		repo:      repo,
+		servers:   servers,
+		standings: standings,
+		now:       func() time.Time { return time.Now().UTC() },
+	}
+}
+
+// standing loads userID's standing in serverID, reporting an unknown server
+// with this package's own not-found error.
+func (s *Service) standing(ctx context.Context, serverID uuid.UUID, userID string) (role.Standing, error) {
+	srv, err := s.servers.GetByID(ctx, serverID)
+	if errors.Is(err, model.ErrServerNotFound) {
+		return role.Standing{}, model.ErrInviteServerNotFound
+	}
+	if err != nil {
+		return role.Standing{}, err
+	}
+	return service.ResolveStanding(ctx, s.standings, srv, userID)
 }
 
 func (s *Service) GenerateInvitation(ctx context.Context, p GenerateParams) (model.Invitation, error) {
@@ -41,20 +63,12 @@ func (s *Service) GenerateInvitation(ctx context.Context, p GenerateParams) (mod
 		return model.Invitation{}, model.ErrInviteServerNotFound
 	}
 
-	exists, err := s.repo.ServerExists(ctx, serverID)
+	actor, err := s.standing(ctx, serverID, p.CreatedBy)
 	if err != nil {
 		return model.Invitation{}, err
 	}
-	if !exists {
-		return model.Invitation{}, model.ErrInviteServerNotFound
-	}
-
-	member, err := s.repo.IsMember(ctx, serverID, p.CreatedBy)
-	if err != nil {
+	if err := service.RequireCreateInvite(actor); err != nil {
 		return model.Invitation{}, err
-	}
-	if !member {
-		return model.Invitation{}, model.ErrInvitePermissionDenied
 	}
 
 	if p.MaxUses != nil && *p.MaxUses <= 0 {
@@ -102,20 +116,12 @@ func (s *Service) ListInvitations(ctx context.Context, p ListParams) ([]model.In
 		return nil, model.ErrInviteServerNotFound
 	}
 
-	exists, err := s.repo.ServerExists(ctx, serverID)
+	actor, err := s.standing(ctx, serverID, p.UserID)
 	if err != nil {
 		return nil, err
 	}
-	if !exists {
-		return nil, model.ErrInviteServerNotFound
-	}
-
-	member, err := s.repo.IsMember(ctx, serverID, p.UserID)
-	if err != nil {
+	if err := service.RequireCreateInvite(actor); err != nil {
 		return nil, err
-	}
-	if !member {
-		return nil, model.ErrInvitePermissionDenied
 	}
 
 	return s.repo.ListByServer(ctx, serverID)
@@ -131,12 +137,12 @@ func (s *Service) RevokeInvitation(ctx context.Context, p RevokeParams) error {
 		return err
 	}
 
-	member, err := s.repo.IsMember(ctx, inv.ServerID, p.UserID)
+	actor, err := s.standing(ctx, inv.ServerID, p.UserID)
 	if err != nil {
 		return err
 	}
-	if !member {
-		return model.ErrInvitePermissionDenied
+	if err := service.RequireRevokeInvite(actor, p.UserID, inv); err != nil {
+		return err
 	}
 
 	if inv.IsRevoked() {

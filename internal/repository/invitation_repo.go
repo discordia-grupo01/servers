@@ -25,16 +25,6 @@ func NewInvitationRepository(pool *pgxpool.Pool) *InvitationRepository {
 	return &InvitationRepository{pool: pool}
 }
 
-func (r *InvitationRepository) ServerExists(ctx context.Context, serverID uuid.UUID) (bool, error) {
-	var exists bool
-	if err := r.pool.QueryRow(ctx,
-		`SELECT EXISTS (SELECT 1 FROM servers WHERE id = $1)`, serverID,
-	).Scan(&exists); err != nil {
-		return false, fmt.Errorf("server exists: %w", err)
-	}
-	return exists, nil
-}
-
 func (r *InvitationRepository) IsMember(ctx context.Context, serverID uuid.UUID, userID string) (bool, error) {
 	var exists bool
 	if err := r.pool.QueryRow(ctx,

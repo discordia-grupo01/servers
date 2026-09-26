@@ -130,7 +130,7 @@ func (h *serverHandler) createServer(c *gin.Context) {
 
 // updateServer godoc
 // @Summary      Edit a server
-// @Description  Owner-only. Multipart form, all fields optional: rename, replace the icon/banner, or remove the banner.
+// @Description  Administrators only (the owner, or a member with ADMINISTRATOR). Multipart form, all fields optional: rename, replace the icon/banner, or remove the banner.
 // @Tags         servers
 // @Accept       multipart/form-data
 // @Produce      json
@@ -143,7 +143,7 @@ func (h *serverHandler) createServer(c *gin.Context) {
 // @Success      200  {object}  serverResponse
 // @Failure      400  {object}  apierr.ErrorResponse
 // @Failure      401  {object}  apierr.ErrorResponse
-// @Failure      403  {object}  apierr.ErrorResponse  "not the owner"
+// @Failure      403  {object}  apierr.ErrorResponse  "not a server administrator"
 // @Failure      404  {object}  apierr.ErrorResponse
 // @Failure      409  {object}  apierr.ErrorResponse  "name already taken"
 // @Router       /v1/servers/{serverId} [patch]

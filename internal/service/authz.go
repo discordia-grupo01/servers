@@ -1,37 +1,59 @@
 package service
 
-import "github.com/discordia-grupo01/servers/internal/model"
+import (
+	"github.com/discordia-grupo01/servers/internal/model"
+	"github.com/discordia-grupo01/servers/internal/model/role"
+)
 
-// RequireManageRoles checks whether userID is allowed to manage roles (and
-// role assignments) in srv. Today this is a simple owner check, but it is
-// named after the capability it represents (not "require owner") so that
-// when a granular MANAGE_ROLES permission exists, only this function needs
-// to change -- not every call site.
+// RequireManageRoles checks whether the actor may manage roles (and role
+// assignments). It is named after the capability it represents, not after
+// who holds it today, so that making it more granular (e.g. letting
+// MANAGE_ROLES alone suffice) only means changing this function -- not every
+// call site.
 //
-// Exported (not requireManageRoles) because role_service and
-// member_role_service live in their own subpackages and need to call it from
-// outside package service.
-func RequireManageRoles(srv model.Server, userID string) error {
-	if srv.OwnerID != userID {
-		return model.ErrForbiddenNotOwner
+// Exported because role_service and member_role_service live in their own
+// subpackages and need to call it from outside package service.
+func RequireManageRoles(actor role.Standing) error {
+	return requireAdmin(actor)
+}
+
+// RequireManageChannels checks whether the actor may manage channels and
+// categories. Same "administrators only" scope as RequireManageRoles.
+func RequireManageChannels(actor role.Standing) error {
+	return requireAdmin(actor)
+}
+
+// RequireManageServer checks whether the actor may edit the server's
+// settings. Same "administrators only" scope as RequireManageRoles.
+func RequireManageServer(actor role.Standing) error {
+	return requireAdmin(actor)
+}
+
+// RequireCreateInvite checks whether the actor may generate invitations and
+// list the server's invitations: administrators, or members whose roles grant
+// CREATE_INVITE.
+func RequireCreateInvite(actor role.Standing) error {
+	if !actor.IsMember || !actor.Has(role.PermCreateInvite) {
+		return model.ErrInvitePermissionDenied
 	}
 	return nil
 }
 
-// RequireManageChannels checks whether userID is allowed to manage channels
-// and categories in srv. Same "owner only" scope as RequireManageRoles today
-// (see its doc comment) even though MANAGE_CHANNELS already exists in the
-// permission catalog -- no RequireManageX function uses the bitmask yet.
-func RequireManageChannels(srv model.Server, userID string) error {
-	if srv.OwnerID != userID {
-		return model.ErrForbiddenNotOwner
+// RequireRevokeInvite checks whether the actor may revoke inv: administrators
+// revoke any invitation of the server, and a member can always revoke the
+// ones they created.
+func RequireRevokeInvite(actor role.Standing, actorID string, inv model.Invitation) error {
+	if !actor.IsMember || (!actor.IsAdmin() && inv.CreatedBy != actorID) {
+		return model.ErrInvitePermissionDenied
 	}
 	return nil
 }
 
-func RequireManageServer(srv model.Server, userID string) error {
-	if srv.OwnerID != userID {
-		return model.ErrForbiddenNotOwner
+// requireAdmin is the rule every "as an administrator" user story shares:
+// the owner, or a member holding ADMINISTRATOR.
+func requireAdmin(actor role.Standing) error {
+	if !actor.IsAdmin() {
+		return model.ErrForbiddenNotAdmin
 	}
 	return nil
 }

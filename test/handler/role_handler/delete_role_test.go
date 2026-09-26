@@ -34,8 +34,8 @@ func TestDeleteRole_InvalidRoleIDParam_BadRequest(t *testing.T) {
 	}
 }
 
-func TestDeleteRole_NotOwner_Returns403(t *testing.T) {
-	r := newRouter(t, &fakeRoleUseCases{deleteErr: model.ErrForbiddenNotOwner})
+func TestDeleteRole_NotAdmin_Returns403(t *testing.T) {
+	r := newRouter(t, &fakeRoleUseCases{deleteErr: model.ErrForbiddenNotAdmin})
 	w := doJSON(t, r, http.MethodDelete, "/v1/roles/"+uuid.New().String(), testUser, nil)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())

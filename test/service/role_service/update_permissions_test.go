@@ -33,7 +33,7 @@ func TestUpdateRolePermissions_UnknownPermission_BadRequest(t *testing.T) {
 	}
 }
 
-func TestUpdateRolePermissions_NotOwner_Forbidden(t *testing.T) {
+func TestUpdateRolePermissions_NotAdmin_Forbidden(t *testing.T) {
 	srv := ownerServer()
 	rl := existingRole(srv.ID)
 	svc := newService(&fakeServers{server: srv}, &fakeRoles{getByIDRole: rl})
@@ -41,8 +41,8 @@ func TestUpdateRolePermissions_NotOwner_Forbidden(t *testing.T) {
 	_, err := svc.UpdateRolePermissions(context.Background(), role_service.UpdateRolePermissionsParams{
 		RoleID: rl.ID, UserID: "someone-else", Permissions: []string{"SEND_MESSAGES"},
 	})
-	if !errors.Is(err, model.ErrForbiddenNotOwner) {
-		t.Errorf("err = %v, want ErrForbiddenNotOwner", err)
+	if !errors.Is(err, model.ErrForbiddenNotAdmin) {
+		t.Errorf("err = %v, want ErrForbiddenNotAdmin", err)
 	}
 }
 

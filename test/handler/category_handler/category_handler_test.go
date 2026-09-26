@@ -33,7 +33,7 @@ func TestCreateCategory_InvalidServerIDParam_BadRequest(t *testing.T) {
 }
 
 func TestCreateCategory_DomainError_MapsToHTTPStatus(t *testing.T) {
-	r := newRouter(t, &fakeCategoryUseCases{createErr: model.ErrForbiddenNotOwner})
+	r := newRouter(t, &fakeCategoryUseCases{createErr: model.ErrForbiddenNotAdmin})
 	w := doJSON(t, r, http.MethodPost, "/v1/servers/"+uuid.New().String()+"/categories", testUser,
 		map[string]string{"name": "Texto"})
 	if w.Code != http.StatusForbidden {
@@ -74,7 +74,7 @@ func TestUpdateCategory_InvalidCategoryIDParam_BadRequest(t *testing.T) {
 }
 
 func TestUpdateCategory_DomainError_MapsToHTTPStatus(t *testing.T) {
-	r := newRouter(t, &fakeCategoryUseCases{updateErr: model.ErrForbiddenNotOwner})
+	r := newRouter(t, &fakeCategoryUseCases{updateErr: model.ErrForbiddenNotAdmin})
 	w := doJSON(t, r, http.MethodPatch, "/v1/categories/"+uuid.New().String(), testUser,
 		map[string]string{"name": "renamed"})
 	if w.Code != http.StatusForbidden {

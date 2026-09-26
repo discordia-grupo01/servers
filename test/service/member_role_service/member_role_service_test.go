@@ -81,7 +81,7 @@ func TestAssignRole_ReturnsAssignedRole(t *testing.T) {
 	}
 }
 
-func TestAssignRole_NotOwner_Forbidden(t *testing.T) {
+func TestAssignRole_NotAdmin_Forbidden(t *testing.T) {
 	srv := ownerServer()
 	rl := role.Role{ID: uuid.New(), ServerID: srv.ID}
 	svc := newService(&fakeServers{server: srv}, &fakeRoles{role: rl}, &fakeMembers{isMember: true})
@@ -90,8 +90,8 @@ func TestAssignRole_NotOwner_Forbidden(t *testing.T) {
 	p.ActorUserID = "someone-else"
 
 	_, err := svc.AssignRole(context.Background(), p)
-	if !errors.Is(err, model.ErrForbiddenNotOwner) {
-		t.Errorf("err = %v, want ErrForbiddenNotOwner", err)
+	if !errors.Is(err, model.ErrForbiddenNotAdmin) {
+		t.Errorf("err = %v, want ErrForbiddenNotAdmin", err)
 	}
 }
 
@@ -133,7 +133,7 @@ func TestRemoveRole_RoleNotFound(t *testing.T) {
 	}
 }
 
-func TestRemoveRole_NotOwner_Forbidden(t *testing.T) {
+func TestRemoveRole_NotAdmin_Forbidden(t *testing.T) {
 	srv := ownerServer()
 	members := &fakeMembers{}
 	svc := newService(&fakeServers{server: srv}, &fakeRoles{}, members)
@@ -141,8 +141,8 @@ func TestRemoveRole_NotOwner_Forbidden(t *testing.T) {
 	err := svc.RemoveRole(context.Background(), member_role_service.RemoveRoleParams{
 		ServerID: srv.ID, TargetUserID: testUser, RoleID: uuid.New(), ActorUserID: "someone-else",
 	})
-	if !errors.Is(err, model.ErrForbiddenNotOwner) {
-		t.Errorf("err = %v, want ErrForbiddenNotOwner", err)
+	if !errors.Is(err, model.ErrForbiddenNotAdmin) {
+		t.Errorf("err = %v, want ErrForbiddenNotAdmin", err)
 	}
 	if members.removeCalls != 0 {
 		t.Error("repo.RemoveRole should not be called when the actor isn't the owner")
