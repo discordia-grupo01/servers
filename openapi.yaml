@@ -30,7 +30,7 @@ paths:
         - ops
   "/v1/categories/{categoryId}":
     patch:
-      description: Owner-only.
+      description: Administrators only (the owner, or a member with ADMINISTRATOR).
       parameters:
         - description: Category ID
           in: path
@@ -65,7 +65,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "403":
-          description: not the owner
+          description: not a server administrator
           content:
             application/json:
               schema:
@@ -83,7 +83,7 @@ paths:
         - categories
   "/v1/channels/{channelId}":
     delete:
-      description: Owner-only.
+      description: Administrators only (the owner, or a member with ADMINISTRATOR).
       parameters:
         - description: Channel ID
           in: path
@@ -101,7 +101,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "403":
-          description: not the owner
+          description: not a server administrator
           content:
             "*/*":
               schema:
@@ -118,7 +118,8 @@ paths:
       tags:
         - channels
     patch:
-      description: Owner-only. `name`/`topic` omitted leave the field unchanged.
+      description: Administrators only (the owner, or a member with ADMINISTRATOR).
+        `name`/`topic` omitted leave the field unchanged.
       parameters:
         - description: Channel ID
           in: path
@@ -153,7 +154,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "403":
-          description: not the owner
+          description: not a server administrator
           content:
             application/json:
               schema:
@@ -171,7 +172,8 @@ paths:
         - channels
   "/v1/channels/{channelId}/category":
     patch:
-      description: Owner-only. `category_id` omitted/null moves it to "sin categoria".
+      description: Administrators only (the owner, or a member with ADMINISTRATOR).
+        `category_id` omitted/null moves it to "sin categoria".
       parameters:
         - description: Channel ID
           in: path
@@ -206,7 +208,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "403":
-          description: not the owner
+          description: not a server administrator
           content:
             application/json:
               schema:
@@ -224,7 +226,9 @@ paths:
         - channels
   "/v1/invites/{code}":
     delete:
-      description: "Idempotent: revoking an already-revoked code still returns 204."
+      description: "Administrators revoke any invitation of the server; any member can
+        revoke the ones they created. Idempotent: revoking an already-revoked
+        code still returns 204."
       parameters:
         - description: Invitation code
           in: path
@@ -237,6 +241,18 @@ paths:
           description: no content
         "401":
           description: Unauthorized
+          content:
+            "*/*":
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "403":
+          description: not an administrator nor the invitation's creator
+          content:
+            "*/*":
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "404":
+          description: invitation not found
           content:
             "*/*":
               schema:
@@ -295,7 +311,7 @@ paths:
         - invitations
   "/v1/roles/{roleId}":
     delete:
-      description: Owner-only.
+      description: Administrators only (the owner, or a member with ADMINISTRATOR).
       parameters:
         - description: Role ID
           in: path
@@ -313,7 +329,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "403":
-          description: not the owner
+          description: not a server administrator, or deleting a role with ADMINISTRATOR
+            that you hold
           content:
             "*/*":
               schema:
@@ -362,8 +379,9 @@ paths:
       tags:
         - roles
     patch:
-      description: Owner-only. Any of `permissions`/`name`/`color` may be omitted to
-        leave it unchanged.
+      description: Administrators only (the owner, or a member with ADMINISTRATOR).
+        Any of `permissions`/`name`/`color` may be omitted to leave it
+        unchanged.
       parameters:
         - description: Role ID
           in: path
@@ -398,7 +416,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "403":
-          description: not the owner
+          description: not a server administrator, or removing ADMINISTRATOR from a role
+            you hold
           content:
             application/json:
               schema:
@@ -521,8 +540,9 @@ paths:
       tags:
         - servers
     patch:
-      description: "Owner-only. Multipart form, all fields optional: rename, replace
-        the icon/banner, or remove the banner."
+      description: "Administrators only (the owner, or a member with ADMINISTRATOR).
+        Multipart form, all fields optional: rename, replace the icon/banner, or
+        remove the banner."
       parameters:
         - description: Server ID
           in: path
@@ -570,7 +590,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "403":
-          description: not the owner
+          description: not a server administrator
           content:
             application/json:
               schema:
@@ -628,7 +648,7 @@ paths:
         - servers
   "/v1/servers/{serverId}/categories":
     post:
-      description: Owner-only.
+      description: Administrators only (the owner, or a member with ADMINISTRATOR).
       parameters:
         - description: Server ID
           in: path
@@ -663,7 +683,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "403":
-          description: not the owner
+          description: not a server administrator
           content:
             application/json:
               schema:
@@ -681,7 +701,8 @@ paths:
         - categories
   "/v1/servers/{serverId}/categories/reorder":
     patch:
-      description: Owner-only. `category_ids` is the full, final order.
+      description: Administrators only (the owner, or a member with ADMINISTRATOR).
+        `category_ids` is the full, final order.
       parameters:
         - description: Server ID
           in: path
@@ -712,7 +733,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "403":
-          description: not the owner
+          description: not a server administrator
           content:
             "*/*":
               schema:
@@ -730,8 +751,9 @@ paths:
         - categories
   "/v1/servers/{serverId}/channels":
     post:
-      description: Owner-only. `kind` is "text" or "voice"; `category_id` may be
-        omitted/null for "no category".
+      description: Administrators only (the owner, or a member with ADMINISTRATOR).
+        `kind` is "text" or "voice"; `category_id` may be omitted/null for "no
+        category".
       parameters:
         - description: Server ID
           in: path
@@ -766,7 +788,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "403":
-          description: not the owner
+          description: not a server administrator
           content:
             application/json:
               schema:
@@ -784,8 +806,9 @@ paths:
         - channels
   "/v1/servers/{serverId}/channels/reorder":
     patch:
-      description: Owner-only. `channel_ids` is the full, final order for that
-        category (or for "sin categoria" if `category_id` is omitted/null).
+      description: Administrators only (the owner, or a member with ADMINISTRATOR).
+        `channel_ids` is the full, final order for that category (or for "sin
+        categoria" if `category_id` is omitted/null).
       parameters:
         - description: Server ID
           in: path
@@ -816,7 +839,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "403":
-          description: not the owner
+          description: not a server administrator
           content:
             "*/*":
               schema:
@@ -834,7 +857,8 @@ paths:
         - channels
   "/v1/servers/{serverId}/default-role":
     put:
-      description: Owner-only. The default role is assigned automatically to new members.
+      description: Administrators only (the owner, or a member with ADMINISTRATOR).
+        The default role is assigned automatically to new members.
       parameters:
         - description: Server ID
           in: path
@@ -865,7 +889,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "403":
-          description: not the owner
+          description: not a server administrator
           content:
             "*/*":
               schema:
@@ -917,8 +941,9 @@ paths:
         - servers
   "/v1/servers/{serverId}/invites":
     get:
-      description: Any member can view them. Returns all invitations (active, revoked
-        or expired, no status filter on the backend), newest first.
+      description: "Same permission as generating one: administrators, or members
+        whose roles grant CREATE_INVITE. Returns all invitations (active,
+        revoked or expired, no status filter on the backend), newest first."
       parameters:
         - description: Server ID
           in: path
@@ -942,7 +967,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "403":
-          description: caller is not a member
+          description: caller cannot invite (not an administrator nor holds CREATE_INVITE)
           content:
             application/json:
               schema:
@@ -959,7 +984,7 @@ paths:
       tags:
         - invitations
     post:
-      description: Any member of the server can generate one (not owner-only). Body is
+      description: Administrators, or members whose roles grant CREATE_INVITE. Body is
         optional JSON; omitting max_uses means unlimited uses. Expires in 7
         days.
       parameters:
@@ -995,7 +1020,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "403":
-          description: caller is not a member
+          description: caller cannot invite (not an administrator nor holds CREATE_INVITE)
           content:
             application/json:
               schema:
@@ -1200,8 +1225,9 @@ paths:
       tags:
         - member-roles
     post:
-      description: "Owner-only. Idempotent: assigning a role the member already has
-        succeeds without changing anything."
+      description: "Administrators only (the owner, or a member with ADMINISTRATOR).
+        Idempotent: assigning a role the member already has succeeds without
+        changing anything."
       parameters:
         - description: Server ID
           in: path
@@ -1242,7 +1268,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "403":
-          description: not the owner
+          description: not a server administrator
           content:
             application/json:
               schema:
@@ -1260,7 +1286,8 @@ paths:
         - member-roles
   "/v1/servers/{serverId}/members/{userId}/roles/{roleId}":
     delete:
-      description: Owner-only. Idempotent.
+      description: Administrators only (the owner, or a member with ADMINISTRATOR).
+        Idempotent.
       parameters:
         - description: Server ID
           in: path
@@ -1290,7 +1317,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "403":
-          description: not the owner
+          description: not a server administrator, or unassigning a role with
+            ADMINISTRATOR from yourself
           content:
             "*/*":
               schema:
@@ -1603,7 +1631,7 @@ paths:
       tags:
         - roles
     post:
-      description: Owner-only.
+      description: Administrators only (the owner, or a member with ADMINISTRATOR).
       parameters:
         - description: Server ID
           in: path
@@ -1638,7 +1666,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "403":
-          description: not the owner
+          description: not a server administrator
           content:
             application/json:
               schema:

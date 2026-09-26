@@ -45,7 +45,7 @@ func toResponse(i model.Invitation) model.InvitationResponse {
 
 // generate godoc
 // @Summary      Generate an invitation
-// @Description  Any member of the server can generate one (not owner-only). Body is optional JSON; omitting max_uses means unlimited uses. Expires in 7 days.
+// @Description  Administrators, or members whose roles grant CREATE_INVITE. Body is optional JSON; omitting max_uses means unlimited uses. Expires in 7 days.
 // @Tags         invitations
 // @Accept       json
 // @Produce      json
@@ -55,7 +55,7 @@ func toResponse(i model.Invitation) model.InvitationResponse {
 // @Success      201  {object}  model.InvitationResponse
 // @Failure      400  {object}  apierr.ErrorResponse  "invalid max_uses"
 // @Failure      401  {object}  apierr.ErrorResponse
-// @Failure      403  {object}  apierr.ErrorResponse  "caller is not a member"
+// @Failure      403  {object}  apierr.ErrorResponse  "caller cannot invite (not an administrator nor holds CREATE_INVITE)"
 // @Failure      404  {object}  apierr.ErrorResponse
 // @Router       /v1/servers/{serverId}/invites [post]
 func (h *Handler) generate(c *gin.Context) {
@@ -81,14 +81,14 @@ func (h *Handler) generate(c *gin.Context) {
 
 // list godoc
 // @Summary      List a server's invitations
-// @Description  Any member can view them. Returns all invitations (active, revoked or expired, no status filter on the backend), newest first.
+// @Description  Same permission as generating one: administrators, or members whose roles grant CREATE_INVITE. Returns all invitations (active, revoked or expired, no status filter on the backend), newest first.
 // @Tags         invitations
 // @Produce      json
 // @Security     BearerAuth
 // @Param        serverId  path  string  true  "Server ID"
 // @Success      200  {array}   model.InvitationResponse
 // @Failure      401  {object}  apierr.ErrorResponse
-// @Failure      403  {object}  apierr.ErrorResponse  "caller is not a member"
+// @Failure      403  {object}  apierr.ErrorResponse  "caller cannot invite (not an administrator nor holds CREATE_INVITE)"
 // @Failure      404  {object}  apierr.ErrorResponse
 // @Router       /v1/servers/{serverId}/invites [get]
 func (h *Handler) list(c *gin.Context) {
@@ -110,12 +110,14 @@ func (h *Handler) list(c *gin.Context) {
 
 // revoke godoc
 // @Summary      Revoke an invitation
-// @Description  Idempotent: revoking an already-revoked code still returns 204.
+// @Description  Administrators revoke any invitation of the server; any member can revoke the ones they created. Idempotent: revoking an already-revoked code still returns 204.
 // @Tags         invitations
 // @Security     BearerAuth
 // @Param        code  path  string  true  "Invitation code"
 // @Success      204  "no content"
 // @Failure      401  {object}  apierr.ErrorResponse
+// @Failure      403  {object}  apierr.ErrorResponse  "not an administrator nor the invitation's creator"
+// @Failure      404  {object}  apierr.ErrorResponse  "invitation not found"
 // @Router       /v1/invites/{code} [delete]
 func (h *Handler) revoke(c *gin.Context) {
 	err := h.uc.RevokeInvitation(c.Request.Context(), invitationsvc.RevokeParams{

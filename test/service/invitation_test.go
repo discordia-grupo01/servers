@@ -12,6 +12,7 @@ import (
 
 	"github.com/discordia-grupo01/events-contract/membership"
 	"github.com/discordia-grupo01/servers/internal/model"
+	"github.com/discordia-grupo01/servers/internal/model/role"
 	"github.com/discordia-grupo01/servers/internal/service/invitation"
 )
 
@@ -19,12 +20,14 @@ func genParams(serverID string) invitation.GenerateParams {
 	return invitation.GenerateParams{ServerID: serverID, CreatedBy: inviterID}
 }
 
-func memberRepo() *fakeInviteRepo {
-	return &fakeInviteRepo{exists: true, member: true}
+// inviterRepo is a server where the caller is a member whose roles grant
+// CREATE_INVITE.
+func inviterRepo() *fakeInviteRepo {
+	return &fakeInviteRepo{exists: true, member: true, perms: role.PermCreateInvite}
 }
 
 func TestGenerate_CreatesAUniqueLink(t *testing.T) {
-	repo := memberRepo()
+	repo := inviterRepo()
 	inv, err := newInviteService(repo).GenerateInvitation(context.Background(), genParams(uuid.NewString()))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -41,7 +44,7 @@ func TestGenerate_CreatesAUniqueLink(t *testing.T) {
 }
 
 func TestGenerate_CodeIsURLSafe(t *testing.T) {
-	inv, err := newInviteService(memberRepo()).GenerateInvitation(context.Background(), genParams(uuid.NewString()))
+	inv, err := newInviteService(inviterRepo()).GenerateInvitation(context.Background(), genParams(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +54,7 @@ func TestGenerate_CodeIsURLSafe(t *testing.T) {
 }
 
 func TestGenerate_TwoInvitationsGetDifferentCodes(t *testing.T) {
-	svc := newInviteService(memberRepo())
+	svc := newInviteService(inviterRepo())
 	a, _ := svc.GenerateInvitation(context.Background(), genParams(uuid.NewString()))
 	b, _ := svc.GenerateInvitation(context.Background(), genParams(uuid.NewString()))
 	if a.Code == b.Code {
@@ -60,7 +63,7 @@ func TestGenerate_TwoInvitationsGetDifferentCodes(t *testing.T) {
 }
 
 func TestGenerate_WithoutMaxUses_HasNoLimit(t *testing.T) {
-	inv, err := newInviteService(memberRepo()).GenerateInvitation(context.Background(), genParams(uuid.NewString()))
+	inv, err := newInviteService(inviterRepo()).GenerateInvitation(context.Background(), genParams(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +79,7 @@ func TestGenerate_WithMaxUses(t *testing.T) {
 	p := genParams(uuid.NewString())
 	p.MaxUses = ptrInt(10)
 
-	inv, err := newInviteService(memberRepo()).GenerateInvitation(context.Background(), p)
+	inv, err := newInviteService(inviterRepo()).GenerateInvitation(context.Background(), p)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +90,7 @@ func TestGenerate_WithMaxUses(t *testing.T) {
 
 func TestGenerate_ExpiresAfterTheConfiguredTTL(t *testing.T) {
 	before := time.Now().UTC()
-	inv, err := newInviteService(memberRepo()).GenerateInvitation(context.Background(), genParams(uuid.NewString()))
+	inv, err := newInviteService(inviterRepo()).GenerateInvitation(context.Background(), genParams(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +104,7 @@ func TestGenerate_ExpiresAfterTheConfiguredTTL(t *testing.T) {
 }
 
 func TestGenerate_RetriesOnCodeCollision(t *testing.T) {
-	repo := &fakeInviteRepo{exists: true, member: true, collisions: 2}
+	repo := &fakeInviteRepo{exists: true, member: true, perms: role.PermCreateInvite, collisions: 2}
 	inv, err := newInviteService(repo).GenerateInvitation(context.Background(), genParams(uuid.NewString()))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -115,7 +118,7 @@ func TestGenerate_RetriesOnCodeCollision(t *testing.T) {
 }
 
 func TestGenerate_GivesUpAfterTooManyCollisions(t *testing.T) {
-	repo := &fakeInviteRepo{exists: true, member: true, collisions: 99}
+	repo := &fakeInviteRepo{exists: true, member: true, perms: role.PermCreateInvite, collisions: 99}
 	_, err := newInviteService(repo).GenerateInvitation(context.Background(), genParams(uuid.NewString()))
 	if !errors.Is(err, model.ErrInviteCodeUnavailable) {
 		t.Fatalf("err = %v, want ErrInviteCodeUnavailable", err)
@@ -125,7 +128,7 @@ func TestGenerate_GivesUpAfterTooManyCollisions(t *testing.T) {
 func TestGenerate_RequiresIdentity(t *testing.T) {
 	p := genParams(uuid.NewString())
 	p.CreatedBy = ""
-	_, err := newInviteService(memberRepo()).GenerateInvitation(context.Background(), p)
+	_, err := newInviteService(inviterRepo()).GenerateInvitation(context.Background(), p)
 	if !errors.Is(err, model.ErrUnauthorized) {
 		t.Fatalf("err = %v, want ErrUnauthorized", err)
 	}
@@ -140,7 +143,7 @@ func TestGenerate_UnknownServer(t *testing.T) {
 }
 
 func TestGenerate_MalformedServerID(t *testing.T) {
-	_, err := newInviteService(memberRepo()).GenerateInvitation(context.Background(), genParams("not-a-uuid"))
+	_, err := newInviteService(inviterRepo()).GenerateInvitation(context.Background(), genParams("not-a-uuid"))
 	if !errors.Is(err, model.ErrInviteServerNotFound) {
 		t.Fatalf("err = %v, want ErrInviteServerNotFound", err)
 	}
@@ -161,7 +164,7 @@ func TestGenerate_RejectsNonPositiveMaxUses(t *testing.T) {
 	for _, n := range []int{0, -3} {
 		p := genParams(uuid.NewString())
 		p.MaxUses = ptrInt(n)
-		_, err := newInviteService(memberRepo()).GenerateInvitation(context.Background(), p)
+		_, err := newInviteService(inviterRepo()).GenerateInvitation(context.Background(), p)
 		if !errors.Is(err, model.ErrInviteMaxUsesInvalid) {
 			t.Fatalf("max_uses=%d: err = %v, want ErrInviteMaxUsesInvalid", n, err)
 		}
@@ -169,7 +172,7 @@ func TestGenerate_RejectsNonPositiveMaxUses(t *testing.T) {
 }
 
 func TestGenerate_PropagatesRepositoryError(t *testing.T) {
-	repo := &fakeInviteRepo{exists: true, member: true, createErr: errors.New("db down")}
+	repo := &fakeInviteRepo{exists: true, member: true, perms: role.PermCreateInvite, createErr: errors.New("db down")}
 	_, err := newInviteService(repo).GenerateInvitation(context.Background(), genParams(uuid.NewString()))
 	if err == nil || errors.Is(err, model.ErrInviteCodeUnavailable) {
 		t.Fatalf("err = %v, want the raw repository error", err)
@@ -183,7 +186,7 @@ func listParams(serverID string) invitation.ListParams {
 func TestList_ReturnsWhateverTheRepoGives(t *testing.T) {
 	serverID := uuid.NewString()
 	want := []model.Invitation{activeInvitation(uuid.New()), activeInvitation(uuid.New())}
-	repo := &fakeInviteRepo{exists: true, member: true, listResult: want}
+	repo := &fakeInviteRepo{exists: true, member: true, perms: role.PermCreateInvite, listResult: want}
 
 	got, err := newInviteService(repo).ListInvitations(context.Background(), listParams(serverID))
 	if err != nil {
@@ -200,7 +203,7 @@ func TestList_ReturnsWhateverTheRepoGives(t *testing.T) {
 func TestList_RequiresIdentity(t *testing.T) {
 	p := listParams(uuid.NewString())
 	p.UserID = ""
-	_, err := newInviteService(memberRepo()).ListInvitations(context.Background(), p)
+	_, err := newInviteService(inviterRepo()).ListInvitations(context.Background(), p)
 	if !errors.Is(err, model.ErrUnauthorized) {
 		t.Fatalf("err = %v, want ErrUnauthorized", err)
 	}
@@ -215,7 +218,7 @@ func TestList_UnknownServer(t *testing.T) {
 }
 
 func TestList_MalformedServerID(t *testing.T) {
-	_, err := newInviteService(memberRepo()).ListInvitations(context.Background(), listParams("not-a-uuid"))
+	_, err := newInviteService(inviterRepo()).ListInvitations(context.Background(), listParams("not-a-uuid"))
 	if !errors.Is(err, model.ErrInviteServerNotFound) {
 		t.Fatalf("err = %v, want ErrInviteServerNotFound", err)
 	}
@@ -234,6 +237,7 @@ func TestList_NonMemberCannotList(t *testing.T) {
 
 func revokeSetup(inv model.Invitation, member bool) *fakeInviteRepo {
 	return &fakeInviteRepo{
+		exists: true,
 		member: member,
 		byCode: map[string]model.Invitation{inv.Code: inv},
 	}

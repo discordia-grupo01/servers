@@ -85,7 +85,7 @@ func main() {
 	transferSvc := ownership_transfer_service.New(serverRepo, memberRepo, transferRepo)
 	go ownership_transfer_service.NewExpirer(transferRepo).Start(ctx)
 	go outbox.NewPoller(pool, publisher).Start(ctx)
-	invSvc := invitation.NewService(repository.NewInvitationRepository(pool))
+	invSvc := invitation.NewService(repository.NewInvitationRepository(pool), serverRepo, memberRepo)
 	categorySvc := category_service.New(serverRepo, categoryRepo, memberRepo)
 	channelSvc := channel_service.New(serverRepo, categoryRepo, channelRepo, memberRepo)
 

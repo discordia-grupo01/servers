@@ -19,6 +19,9 @@ const (
 	// PermAdministrator grants every other permission and makes its holder a
 	// server administrator (see Standing.IsAdmin).
 	PermAdministrator
+	// PermCreateInvite lets its holder generate and list the server's
+	// invitations (administrators hold it implicitly).
+	PermCreateInvite
 )
 
 var permissionsByName = map[string]Permission{
@@ -30,6 +33,7 @@ var permissionsByName = map[string]Permission{
 	"BAN_MEMBERS":     PermBanMembers,
 	"MANAGE_SERVER":   PermManageServer,
 	"ADMINISTRATOR":   PermAdministrator,
+	"CREATE_INVITE":   PermCreateInvite,
 }
 
 // ParsePermissions translates permission names into a bitmask. If any name is

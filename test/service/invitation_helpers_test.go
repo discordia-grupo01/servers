@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/discordia-grupo01/servers/internal/model"
+	"github.com/discordia-grupo01/servers/internal/model/role"
 	"github.com/discordia-grupo01/servers/internal/outbox"
 	"github.com/discordia-grupo01/servers/internal/service/invitation"
 )
@@ -16,12 +17,17 @@ const (
 	joinerID  = "user-joiner"
 )
 
+// fakeInviteRepo is also the fake server getter and standing reader of the
+// invitation service: exists/ownerID drive GetByID, member/perms drive
+// MemberStanding.
 type fakeInviteRepo struct {
 	exists    bool
 	existsErr error
+	ownerID   string
 
 	member    bool
 	memberErr error
+	perms     role.Permission
 
 	banned    bool
 	bannedErr error
@@ -49,8 +55,18 @@ type fakeInviteRepo struct {
 	gotOutboxEvent outbox.Event
 }
 
-func (f *fakeInviteRepo) ServerExists(context.Context, uuid.UUID) (bool, error) {
-	return f.exists, f.existsErr
+func (f *fakeInviteRepo) GetByID(_ context.Context, id uuid.UUID) (model.Server, error) {
+	if f.existsErr != nil {
+		return model.Server{}, f.existsErr
+	}
+	if !f.exists {
+		return model.Server{}, model.ErrServerNotFound
+	}
+	return model.Server{ID: id, OwnerID: f.ownerID}, nil
+}
+
+func (f *fakeInviteRepo) MemberStanding(context.Context, uuid.UUID, string) (role.Standing, error) {
+	return role.Standing{IsMember: f.member, Permissions: f.perms}, f.memberErr
 }
 
 func (f *fakeInviteRepo) IsMember(context.Context, uuid.UUID, string) (bool, error) {
@@ -115,7 +131,7 @@ func (f *fakeInviteRepo) RedeemInvitation(_ context.Context, _, _ string, _ time
 }
 
 func newInviteService(repo *fakeInviteRepo) *invitation.Service {
-	return invitation.NewService(repo)
+	return invitation.NewService(repo, repo, repo)
 }
 
 func activeInvitation(serverID uuid.UUID) model.Invitation {

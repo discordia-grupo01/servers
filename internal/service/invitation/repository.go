@@ -11,7 +11,6 @@ import (
 )
 
 type Repository interface {
-	ServerExists(ctx context.Context, serverID uuid.UUID) (bool, error)
 	IsMember(ctx context.Context, serverID uuid.UUID, userID string) (bool, error)
 	IsBanned(ctx context.Context, serverID uuid.UUID, userID string) (bool, error)
 	CreateInvitation(ctx context.Context, inv model.Invitation) error

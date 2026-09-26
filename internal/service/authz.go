@@ -29,6 +29,26 @@ func RequireManageServer(actor role.Standing) error {
 	return requireAdmin(actor)
 }
 
+// RequireCreateInvite checks whether the actor may generate invitations and
+// list the server's invitations: administrators, or members whose roles grant
+// CREATE_INVITE.
+func RequireCreateInvite(actor role.Standing) error {
+	if !actor.IsMember || !actor.Has(role.PermCreateInvite) {
+		return model.ErrInvitePermissionDenied
+	}
+	return nil
+}
+
+// RequireRevokeInvite checks whether the actor may revoke inv: administrators
+// revoke any invitation of the server, and a member can always revoke the
+// ones they created.
+func RequireRevokeInvite(actor role.Standing, actorID string, inv model.Invitation) error {
+	if !actor.IsMember || (!actor.IsAdmin() && inv.CreatedBy != actorID) {
+		return model.ErrInvitePermissionDenied
+	}
+	return nil
+}
+
 // requireAdmin is the rule every "as an administrator" user story shares:
 // the owner, or a member holding ADMINISTRATOR.
 func requireAdmin(actor role.Standing) error {
