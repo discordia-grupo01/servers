@@ -55,6 +55,26 @@ func TestAuth_HeaderWins(t *testing.T) {
 	}
 }
 
+// With no header configured (the default), a client-sent X-User-Id must not
+// override the JWT: otherwise anyone with a valid token could impersonate
+// another user by sending that header through Kong.
+func TestAuth_HeaderDisabled_IgnoresSpoofedHeader(t *testing.T) {
+	w := run(middleware.AuthConfig{}, map[string]string{
+		"X-User-Id":     "victim",
+		"Authorization": "Bearer " + jwt("attacker"),
+	})
+	if w.Code != http.StatusOK || w.Body.String() != "attacker" {
+		t.Fatalf("code=%d body=%q, want the JWT's sub", w.Code, w.Body.String())
+	}
+}
+
+func TestAuth_HeaderDisabled_HeaderAloneIsNotACredential(t *testing.T) {
+	w := run(middleware.AuthConfig{}, map[string]string{"X-User-Id": "victim"})
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("code=%d, want 401", w.Code)
+	}
+}
+
 func TestAuth_NoCredential(t *testing.T) {
 	w := run(middleware.AuthConfig{UserIDHeader: "X-User-Id"}, nil)
 	if w.Code != http.StatusUnauthorized {
