@@ -1,37 +1,39 @@
 package service
 
-import "github.com/discordia-grupo01/servers/internal/model"
+import (
+	"github.com/discordia-grupo01/servers/internal/model"
+	"github.com/discordia-grupo01/servers/internal/model/role"
+)
 
-// RequireManageRoles checks whether userID is allowed to manage roles (and
-// role assignments) in srv. Today this is a simple owner check, but it is
-// named after the capability it represents (not "require owner") so that
-// when a granular MANAGE_ROLES permission exists, only this function needs
-// to change -- not every call site.
+// RequireManageRoles checks whether the actor may manage roles (and role
+// assignments). It is named after the capability it represents, not after
+// who holds it today, so that making it more granular (e.g. letting
+// MANAGE_ROLES alone suffice) only means changing this function -- not every
+// call site.
 //
-// Exported (not requireManageRoles) because role_service and
-// member_role_service live in their own subpackages and need to call it from
-// outside package service.
-func RequireManageRoles(srv model.Server, userID string) error {
-	if srv.OwnerID != userID {
-		return model.ErrForbiddenNotOwner
-	}
-	return nil
+// Exported because role_service and member_role_service live in their own
+// subpackages and need to call it from outside package service.
+func RequireManageRoles(actor role.Standing) error {
+	return requireAdmin(actor)
 }
 
-// RequireManageChannels checks whether userID is allowed to manage channels
-// and categories in srv. Same "owner only" scope as RequireManageRoles today
-// (see its doc comment) even though MANAGE_CHANNELS already exists in the
-// permission catalog -- no RequireManageX function uses the bitmask yet.
-func RequireManageChannels(srv model.Server, userID string) error {
-	if srv.OwnerID != userID {
-		return model.ErrForbiddenNotOwner
-	}
-	return nil
+// RequireManageChannels checks whether the actor may manage channels and
+// categories. Same "administrators only" scope as RequireManageRoles.
+func RequireManageChannels(actor role.Standing) error {
+	return requireAdmin(actor)
 }
 
-func RequireManageServer(srv model.Server, userID string) error {
-	if srv.OwnerID != userID {
-		return model.ErrForbiddenNotOwner
+// RequireManageServer checks whether the actor may edit the server's
+// settings. Same "administrators only" scope as RequireManageRoles.
+func RequireManageServer(actor role.Standing) error {
+	return requireAdmin(actor)
+}
+
+// requireAdmin is the rule every "as an administrator" user story shares:
+// the owner, or a member holding ADMINISTRATOR.
+func requireAdmin(actor role.Standing) error {
+	if !actor.IsAdmin() {
+		return model.ErrForbiddenNotAdmin
 	}
 	return nil
 }

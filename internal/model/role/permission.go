@@ -16,6 +16,9 @@ const (
 	PermKickMembers
 	PermBanMembers
 	PermManageServer
+	// PermAdministrator grants every other permission and makes its holder a
+	// server administrator (see Standing.IsAdmin).
+	PermAdministrator
 )
 
 var permissionsByName = map[string]Permission{
@@ -26,6 +29,7 @@ var permissionsByName = map[string]Permission{
 	"KICK_MEMBERS":    PermKickMembers,
 	"BAN_MEMBERS":     PermBanMembers,
 	"MANAGE_SERVER":   PermManageServer,
+	"ADMINISTRATOR":   PermAdministrator,
 }
 
 // ParsePermissions translates permission names into a bitmask. If any name is

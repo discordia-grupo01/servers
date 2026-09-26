@@ -104,8 +104,8 @@ func TestRemoveRole_NotAssigned_Returns404(t *testing.T) {
 	}
 }
 
-func TestRemoveRole_NotOwner_Returns403(t *testing.T) {
-	r := newRouter(t, &fakeMemberRoleUseCases{removeErr: model.ErrForbiddenNotOwner})
+func TestRemoveRole_NotAdmin_Returns403(t *testing.T) {
+	r := newRouter(t, &fakeMemberRoleUseCases{removeErr: model.ErrForbiddenNotAdmin})
 	w := doJSON(t, r, http.MethodDelete, "/v1/servers/"+uuid.New().String()+"/members/member-1/roles/"+uuid.New().String(), testUser, nil)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())

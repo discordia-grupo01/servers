@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/discordia-grupo01/servers/internal/model"
+	"github.com/discordia-grupo01/servers/internal/model/role"
 	"github.com/discordia-grupo01/servers/internal/service/channel_service"
 )
 
@@ -117,5 +118,29 @@ func ownerServer() model.Server {
 }
 
 func newService(servers *fakeServers, categories *fakeCategories, channels *fakeChannels) *channel_service.ChannelService {
-	return channel_service.New(servers, categories, channels)
+	return newServiceWithStandings(servers, categories, channels, &fakeStandings{})
+}
+
+func newServiceWithStandings(servers *fakeServers, categories *fakeCategories, channels *fakeChannels, standings *fakeStandings) *channel_service.ChannelService {
+	return channel_service.New(servers, categories, channels, standings)
+}
+
+// fakeStandings returns the same standing for every non-owner caller (the
+// owner never reaches it: service.ResolveStanding short-circuits them). The
+// zero value makes every non-owner a non-member, i.e. not an administrator.
+type fakeStandings struct {
+	standing role.Standing
+	err      error
+}
+
+func (f *fakeStandings) MemberStanding(_ context.Context, _ uuid.UUID, _ string) (role.Standing, error) {
+	if f.err != nil {
+		return role.Standing{}, f.err
+	}
+	return f.standing, nil
+}
+
+// adminStanding is a non-owner member holding ADMINISTRATOR through a role.
+func adminStanding() role.Standing {
+	return role.Standing{IsMember: true, Permissions: role.PermAdministrator}
 }

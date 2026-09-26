@@ -52,7 +52,7 @@ type createChannelRequest struct {
 
 // CreateChannel godoc
 // @Summary      Create a channel
-// @Description  Owner-only. `kind` is "text" or "voice"; `category_id` may be omitted/null for "no category".
+// @Description  Administrators only (the owner, or a member with ADMINISTRATOR). `kind` is "text" or "voice"; `category_id` may be omitted/null for "no category".
 // @Tags         channels
 // @Accept       json
 // @Produce      json
@@ -62,7 +62,7 @@ type createChannelRequest struct {
 // @Success      201  {object}  channelview.Response
 // @Failure      400  {object}  apierr.ErrorResponse
 // @Failure      401  {object}  apierr.ErrorResponse
-// @Failure      403  {object}  apierr.ErrorResponse  "not the owner"
+// @Failure      403  {object}  apierr.ErrorResponse  "not a server administrator"
 // @Failure      404  {object}  apierr.ErrorResponse
 // @Router       /v1/servers/{serverId}/channels [post]
 func (h *Handler) CreateChannel(c *gin.Context) {
@@ -103,7 +103,7 @@ type updateChannelRequest struct {
 
 // UpdateChannel godoc
 // @Summary      Edit a channel
-// @Description  Owner-only. `name`/`topic` omitted leave the field unchanged.
+// @Description  Administrators only (the owner, or a member with ADMINISTRATOR). `name`/`topic` omitted leave the field unchanged.
 // @Tags         channels
 // @Accept       json
 // @Produce      json
@@ -113,7 +113,7 @@ type updateChannelRequest struct {
 // @Success      200  {object}  channelview.Response
 // @Failure      400  {object}  apierr.ErrorResponse
 // @Failure      401  {object}  apierr.ErrorResponse
-// @Failure      403  {object}  apierr.ErrorResponse  "not the owner"
+// @Failure      403  {object}  apierr.ErrorResponse  "not a server administrator"
 // @Failure      404  {object}  apierr.ErrorResponse
 // @Router       /v1/channels/{channelId} [patch]
 func (h *Handler) UpdateChannel(c *gin.Context) {
@@ -143,13 +143,13 @@ func (h *Handler) UpdateChannel(c *gin.Context) {
 
 // DeleteChannel godoc
 // @Summary      Delete a channel
-// @Description  Owner-only.
+// @Description  Administrators only (the owner, or a member with ADMINISTRATOR).
 // @Tags         channels
 // @Security     BearerAuth
 // @Param        channelId  path  string  true  "Channel ID"
 // @Success      204  "no content"
 // @Failure      401  {object}  apierr.ErrorResponse
-// @Failure      403  {object}  apierr.ErrorResponse  "not the owner"
+// @Failure      403  {object}  apierr.ErrorResponse  "not a server administrator"
 // @Failure      404  {object}  apierr.ErrorResponse
 // @Router       /v1/channels/{channelId} [delete]
 func (h *Handler) DeleteChannel(c *gin.Context) {
@@ -175,7 +175,7 @@ type moveChannelRequest struct {
 
 // MoveToCategory godoc
 // @Summary      Move a channel to a category
-// @Description  Owner-only. `category_id` omitted/null moves it to "sin categoria".
+// @Description  Administrators only (the owner, or a member with ADMINISTRATOR). `category_id` omitted/null moves it to "sin categoria".
 // @Tags         channels
 // @Accept       json
 // @Produce      json
@@ -185,7 +185,7 @@ type moveChannelRequest struct {
 // @Success      200  {object}  channelview.Response
 // @Failure      400  {object}  apierr.ErrorResponse
 // @Failure      401  {object}  apierr.ErrorResponse
-// @Failure      403  {object}  apierr.ErrorResponse  "not the owner"
+// @Failure      403  {object}  apierr.ErrorResponse  "not a server administrator"
 // @Failure      404  {object}  apierr.ErrorResponse
 // @Router       /v1/channels/{channelId}/category [patch]
 func (h *Handler) MoveToCategory(c *gin.Context) {
@@ -224,7 +224,7 @@ type reorderChannelsRequest struct {
 
 // Reorder godoc
 // @Summary      Reorder channels within a category
-// @Description  Owner-only. `channel_ids` is the full, final order for that category (or for "sin categoria" if `category_id` is omitted/null).
+// @Description  Administrators only (the owner, or a member with ADMINISTRATOR). `channel_ids` is the full, final order for that category (or for "sin categoria" if `category_id` is omitted/null).
 // @Tags         channels
 // @Accept       json
 // @Security     BearerAuth
@@ -233,7 +233,7 @@ type reorderChannelsRequest struct {
 // @Success      200  "ok"
 // @Failure      400  {object}  apierr.ErrorResponse
 // @Failure      401  {object}  apierr.ErrorResponse
-// @Failure      403  {object}  apierr.ErrorResponse  "not the owner"
+// @Failure      403  {object}  apierr.ErrorResponse  "not a server administrator"
 // @Failure      404  {object}  apierr.ErrorResponse
 // @Router       /v1/servers/{serverId}/channels/reorder [patch]
 func (h *Handler) Reorder(c *gin.Context) {

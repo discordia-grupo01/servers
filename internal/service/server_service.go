@@ -32,12 +32,13 @@ type IconStore interface {
 }
 
 type Service struct {
-	repo  Repo
-	icons IconStore
+	repo      Repo
+	icons     IconStore
+	standings StandingReader
 }
 
-func New(repo Repo, icons IconStore) *Service {
-	return &Service{repo: repo, icons: icons}
+func New(repo Repo, icons IconStore, standings StandingReader) *Service {
+	return &Service{repo: repo, icons: icons, standings: standings}
 }
 
 func validateServerName(raw string) (string, error) {
@@ -174,7 +175,11 @@ func (s *Service) UpdateServer(ctx context.Context, p UpdateServerParams) (model
 	if err != nil {
 		return model.Server{}, err
 	}
-	if err := RequireManageServer(srv, p.ActorUserID); err != nil {
+	actor, err := ResolveStanding(ctx, s.standings, srv, p.ActorUserID)
+	if err != nil {
+		return model.Server{}, err
+	}
+	if err := RequireManageServer(actor); err != nil {
 		return model.Server{}, err
 	}
 

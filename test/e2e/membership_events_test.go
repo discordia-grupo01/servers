@@ -106,7 +106,7 @@ func setupE2E(t *testing.T) (*gin.Engine, <-chan amqp.Delivery) {
 
 	gin.SetMode(gin.TestMode)
 	router := handler.NewRouter(handler.Deps{
-		Servers:     service.New(serverRepo, icons),
+		Servers:     service.New(serverRepo, icons, memberRepo),
 		Icons:       icons,
 		Membership:  membership_service.New(serverRepo, memberRepo),
 		Invitations: invitation.NewService(repository.NewInvitationRepository(pool)),

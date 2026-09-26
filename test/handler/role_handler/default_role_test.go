@@ -58,8 +58,8 @@ func TestSetDefaultRole_RoleServerMismatch_Returns400(t *testing.T) {
 	}
 }
 
-func TestSetDefaultRole_NotOwner_Returns403(t *testing.T) {
-	r := newRouter(t, &fakeRoleUseCases{setDefaultErr: model.ErrForbiddenNotOwner})
+func TestSetDefaultRole_NotAdmin_Returns403(t *testing.T) {
+	r := newRouter(t, &fakeRoleUseCases{setDefaultErr: model.ErrForbiddenNotAdmin})
 	w := doJSON(t, r, http.MethodPut, "/v1/servers/"+uuid.New().String()+"/default-role", testUser,
 		map[string]string{"role_id": uuid.New().String()})
 	if w.Code != http.StatusForbidden {

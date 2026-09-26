@@ -12,7 +12,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/model/role"
 )
 
-func TestCreateRole_NotOwner_Forbidden(t *testing.T) {
+func TestCreateRole_NotAdmin_Forbidden(t *testing.T) {
 	srv := ownerServer()
 	svc := newService(&fakeServers{server: srv}, &fakeRoles{})
 
@@ -20,8 +20,8 @@ func TestCreateRole_NotOwner_Forbidden(t *testing.T) {
 	p.UserID = "someone-else"
 
 	_, err := svc.CreateRole(context.Background(), p)
-	if !errors.Is(err, model.ErrForbiddenNotOwner) {
-		t.Errorf("err = %v, want ErrForbiddenNotOwner", err)
+	if !errors.Is(err, model.ErrForbiddenNotAdmin) {
+		t.Errorf("err = %v, want ErrForbiddenNotAdmin", err)
 	}
 }
 

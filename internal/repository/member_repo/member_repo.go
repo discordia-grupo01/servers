@@ -35,6 +35,39 @@ func (r *MemberRepository) IsMember(ctx context.Context, serverID uuid.UUID, use
 	return exists, nil
 }
 
+// MemberStanding returns whether userID is a member of serverID and the union
+// of the permissions of every role assigned to them, in a single query. It
+// never sets IsOwner: ownership comes from the server row (see
+// service.ResolveStanding).
+func (r *MemberRepository) MemberStanding(ctx context.Context, serverID uuid.UUID, userID string) (role.Standing, error) {
+	var st role.Standing
+	err := r.pool.QueryRow(ctx, `
+		SELECT EXISTS (SELECT 1 FROM server_members WHERE server_id = $1 AND user_id = $2),
+		       COALESCE(BIT_OR(r.permissions), 0)
+		  FROM member_roles mr
+		  JOIN roles r ON r.id = mr.role_id
+		 WHERE mr.server_id = $1 AND mr.user_id = $2`,
+		serverID, userID,
+	).Scan(&st.IsMember, &st.Permissions)
+	if err != nil {
+		return role.Standing{}, fmt.Errorf("member standing: %w", err)
+	}
+	return st, nil
+}
+
+// HasRole reports whether userID currently has roleID assigned in serverID.
+func (r *MemberRepository) HasRole(ctx context.Context, serverID uuid.UUID, userID string, roleID uuid.UUID) (bool, error) {
+	var has bool
+	err := r.pool.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM member_roles WHERE server_id = $1 AND user_id = $2 AND role_id = $3)`,
+		serverID, userID, roleID,
+	).Scan(&has)
+	if err != nil {
+		return false, fmt.Errorf("has role: %w", err)
+	}
+	return has, nil
+}
+
 // AssignRole is idempotent: assigning a role the member already has is a no-op.
 func (r *MemberRepository) AssignRole(ctx context.Context, serverID uuid.UUID, userID string, roleID uuid.UUID) error {
 	_, err := r.pool.Exec(ctx, `

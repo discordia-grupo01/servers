@@ -76,7 +76,7 @@ func TestGetIcon_PreMigrationURLWithoutVersionHash_IsStillServed(t *testing.T) {
 	repo := &fakeRepo{getResult: model.Server{ID: id, IconURL: &oldStyleURL}}
 
 	r := handler.NewRouter(handler.Deps{
-		Servers: service.New(repo, icons),
+		Servers: service.New(repo, icons, repo),
 		Icons:   icons,
 		Auth:    middleware.AuthConfig{UserIDHeader: "X-User-Id"},
 		DB:      okPinger{},

@@ -18,6 +18,9 @@ var (
 	ErrServerNotFound     = errors.New("server not found")
 	ErrForbiddenNotOwner  = errors.New("only the server owner can perform this action")
 	ErrForbiddenNotMember = errors.New("you must be a member of this server to view this")
+	ErrForbiddenNotAdmin  = errors.New("you must be a server administrator to perform this action")
+
+	ErrCannotRemoveOwnAdmin = errors.New("you cannot remove the administrator permission from yourself")
 
 	ErrLeaveForbidden   = errors.New("you can only remove your own membership")
 	ErrOwnerCannotLeave = errors.New("the server owner cannot leave; transfer ownership or delete the server first")

@@ -24,7 +24,9 @@ type Roles interface {
 
 // Members is the slice of MemberRepository this service needs.
 type Members interface {
+	service.StandingReader
 	IsMember(ctx context.Context, serverID uuid.UUID, userID string) (bool, error)
+	HasRole(ctx context.Context, serverID uuid.UUID, userID string, roleID uuid.UUID) (bool, error)
 	AssignRole(ctx context.Context, serverID uuid.UUID, userID string, roleID uuid.UUID) error
 	RemoveRole(ctx context.Context, serverID uuid.UUID, userID string, roleID uuid.UUID) error
 	ListRolesForMember(ctx context.Context, serverID uuid.UUID, userID string) ([]role.Role, error)
@@ -64,7 +66,11 @@ func (s *MemberRoleService) AssignRole(ctx context.Context, p AssignRoleParams) 
 	if err != nil {
 		return role.Role{}, err
 	}
-	if err := service.RequireManageRoles(srv, p.ActorUserID); err != nil {
+	actor, err := service.ResolveStanding(ctx, s.members, srv, p.ActorUserID)
+	if err != nil {
+		return role.Role{}, err
+	}
+	if err := service.RequireManageRoles(actor); err != nil {
 		return role.Role{}, err
 	}
 
@@ -100,12 +106,28 @@ func (s *MemberRoleService) RemoveRole(ctx context.Context, p RemoveRoleParams) 
 	if err != nil {
 		return err
 	}
-	if err := service.RequireManageRoles(srv, p.ActorUserID); err != nil {
+	actor, err := service.ResolveStanding(ctx, s.members, srv, p.ActorUserID)
+	if err != nil {
+		return err
+	}
+	if err := service.RequireManageRoles(actor); err != nil {
 		return err
 	}
 
-	if _, err := s.resolveRole(ctx, p.ServerID, p.RoleID); err != nil {
+	rl, err := s.resolveRole(ctx, p.ServerID, p.RoleID)
+	if err != nil {
 		return err
+	}
+	if p.TargetUserID == p.ActorUserID && role.RemovesOwnAdmin(actor, true, rl.Permissions, 0) {
+		has, err := s.members.HasRole(ctx, p.ServerID, p.ActorUserID, p.RoleID)
+		if err != nil {
+			return err
+		}
+		// An administrator can't unassign ADMINISTRATOR from themselves (CA2
+		// of #22); if they don't hold the role, RemoveRole reports it below.
+		if role.RemovesOwnAdmin(actor, has, rl.Permissions, 0) {
+			return model.ErrCannotRemoveOwnAdmin
+		}
 	}
 
 	if err := s.members.RemoveRole(ctx, p.ServerID, p.TargetUserID, p.RoleID); err != nil {
