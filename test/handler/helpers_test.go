@@ -16,6 +16,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/iconstore"
 	"github.com/discordia-grupo01/servers/internal/middleware"
 	"github.com/discordia-grupo01/servers/internal/model"
+	"github.com/discordia-grupo01/servers/internal/model/role"
 	"github.com/discordia-grupo01/servers/internal/outbox"
 	"github.com/discordia-grupo01/servers/internal/service"
 )
@@ -86,6 +87,12 @@ func (f *fakeRepo) UpdateServer(_ context.Context, _ uuid.UUID, name, nameKey st
 	return nil
 }
 
+// MemberStanding makes fakeRepo the server service's StandingReader too:
+// every non-owner caller is a non-member, so only the owner administers.
+func (f *fakeRepo) MemberStanding(_ context.Context, _ uuid.UUID, _ string) (role.Standing, error) {
+	return role.Standing{}, nil
+}
+
 type okPinger struct{}
 
 func (okPinger) Ping(context.Context) error { return nil }
@@ -122,7 +129,7 @@ func newRouter(t *testing.T, maxIcon int64, repoErr error) (*gin.Engine, *fakeRe
 		t.Fatal(err)
 	}
 	r := handler.NewRouter(handler.Deps{
-		Servers: service.New(repo, icons),
+		Servers: service.New(repo, icons, repo),
 		Icons:   icons,
 		Auth:    middleware.AuthConfig{UserIDHeader: "X-User-Id"},
 		DB:      okPinger{},

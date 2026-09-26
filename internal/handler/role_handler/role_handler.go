@@ -40,7 +40,7 @@ type createRoleRequest struct {
 
 // CreateRole godoc
 // @Summary      Create a role
-// @Description  Owner-only.
+// @Description  Administrators only (the owner, or a member with ADMINISTRATOR).
 // @Tags         roles
 // @Accept       json
 // @Produce      json
@@ -50,7 +50,7 @@ type createRoleRequest struct {
 // @Success      201  {object}  roleview.Response
 // @Failure      400  {object}  apierr.ErrorResponse
 // @Failure      401  {object}  apierr.ErrorResponse
-// @Failure      403  {object}  apierr.ErrorResponse  "not the owner"
+// @Failure      403  {object}  apierr.ErrorResponse  "not a server administrator"
 // @Failure      404  {object}  apierr.ErrorResponse
 // @Router       /v1/servers/{serverId}/roles [post]
 func (h *Handler) CreateRole(c *gin.Context) {
@@ -139,7 +139,7 @@ type updateRolePermissionsRequest struct {
 
 // UpdateRolePermissions godoc
 // @Summary      Edit a role
-// @Description  Owner-only. Any of `permissions`/`name`/`color` may be omitted to leave it unchanged.
+// @Description  Administrators only (the owner, or a member with ADMINISTRATOR). Any of `permissions`/`name`/`color` may be omitted to leave it unchanged.
 // @Tags         roles
 // @Accept       json
 // @Produce      json
@@ -149,7 +149,7 @@ type updateRolePermissionsRequest struct {
 // @Success      200  {object}  roleview.Response
 // @Failure      400  {object}  apierr.ErrorResponse
 // @Failure      401  {object}  apierr.ErrorResponse
-// @Failure      403  {object}  apierr.ErrorResponse  "not the owner"
+// @Failure      403  {object}  apierr.ErrorResponse  "not a server administrator, or removing ADMINISTRATOR from a role you hold"
 // @Failure      404  {object}  apierr.ErrorResponse
 // @Router       /v1/roles/{roleId} [patch]
 func (h *Handler) UpdateRolePermissions(c *gin.Context) {
@@ -184,7 +184,7 @@ type setDefaultRoleRequest struct {
 
 // SetDefaultRole godoc
 // @Summary      Set the server's default role
-// @Description  Owner-only. The default role is assigned automatically to new members.
+// @Description  Administrators only (the owner, or a member with ADMINISTRATOR). The default role is assigned automatically to new members.
 // @Tags         roles
 // @Accept       json
 // @Security     BearerAuth
@@ -193,7 +193,7 @@ type setDefaultRoleRequest struct {
 // @Success      204  "no content"
 // @Failure      400  {object}  apierr.ErrorResponse
 // @Failure      401  {object}  apierr.ErrorResponse
-// @Failure      403  {object}  apierr.ErrorResponse  "not the owner"
+// @Failure      403  {object}  apierr.ErrorResponse  "not a server administrator"
 // @Failure      404  {object}  apierr.ErrorResponse
 // @Router       /v1/servers/{serverId}/default-role [put]
 func (h *Handler) SetDefaultRole(c *gin.Context) {
@@ -227,13 +227,13 @@ func (h *Handler) SetDefaultRole(c *gin.Context) {
 
 // DeleteRole godoc
 // @Summary      Delete a role
-// @Description  Owner-only.
+// @Description  Administrators only (the owner, or a member with ADMINISTRATOR).
 // @Tags         roles
 // @Security     BearerAuth
 // @Param        roleId  path  string  true  "Role ID"
 // @Success      204  "no content"
 // @Failure      401  {object}  apierr.ErrorResponse
-// @Failure      403  {object}  apierr.ErrorResponse  "not the owner"
+// @Failure      403  {object}  apierr.ErrorResponse  "not a server administrator, or deleting a role with ADMINISTRATOR that you hold"
 // @Failure      404  {object}  apierr.ErrorResponse
 // @Router       /v1/roles/{roleId} [delete]
 func (h *Handler) DeleteRole(c *gin.Context) {

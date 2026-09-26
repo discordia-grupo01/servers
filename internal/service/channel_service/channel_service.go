@@ -40,10 +40,11 @@ type ChannelService struct {
 	servers    Servers
 	categories Categories
 	channels   Repo
+	standings  service.StandingReader
 }
 
-func New(servers Servers, categories Categories, channels Repo) *ChannelService {
-	return &ChannelService{servers: servers, categories: categories, channels: channels}
+func New(servers Servers, categories Categories, channels Repo, standings service.StandingReader) *ChannelService {
+	return &ChannelService{servers: servers, categories: categories, channels: channels, standings: standings}
 }
 
 // resolveCategory fetches the category (if any) and confirms it belongs to serverID.
@@ -101,7 +102,11 @@ func (s *ChannelService) CreateChannel(ctx context.Context, p CreateChannelParam
 	if err != nil {
 		return model.Channel{}, err
 	}
-	if err := service.RequireManageChannels(srv, p.UserID); err != nil {
+	actor, err := service.ResolveStanding(ctx, s.standings, srv, p.UserID)
+	if err != nil {
+		return model.Channel{}, err
+	}
+	if err := service.RequireManageChannels(actor); err != nil {
 		return model.Channel{}, err
 	}
 
@@ -156,7 +161,11 @@ func (s *ChannelService) UpdateChannel(ctx context.Context, p UpdateChannelParam
 	if err != nil {
 		return model.Channel{}, err
 	}
-	if err := service.RequireManageChannels(srv, p.UserID); err != nil {
+	actor, err := service.ResolveStanding(ctx, s.standings, srv, p.UserID)
+	if err != nil {
+		return model.Channel{}, err
+	}
+	if err := service.RequireManageChannels(actor); err != nil {
 		return model.Channel{}, err
 	}
 
@@ -202,7 +211,11 @@ func (s *ChannelService) DeleteChannel(ctx context.Context, p DeleteChannelParam
 	if err != nil {
 		return err
 	}
-	if err := service.RequireManageChannels(srv, p.UserID); err != nil {
+	actor, err := service.ResolveStanding(ctx, s.standings, srv, p.UserID)
+	if err != nil {
+		return err
+	}
+	if err := service.RequireManageChannels(actor); err != nil {
 		return err
 	}
 
@@ -229,7 +242,11 @@ func (s *ChannelService) MoveChannelToCategory(ctx context.Context, p MoveChanne
 	if err != nil {
 		return model.Channel{}, err
 	}
-	if err := service.RequireManageChannels(srv, p.UserID); err != nil {
+	actor, err := service.ResolveStanding(ctx, s.standings, srv, p.UserID)
+	if err != nil {
+		return model.Channel{}, err
+	}
+	if err := service.RequireManageChannels(actor); err != nil {
 		return model.Channel{}, err
 	}
 
@@ -262,7 +279,11 @@ func (s *ChannelService) ReorderChannels(ctx context.Context, p ReorderChannelsP
 	if err != nil {
 		return err
 	}
-	if err := service.RequireManageChannels(srv, p.UserID); err != nil {
+	actor, err := service.ResolveStanding(ctx, s.standings, srv, p.UserID)
+	if err != nil {
+		return err
+	}
+	if err := service.RequireManageChannels(actor); err != nil {
 		return err
 	}
 

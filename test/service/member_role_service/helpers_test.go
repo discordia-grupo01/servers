@@ -53,7 +53,36 @@ type fakeMembers struct {
 
 	listRoles []role.Role
 	listErr   error
+
+	standing    role.Standing
+	standingErr error
+
+	hasRole      bool
+	hasRoleErr   error
+	hasRoleCalls int
 }
+
+func (f *fakeMembers) MemberStanding(_ context.Context, _ uuid.UUID, _ string) (role.Standing, error) {
+	if f.standingErr != nil {
+		return role.Standing{}, f.standingErr
+	}
+	return f.standing, nil
+}
+
+func (f *fakeMembers) HasRole(_ context.Context, _ uuid.UUID, _ string, _ uuid.UUID) (bool, error) {
+	f.hasRoleCalls++
+	if f.hasRoleErr != nil {
+		return false, f.hasRoleErr
+	}
+	return f.hasRole, nil
+}
+
+// adminStanding is a non-owner member holding ADMINISTRATOR through a role.
+func adminStanding() role.Standing {
+	return role.Standing{IsMember: true, Permissions: role.PermAdministrator}
+}
+
+const testAdmin = "admin-1"
 
 func (f *fakeMembers) IsMember(_ context.Context, _ uuid.UUID, _ string) (bool, error) {
 	if f.isMemberErr != nil {

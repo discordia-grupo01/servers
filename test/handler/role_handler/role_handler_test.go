@@ -46,7 +46,7 @@ func TestRoleHandler_InvalidUUIDParam_BadRequest(t *testing.T) {
 }
 
 func TestCreateRole_DomainError_MapsToHTTPStatus(t *testing.T) {
-	r := newRouter(t, &fakeRoleUseCases{createErr: model.ErrForbiddenNotOwner})
+	r := newRouter(t, &fakeRoleUseCases{createErr: model.ErrForbiddenNotAdmin})
 	w := doJSON(t, r, http.MethodPost, "/v1/servers/"+uuid.New().String()+"/roles", testUser,
 		map[string]string{"name": "Moderator", "color": "#FF00AA"})
 	if w.Code != http.StatusForbidden {

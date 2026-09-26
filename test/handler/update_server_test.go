@@ -101,8 +101,8 @@ func TestUpdateServer_IconChangedTwice_AlwaysServesTheLatestOne(t *testing.T) {
 	}
 }
 
-// CA2: a non-owner can't edit the server's config, and nothing is persisted.
-func TestUpdateServer_NotOwner_Returns403(t *testing.T) {
+// CA2: a non-administrator can't edit the server's config, and nothing is persisted.
+func TestUpdateServer_NotAdmin_Returns403(t *testing.T) {
 	r, repo := newRouter(t, oneMB, nil)
 	id := uuid.New()
 	repo.getResult = model.Server{ID: id, Name: "Original", OwnerID: testUser}
@@ -112,7 +112,7 @@ func TestUpdateServer_NotOwner_Returns403(t *testing.T) {
 		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
 	}
 	if repo.updateCalls != 0 {
-		t.Error("UpdateServer must not be called for a non-owner")
+		t.Error("UpdateServer must not be called for a non-administrator")
 	}
 }
 

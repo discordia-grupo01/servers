@@ -78,16 +78,16 @@ func main() {
 	categoryRepo := category_repo.NewCategoryRepository(pool)
 	channelRepo := channel_repo.NewChannelRepository(pool)
 
-	svc := service.New(serverRepo, icons)
-	roleSvc := role_service.New(serverRepo, roleRepo)
+	svc := service.New(serverRepo, icons, memberRepo)
+	roleSvc := role_service.New(serverRepo, roleRepo, memberRepo)
 	memberRoleSvc := member_role_service.New(serverRepo, roleRepo, memberRepo)
 	membershipSvc := membership_service.New(serverRepo, memberRepo)
 	transferSvc := ownership_transfer_service.New(serverRepo, memberRepo, transferRepo)
 	go ownership_transfer_service.NewExpirer(transferRepo).Start(ctx)
 	go outbox.NewPoller(pool, publisher).Start(ctx)
-	invSvc := invitation.NewService(repository.NewInvitationRepository(pool))
-	categorySvc := category_service.New(serverRepo, categoryRepo)
-	channelSvc := channel_service.New(serverRepo, categoryRepo, channelRepo)
+	invSvc := invitation.NewService(repository.NewInvitationRepository(pool), serverRepo, memberRepo)
+	categorySvc := category_service.New(serverRepo, categoryRepo, memberRepo)
+	channelSvc := channel_service.New(serverRepo, categoryRepo, channelRepo, memberRepo)
 
 	router := handler.NewRouter(handler.Deps{
 		Servers:            svc,

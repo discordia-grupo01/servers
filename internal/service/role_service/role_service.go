@@ -32,13 +32,22 @@ type Repo interface {
 	Delete(ctx context.Context, id uuid.UUID) error
 }
 
+// Members is the slice of MemberRepository this service needs: the actor's
+// standing for authorization, and whether they hold a given role (to stop an
+// administrator from removing ADMINISTRATOR from themselves).
+type Members interface {
+	service.StandingReader
+	HasRole(ctx context.Context, serverID uuid.UUID, userID string, roleID uuid.UUID) (bool, error)
+}
+
 type RoleService struct {
 	servers Servers
 	roles   Repo
+	members Members
 }
 
-func New(servers Servers, roles Repo) *RoleService {
-	return &RoleService{servers: servers, roles: roles}
+func New(servers Servers, roles Repo, members Members) *RoleService {
+	return &RoleService{servers: servers, roles: roles, members: members}
 }
 
 type CreateRoleParams struct {
@@ -53,7 +62,11 @@ func (s *RoleService) CreateRole(ctx context.Context, p CreateRoleParams) (role.
 	if err != nil {
 		return role.Role{}, err
 	}
-	if err := service.RequireManageRoles(srv, p.UserID); err != nil {
+	actor, err := service.ResolveStanding(ctx, s.members, srv, p.UserID)
+	if err != nil {
+		return role.Role{}, err
+	}
+	if err := service.RequireManageRoles(actor); err != nil {
 		return role.Role{}, err
 	}
 
@@ -126,7 +139,11 @@ func (s *RoleService) UpdateRolePermissions(ctx context.Context, p UpdateRolePer
 	if err != nil {
 		return role.Role{}, err
 	}
-	if err := service.RequireManageRoles(srv, p.UserID); err != nil {
+	actor, err := service.ResolveStanding(ctx, s.members, srv, p.UserID)
+	if err != nil {
+		return role.Role{}, err
+	}
+	if err := service.RequireManageRoles(actor); err != nil {
 		return role.Role{}, err
 	}
 
@@ -134,6 +151,9 @@ func (s *RoleService) UpdateRolePermissions(ctx context.Context, p UpdateRolePer
 		mask, invalid, ok := role.ParsePermissions(p.Permissions)
 		if !ok {
 			return role.Role{}, &model.InvalidPermissionError{Value: invalid}
+		}
+		if err := s.requireNotRemovingOwnAdmin(ctx, actor, p.UserID, rl, mask); err != nil {
+			return role.Role{}, err
 		}
 		rl.Permissions = mask
 	}
@@ -173,7 +193,11 @@ func (s *RoleService) SetDefaultRole(ctx context.Context, p SetDefaultRoleParams
 	if err != nil {
 		return err
 	}
-	if err := service.RequireManageRoles(srv, p.UserID); err != nil {
+	actor, err := service.ResolveStanding(ctx, s.members, srv, p.UserID)
+	if err != nil {
+		return err
+	}
+	if err := service.RequireManageRoles(actor); err != nil {
 		return err
 	}
 
@@ -207,16 +231,42 @@ func (s *RoleService) DeleteRole(ctx context.Context, p DeleteRoleParams) error 
 	if err != nil {
 		return err
 	}
-	if err := service.RequireManageRoles(srv, p.UserID); err != nil {
+	actor, err := service.ResolveStanding(ctx, s.members, srv, p.UserID)
+	if err != nil {
+		return err
+	}
+	if err := service.RequireManageRoles(actor); err != nil {
 		return err
 	}
 	if srv.DefaultRoleID != nil && *srv.DefaultRoleID == p.RoleID {
 		return model.ErrRoleIsServerDefault
+	}
+	if err := s.requireNotRemovingOwnAdmin(ctx, actor, p.UserID, rl, 0); err != nil {
+		return err
 	}
 
 	if err := s.roles.Delete(ctx, p.RoleID); err != nil {
 		return err
 	}
 	// TODO(events): publicar "roles.role_deleted" en discordia.events cuando exista un consumidor real (ver Canales).
+	return nil
+}
+
+// requireNotRemovingOwnAdmin stops an administrator from taking ADMINISTRATOR
+// away from themselves through rl -- by changing its permissions to after, or
+// by deleting it (after = 0) -- so they can't lock themselves out by mistake
+// (CA2 of #22). HasRole is only looked up when the change would actually drop
+// ADMINISTRATOR from a role and the actor is not the owner.
+func (s *RoleService) requireNotRemovingOwnAdmin(ctx context.Context, actor role.Standing, userID string, rl role.Role, after role.Permission) error {
+	if !role.RemovesOwnAdmin(actor, true, rl.Permissions, after) {
+		return nil
+	}
+	has, err := s.members.HasRole(ctx, rl.ServerID, userID, rl.ID)
+	if err != nil {
+		return err
+	}
+	if role.RemovesOwnAdmin(actor, has, rl.Permissions, after) {
+		return model.ErrCannotRemoveOwnAdmin
+	}
 	return nil
 }

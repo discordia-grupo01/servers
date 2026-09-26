@@ -38,7 +38,7 @@ type assignRoleRequest struct {
 
 // AssignRole godoc
 // @Summary      Assign a role to a member
-// @Description  Owner-only. Idempotent: assigning a role the member already has succeeds without changing anything.
+// @Description  Administrators only (the owner, or a member with ADMINISTRATOR). Idempotent: assigning a role the member already has succeeds without changing anything.
 // @Tags         member-roles
 // @Accept       json
 // @Produce      json
@@ -49,7 +49,7 @@ type assignRoleRequest struct {
 // @Success      200  {object}  roleview.Response
 // @Failure      400  {object}  apierr.ErrorResponse
 // @Failure      401  {object}  apierr.ErrorResponse
-// @Failure      403  {object}  apierr.ErrorResponse  "not the owner"
+// @Failure      403  {object}  apierr.ErrorResponse  "not a server administrator"
 // @Failure      404  {object}  apierr.ErrorResponse
 // @Router       /v1/servers/{serverId}/members/{userId}/roles [post]
 func (h *Handler) AssignRole(c *gin.Context) {
@@ -85,7 +85,7 @@ func (h *Handler) AssignRole(c *gin.Context) {
 
 // RemoveRole godoc
 // @Summary      Remove a role from a member
-// @Description  Owner-only. Idempotent.
+// @Description  Administrators only (the owner, or a member with ADMINISTRATOR). Idempotent.
 // @Tags         member-roles
 // @Security     BearerAuth
 // @Param        serverId  path  string  true  "Server ID"
@@ -93,7 +93,7 @@ func (h *Handler) AssignRole(c *gin.Context) {
 // @Param        roleId    path  string  true  "Role ID"
 // @Success      204  "no content"
 // @Failure      401  {object}  apierr.ErrorResponse
-// @Failure      403  {object}  apierr.ErrorResponse  "not the owner"
+// @Failure      403  {object}  apierr.ErrorResponse  "not a server administrator, or unassigning a role with ADMINISTRATOR from yourself"
 // @Failure      404  {object}  apierr.ErrorResponse
 // @Router       /v1/servers/{serverId}/members/{userId}/roles/{roleId} [delete]
 func (h *Handler) RemoveRole(c *gin.Context) {

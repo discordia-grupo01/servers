@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/discordia-grupo01/servers/internal/model"
+	"github.com/discordia-grupo01/servers/internal/model/role"
 	"github.com/discordia-grupo01/servers/internal/service"
 )
 
@@ -18,7 +19,7 @@ func serverToUpdate() model.Server {
 
 func update(t *testing.T, repo *fakeRepoHelper, icons *fakeIconsHelper, p service.UpdateServerParams) (model.Server, error) {
 	t.Helper()
-	return service.New(repo, icons).UpdateServer(context.Background(), p)
+	return service.New(repo, icons, repo).UpdateServer(context.Background(), p)
 }
 
 // CA1: a valid edit by the owner persists and is reflected back.
@@ -142,7 +143,7 @@ func TestUpdateServer_RemoveBanner_ClearsURLAndDeletesFromStore(t *testing.T) {
 }
 
 // CA2: a non-owner cannot edit the server, and nothing is persisted.
-func TestUpdateServer_NotOwner_Forbidden(t *testing.T) {
+func TestUpdateServer_NotAdmin_Forbidden(t *testing.T) {
 	srv := serverToUpdate()
 	repo, icons := &fakeRepoHelper{getResult: srv}, &fakeIconsHelper{}
 	newName := "Hijacked"
@@ -150,8 +151,8 @@ func TestUpdateServer_NotOwner_Forbidden(t *testing.T) {
 	_, err := update(t, repo, icons, service.UpdateServerParams{
 		ServerID: srv.ID, ActorUserID: "someone-else", Name: &newName,
 	})
-	if !errors.Is(err, model.ErrForbiddenNotOwner) {
-		t.Errorf("err = %v, want ErrForbiddenNotOwner", err)
+	if !errors.Is(err, model.ErrForbiddenNotAdmin) {
+		t.Errorf("err = %v, want ErrForbiddenNotAdmin", err)
 	}
 	if repo.updateCalls != 0 {
 		t.Error("UpdateServer must not be called when the actor isn't the owner")
@@ -242,5 +243,36 @@ func TestUpdateServer_UnsupportedIcon_Rejected(t *testing.T) {
 	}
 	if repo.updateCalls != 0 {
 		t.Error("UpdateServer must not be called when the icon is rejected")
+	}
+}
+
+// Bug #22: a non-owner holding ADMINISTRATOR can edit the server.
+func TestUpdateServer_Administrator_Allowed(t *testing.T) {
+	srv := serverToUpdate()
+	repo := &fakeRepoHelper{getResult: srv, standing: role.Standing{IsMember: true, Permissions: role.PermAdministrator}}
+	newName := "New Name"
+
+	got, err := update(t, repo, &fakeIconsHelper{}, service.UpdateServerParams{
+		ServerID: srv.ID, ActorUserID: "admin-1", Name: &newName,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.Name != newName || repo.updateCalls != 1 {
+		t.Errorf("got = %+v, updateCalls = %d", got, repo.updateCalls)
+	}
+}
+
+func TestUpdateServer_StandingLookupError_Propagates(t *testing.T) {
+	srv := serverToUpdate()
+	boom := errors.New("db down")
+	repo := &fakeRepoHelper{getResult: srv, standingErr: boom}
+	newName := "New Name"
+
+	_, err := update(t, repo, &fakeIconsHelper{}, service.UpdateServerParams{
+		ServerID: srv.ID, ActorUserID: "member-1", Name: &newName,
+	})
+	if !errors.Is(err, boom) {
+		t.Errorf("err = %v, want %v", err, boom)
 	}
 }

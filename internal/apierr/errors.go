@@ -79,6 +79,10 @@ func WriteDomainError(c *gin.Context, err error) {
 		RespondError(c, http.StatusForbidden, err.Error(), nil)
 	case errors.Is(err, model.ErrForbiddenNotMember):
 		RespondError(c, http.StatusForbidden, err.Error(), nil)
+	case errors.Is(err, model.ErrForbiddenNotAdmin):
+		RespondError(c, http.StatusForbidden, err.Error(), nil)
+	case errors.Is(err, model.ErrCannotRemoveOwnAdmin):
+		RespondError(c, http.StatusForbidden, err.Error(), map[string]any{"reason": "cannot_remove_own_admin"})
 	case errors.Is(err, model.ErrLeaveForbidden):
 		RespondError(c, http.StatusForbidden, err.Error(), nil)
 	case errors.Is(err, model.ErrOwnerCannotLeave):

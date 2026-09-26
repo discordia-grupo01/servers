@@ -61,7 +61,7 @@ func TestCreateChannel_InvalidServerIDParam_BadRequest(t *testing.T) {
 }
 
 func TestCreateChannel_DomainError_MapsToHTTPStatus(t *testing.T) {
-	r := newRouter(t, &fakeChannelUseCases{createErr: model.ErrForbiddenNotOwner})
+	r := newRouter(t, &fakeChannelUseCases{createErr: model.ErrForbiddenNotAdmin})
 	w := doJSON(t, r, http.MethodPost, "/v1/servers/"+uuid.New().String()+"/channels", testUser,
 		map[string]string{"name": "general", "kind": "text"})
 	if w.Code != http.StatusForbidden {
@@ -115,7 +115,7 @@ func TestDeleteChannel_Returns204(t *testing.T) {
 }
 
 func TestDeleteChannel_DomainError_MapsToHTTPStatus(t *testing.T) {
-	r := newRouter(t, &fakeChannelUseCases{deleteErr: model.ErrForbiddenNotOwner})
+	r := newRouter(t, &fakeChannelUseCases{deleteErr: model.ErrForbiddenNotAdmin})
 	w := doJSON(t, r, http.MethodDelete, "/v1/channels/"+uuid.New().String(), testUser, nil)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())

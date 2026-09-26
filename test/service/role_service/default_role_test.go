@@ -24,7 +24,7 @@ func TestSetDefaultRole_RoleServerMismatch_BadRequest(t *testing.T) {
 	}
 }
 
-func TestSetDefaultRole_NotOwner_Forbidden(t *testing.T) {
+func TestSetDefaultRole_NotAdmin_Forbidden(t *testing.T) {
 	srv := ownerServer()
 	rl := existingRole(srv.ID)
 	svc := newService(&fakeServers{server: srv}, &fakeRoles{getByIDRole: rl})
@@ -32,8 +32,8 @@ func TestSetDefaultRole_NotOwner_Forbidden(t *testing.T) {
 	err := svc.SetDefaultRole(context.Background(), role_service.SetDefaultRoleParams{
 		ServerID: srv.ID, RoleID: rl.ID, UserID: "someone-else",
 	})
-	if !errors.Is(err, model.ErrForbiddenNotOwner) {
-		t.Errorf("err = %v, want ErrForbiddenNotOwner", err)
+	if !errors.Is(err, model.ErrForbiddenNotAdmin) {
+		t.Errorf("err = %v, want ErrForbiddenNotAdmin", err)
 	}
 }
 

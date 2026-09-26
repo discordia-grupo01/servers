@@ -56,11 +56,26 @@ func TestUpdateRolePermissions_RoleNotFound_Returns404(t *testing.T) {
 	}
 }
 
-func TestUpdateRolePermissions_NotOwner_Returns403(t *testing.T) {
-	r := newRouter(t, &fakeRoleUseCases{updateErr: model.ErrForbiddenNotOwner})
+func TestUpdateRolePermissions_NotAdmin_Returns403(t *testing.T) {
+	r := newRouter(t, &fakeRoleUseCases{updateErr: model.ErrForbiddenNotAdmin})
 	w := doJSON(t, r, http.MethodPatch, "/v1/roles/"+uuid.New().String(), testUser,
 		map[string]any{"permissions": []string{"SEND_MESSAGES"}})
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
+// CA2 of #22: removing ADMINISTRATOR from your own role is a 403 with a
+// machine-readable reason, so clients can explain it.
+func TestUpdateRolePermissions_RemovingOwnAdmin_Returns403WithReason(t *testing.T) {
+	r := newRouter(t, &fakeRoleUseCases{updateErr: model.ErrCannotRemoveOwnAdmin})
+	w := doJSON(t, r, http.MethodPatch, "/v1/roles/"+uuid.New().String(), testUser,
+		map[string]any{"permissions": []string{"SEND_MESSAGES"}})
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
+	}
+	body := decodeError(t, w)
+	if body.Error.Details["reason"] != "cannot_remove_own_admin" {
+		t.Errorf("details = %v", body.Error.Details)
 	}
 }
