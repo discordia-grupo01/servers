@@ -272,9 +272,9 @@ admins lo tienen implícito); ver "Roles, permisos y jerarquía".
 | POST | `/v1/servers/{serverId}/ownership-transfers/{transferId}/reject` | si (destinatario) | Rechazar: la propiedad no cambia. |
 | POST | `/v1/servers/{serverId}/ownership-transfers/{transferId}/cancel` | si (owner que la inicio) | Cancelar la transferencia pendiente antes de que el destinatario responda (p. ej. para ofrecersela a otro miembro). |
 | POST | `/v1/servers/{serverId}/roles` | si (admin) | Crear rol (`name`, `color`). Se crea al final de la jerarquía, con `VIEW_CHANNELS` y `SEND_MESSAGES`. |
-| GET | `/v1/servers/{serverId}/roles` | si | Listar roles de un server, ordenados por jerarquía (`position` 1 = el más alto). |
+| GET | `/v1/servers/{serverId}/roles` | si (miembro) | Listar roles de un server, ordenados por jerarquía (`position` 1 = el más alto). |
 | PATCH | `/v1/servers/{serverId}/roles/reorder` | si (admin) | Reordenar la jerarquía (`role_ids`: todos los roles del server, del más alto al más bajo). 400 si la lista no coincide exactamente; 403 si un admin no-owner mueve un rol que no está por debajo de su rol más alto. |
-| GET | `/v1/roles/{roleId}` | si | Un rol puntual (mismo shape que un elemento de `GET /v1/servers/{serverId}/roles`). 404 si no existe. |
+| GET | `/v1/roles/{roleId}` | si (miembro) | Un rol puntual (mismo shape que un elemento de `GET /v1/servers/{serverId}/roles`). 404 si no existe; 403 si quien consulta no es miembro del server del rol. |
 | PATCH | `/v1/roles/{roleId}` | si (admin) | Editar permisos/nombre/color de un rol. |
 | POST | `/v1/servers/{serverId}/members/{userId}/roles` | si (admin) | Asignar un rol a un miembro (idempotente). |
 | DELETE | `/v1/servers/{serverId}/members/{userId}/roles/{roleId}` | si (admin) | Quitar un rol de un miembro. 404 si no lo tiene. |

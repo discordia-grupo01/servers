@@ -128,7 +128,7 @@ func TestCreateRole_PersistsThroughTheRepositoryOnce(t *testing.T) {
 func TestListRoles_ServerNotFound(t *testing.T) {
 	svc := newService(&fakeServers{getErr: model.ErrServerNotFound}, &fakeRoles{})
 
-	_, err := svc.ListRoles(context.Background(), uuid.New())
+	_, err := svc.ListRoles(context.Background(), uuid.New(), testOwner)
 	if !errors.Is(err, model.ErrServerNotFound) {
 		t.Errorf("err = %v, want ErrServerNotFound", err)
 	}
@@ -139,7 +139,7 @@ func TestListRoles_ReturnsRolesFromRepo(t *testing.T) {
 	roles := &fakeRoles{listRoles: []role.Role{{ID: uuid.New()}, {ID: uuid.New()}}}
 	svc := newService(&fakeServers{server: srv}, roles)
 
-	got, err := svc.ListRoles(context.Background(), srv.ID)
+	got, err := svc.ListRoles(context.Background(), srv.ID, testOwner)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -149,11 +149,12 @@ func TestListRoles_ReturnsRolesFromRepo(t *testing.T) {
 }
 
 func TestGetRole_ReturnsRoleFromRepo(t *testing.T) {
+	srv := ownerServer()
 	roleID := uuid.New()
-	roles := &fakeRoles{getByIDRole: role.Role{ID: roleID, Name: "Moderator"}}
-	svc := newService(&fakeServers{}, roles)
+	roles := &fakeRoles{getByIDRole: role.Role{ID: roleID, ServerID: srv.ID, Name: "Moderator"}}
+	svc := newService(&fakeServers{server: srv}, roles)
 
-	got, err := svc.GetRole(context.Background(), roleID)
+	got, err := svc.GetRole(context.Background(), roleID, testOwner)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -165,8 +166,56 @@ func TestGetRole_ReturnsRoleFromRepo(t *testing.T) {
 func TestGetRole_NotFound(t *testing.T) {
 	svc := newService(&fakeServers{}, &fakeRoles{getByIDErr: model.ErrRoleNotFound})
 
-	_, err := svc.GetRole(context.Background(), uuid.New())
+	_, err := svc.GetRole(context.Background(), uuid.New(), testOwner)
 	if !errors.Is(err, model.ErrRoleNotFound) {
 		t.Errorf("err = %v, want ErrRoleNotFound", err)
+	}
+}
+
+// Any member can read the server's roles, not only administrators.
+func TestRoleReads_AnyMemberCanRead(t *testing.T) {
+	srv := ownerServer()
+	rl := role.Role{ID: uuid.New(), ServerID: srv.ID}
+	members := &fakeMembers{standing: role.Standing{IsMember: true}}
+	svc := newServiceWithMembers(&fakeServers{server: srv}, &fakeRoles{listRoles: []role.Role{rl}, getByIDRole: rl}, members)
+
+	if got, err := svc.ListRoles(context.Background(), srv.ID, "member-1"); err != nil || len(got) != 1 {
+		t.Errorf("ListRoles = %v, %v", got, err)
+	}
+	if got, err := svc.GetRole(context.Background(), rl.ID, "member-1"); err != nil || got.ID != rl.ID {
+		t.Errorf("GetRole = %+v, %v", got, err)
+	}
+}
+
+// Outsiders can't learn how the server is organized.
+func TestRoleReads_NotAMember_Forbidden(t *testing.T) {
+	srv := ownerServer()
+	rl := role.Role{ID: uuid.New(), ServerID: srv.ID}
+	svc := newServiceWithMembers(&fakeServers{server: srv}, &fakeRoles{listRoles: []role.Role{rl}, getByIDRole: rl}, &fakeMembers{})
+
+	if _, err := svc.ListRoles(context.Background(), srv.ID, "stranger"); !errors.Is(err, model.ErrForbiddenNotMember) {
+		t.Errorf("ListRoles: err = %v, want ErrForbiddenNotMember", err)
+	}
+	if _, err := svc.GetRole(context.Background(), rl.ID, "stranger"); !errors.Is(err, model.ErrForbiddenNotMember) {
+		t.Errorf("GetRole: err = %v, want ErrForbiddenNotMember", err)
+	}
+}
+
+func TestRoleReads_LookupErrorsPropagate(t *testing.T) {
+	srv := ownerServer()
+	rl := role.Role{ID: uuid.New(), ServerID: srv.ID}
+	boom := errors.New("db down")
+
+	svc := newServiceWithMembers(&fakeServers{server: srv}, &fakeRoles{getByIDRole: rl}, &fakeMembers{standingErr: boom})
+	if _, err := svc.ListRoles(context.Background(), srv.ID, "member-1"); !errors.Is(err, boom) {
+		t.Errorf("ListRoles standing: err = %v, want %v", err, boom)
+	}
+	if _, err := svc.GetRole(context.Background(), rl.ID, "member-1"); !errors.Is(err, boom) {
+		t.Errorf("GetRole standing: err = %v, want %v", err, boom)
+	}
+
+	svc = newService(&fakeServers{getErr: boom}, &fakeRoles{getByIDRole: rl})
+	if _, err := svc.GetRole(context.Background(), rl.ID, testOwner); !errors.Is(err, boom) {
+		t.Errorf("GetRole server: err = %v, want %v", err, boom)
 	}
 }

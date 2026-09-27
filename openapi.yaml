@@ -348,6 +348,7 @@ paths:
       tags:
         - roles
     get:
+      description: Any member of the role's server.
       parameters:
         - description: Role ID
           in: path
@@ -364,6 +365,12 @@ paths:
                 $ref: "#/components/schemas/roleview.Response"
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "403":
+          description: the caller is not a member of the role's server
           content:
             application/json:
               schema:
@@ -1789,6 +1796,7 @@ paths:
         - ownership-transfers
   "/v1/servers/{serverId}/roles":
     get:
+      description: Any member of the server. Ordered by hierarchy (position 1 = highest).
       parameters:
         - description: Server ID
           in: path
@@ -1807,6 +1815,12 @@ paths:
                 type: array
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "403":
+          description: the caller is not a member of the server
           content:
             application/json:
               schema:

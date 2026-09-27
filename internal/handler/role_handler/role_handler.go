@@ -18,8 +18,8 @@ import (
 // RoleUseCases is the slice of RoleService this handler needs.
 type RoleUseCases interface {
 	CreateRole(ctx context.Context, p role_service.CreateRoleParams) (role.Role, error)
-	ListRoles(ctx context.Context, serverID uuid.UUID) ([]role.Role, error)
-	GetRole(ctx context.Context, roleID uuid.UUID) (role.Role, error)
+	ListRoles(ctx context.Context, serverID uuid.UUID, userID string) ([]role.Role, error)
+	GetRole(ctx context.Context, roleID uuid.UUID, userID string) (role.Role, error)
 	UpdateRolePermissions(ctx context.Context, p role_service.UpdateRolePermissionsParams) (role.Role, error)
 	SetDefaultRole(ctx context.Context, p role_service.SetDefaultRoleParams) error
 	DeleteRole(ctx context.Context, p role_service.DeleteRoleParams) error
@@ -81,12 +81,14 @@ func (h *Handler) CreateRole(c *gin.Context) {
 
 // ListRoles godoc
 // @Summary      List a server's roles
+// @Description  Any member of the server. Ordered by hierarchy (position 1 = highest).
 // @Tags         roles
 // @Produce      json
 // @Security     BearerAuth
 // @Param        serverId  path  string  true  "Server ID"
 // @Success      200  {array}   roleview.Response
 // @Failure      401  {object}  apierr.ErrorResponse
+// @Failure      403  {object}  apierr.ErrorResponse  "the caller is not a member of the server"
 // @Failure      404  {object}  apierr.ErrorResponse
 // @Router       /v1/servers/{serverId}/roles [get]
 func (h *Handler) ListRoles(c *gin.Context) {
@@ -95,7 +97,7 @@ func (h *Handler) ListRoles(c *gin.Context) {
 		return
 	}
 
-	roles, err := h.uc.ListRoles(c.Request.Context(), serverID)
+	roles, err := h.uc.ListRoles(c.Request.Context(), serverID, middleware.UserID(c))
 	if err != nil {
 		apierr.WriteDomainError(c, err)
 		return
@@ -110,12 +112,14 @@ func (h *Handler) ListRoles(c *gin.Context) {
 
 // GetRole godoc
 // @Summary      Get a role
+// @Description  Any member of the role's server.
 // @Tags         roles
 // @Produce      json
 // @Security     BearerAuth
 // @Param        roleId  path  string  true  "Role ID"
 // @Success      200  {object}  roleview.Response
 // @Failure      401  {object}  apierr.ErrorResponse
+// @Failure      403  {object}  apierr.ErrorResponse  "the caller is not a member of the role's server"
 // @Failure      404  {object}  apierr.ErrorResponse
 // @Router       /v1/roles/{roleId} [get]
 func (h *Handler) GetRole(c *gin.Context) {
@@ -124,7 +128,7 @@ func (h *Handler) GetRole(c *gin.Context) {
 		return
 	}
 
-	rl, err := h.uc.GetRole(c.Request.Context(), roleID)
+	rl, err := h.uc.GetRole(c.Request.Context(), roleID, middleware.UserID(c))
 	if err != nil {
 		apierr.WriteDomainError(c, err)
 		return

@@ -49,10 +49,12 @@ type fakeRoleUseCases struct {
 	listResult  []role.Role
 	listErr     error
 	gotServerID uuid.UUID
+	gotListUser string
 
 	getResult  role.Role
 	getErr     error
 	gotGetRole uuid.UUID
+	gotGetUser string
 
 	updateErr error
 	updated   role.Role
@@ -81,16 +83,16 @@ func (f *fakeRoleUseCases) CreateRole(_ context.Context, p role_service.CreateRo
 	return f.created, nil
 }
 
-func (f *fakeRoleUseCases) ListRoles(_ context.Context, serverID uuid.UUID) ([]role.Role, error) {
-	f.gotServerID = serverID
+func (f *fakeRoleUseCases) ListRoles(_ context.Context, serverID uuid.UUID, userID string) ([]role.Role, error) {
+	f.gotServerID, f.gotListUser = serverID, userID
 	if f.listErr != nil {
 		return nil, f.listErr
 	}
 	return f.listResult, nil
 }
 
-func (f *fakeRoleUseCases) GetRole(_ context.Context, roleID uuid.UUID) (role.Role, error) {
-	f.gotGetRole = roleID
+func (f *fakeRoleUseCases) GetRole(_ context.Context, roleID uuid.UUID, userID string) (role.Role, error) {
+	f.gotGetRole, f.gotGetUser = roleID, userID
 	if f.getErr != nil {
 		return role.Role{}, f.getErr
 	}

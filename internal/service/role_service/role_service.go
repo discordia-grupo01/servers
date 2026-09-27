@@ -103,22 +103,47 @@ func (s *RoleService) CreateRole(ctx context.Context, p CreateRoleParams) (role.
 	return rl, nil
 }
 
-// ListRoles lists every role of a server. It only checks that the server
-// exists; it does not (yet) check that the caller is a member of it -- there
-// is no member-lookup dependency wired into this service until
-// member_role_service/member_repo land in a later commit. See
-// IMPLEMENTATION.md for this known gap.
-func (s *RoleService) ListRoles(ctx context.Context, serverID uuid.UUID) ([]role.Role, error) {
-	if _, err := s.servers.GetByID(ctx, serverID); err != nil {
+// requireMember lets any member of srv (the owner included) read its roles;
+// anyone else gets ErrForbiddenNotMember, so outsiders can't learn how the
+// server is organized (who can ban, who is an administrator).
+func (s *RoleService) requireMember(ctx context.Context, srv model.Server, userID string) error {
+	actor, err := service.ResolveStanding(ctx, s.members, srv, userID)
+	if err != nil {
+		return err
+	}
+	if !actor.IsMember {
+		return model.ErrForbiddenNotMember
+	}
+	return nil
+}
+
+// ListRoles lists every role of a server, highest first, for any member of
+// the server.
+func (s *RoleService) ListRoles(ctx context.Context, serverID uuid.UUID, userID string) ([]role.Role, error) {
+	srv, err := s.servers.GetByID(ctx, serverID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.requireMember(ctx, srv, userID); err != nil {
 		return nil, err
 	}
 	return s.roles.ListByServer(ctx, serverID)
 }
 
-// GetRole fetches a single role by id. It only checks that the role exists,
-// mirroring the same "read is not authz-gated" behavior as ListRoles.
-func (s *RoleService) GetRole(ctx context.Context, roleID uuid.UUID) (role.Role, error) {
-	return s.roles.GetByID(ctx, roleID)
+// GetRole fetches a single role by id, for any member of the role's server.
+func (s *RoleService) GetRole(ctx context.Context, roleID uuid.UUID, userID string) (role.Role, error) {
+	rl, err := s.roles.GetByID(ctx, roleID)
+	if err != nil {
+		return role.Role{}, err
+	}
+	srv, err := s.servers.GetByID(ctx, rl.ServerID)
+	if err != nil {
+		return role.Role{}, err
+	}
+	if err := s.requireMember(ctx, srv, userID); err != nil {
+		return role.Role{}, err
+	}
+	return rl, nil
 }
 
 // UpdateRolePermissionsParams. Permissions == nil means "leave the existing
