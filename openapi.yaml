@@ -173,7 +173,8 @@ paths:
   "/v1/channels/{channelId}/category":
     patch:
       description: Administrators only (the owner, or a member with ADMINISTRATOR).
-        `category_id` omitted/null moves it to "sin categoria".
+        `category_id` omitted/null moves it to the server's native category for
+        its kind ("no category" is not a valid state).
       parameters:
         - description: Channel ID
           in: path
@@ -752,8 +753,9 @@ paths:
   "/v1/servers/{serverId}/channels":
     post:
       description: Administrators only (the owner, or a member with ADMINISTRATOR).
-        `kind` is "text" or "voice"; `category_id` may be omitted/null for "no
-        category".
+        `kind` is "text" or "voice"; `category_id` may be omitted/null, which
+        defaults the channel to the server's native category for that kind ("no
+        category" is not a valid state).
       parameters:
         - description: Server ID
           in: path
