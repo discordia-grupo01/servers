@@ -35,20 +35,21 @@ func (r *MemberRepository) IsMember(ctx context.Context, serverID uuid.UUID, use
 	return exists, nil
 }
 
-// MemberStanding returns whether userID is a member of serverID and the union
-// of the permissions of every role assigned to them, in a single query. It
-// never sets IsOwner: ownership comes from the server row (see
-// service.ResolveStanding).
+// MemberStanding returns whether userID is a member of serverID, the union of
+// the permissions of every role assigned to them and the position of their
+// highest role (nil without roles), in a single query. It never sets IsOwner:
+// ownership comes from the server row (see service.ResolveStanding).
 func (r *MemberRepository) MemberStanding(ctx context.Context, serverID uuid.UUID, userID string) (role.Standing, error) {
 	var st role.Standing
 	err := r.pool.QueryRow(ctx, `
 		SELECT EXISTS (SELECT 1 FROM server_members WHERE server_id = $1 AND user_id = $2),
-		       COALESCE(BIT_OR(r.permissions), 0)
+		       COALESCE(BIT_OR(r.permissions), 0),
+		       MIN(r.position)
 		  FROM member_roles mr
 		  JOIN roles r ON r.id = mr.role_id
 		 WHERE mr.server_id = $1 AND mr.user_id = $2`,
 		serverID, userID,
-	).Scan(&st.IsMember, &st.Permissions)
+	).Scan(&st.IsMember, &st.Permissions, &st.TopPosition)
 	if err != nil {
 		return role.Standing{}, fmt.Errorf("member standing: %w", err)
 	}

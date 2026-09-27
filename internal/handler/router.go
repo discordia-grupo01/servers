@@ -77,6 +77,7 @@ func NewRouter(d Deps) *gin.Engine {
 	v1.PATCH("/roles/:roleId", roleH.UpdateRolePermissions)
 	v1.DELETE("/roles/:roleId", roleH.DeleteRole)
 	v1.PUT("/servers/:serverId/default-role", roleH.SetDefaultRole)
+	v1.PATCH("/servers/:serverId/roles/reorder", roleH.ReorderRoles)
 
 	v1.POST("/servers/:serverId/members/:userId/roles", memberRoleH.AssignRole)
 	v1.DELETE("/servers/:serverId/members/:userId/roles/:roleId", memberRoleH.RemoveRole)

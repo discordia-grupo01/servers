@@ -32,6 +32,7 @@ type Repo interface {
 	ListByServer(ctx context.Context, serverID uuid.UUID) ([]role.Role, error)
 	Update(ctx context.Context, r role.Role) error
 	Delete(ctx context.Context, id uuid.UUID) error
+	Reorder(ctx context.Context, serverID uuid.UUID, orderedIDs []uuid.UUID, check func(current []role.Role) error) ([]role.Role, error)
 }
 
 // Members is the slice of MemberRepository this service needs: the actor's
@@ -217,6 +218,66 @@ func (s *RoleService) SetDefaultRole(ctx context.Context, p SetDefaultRoleParams
 	}
 	// TODO(events): publicar "roles.default_role_set" en discordia.events cuando exista un consumidor real (ver Canales).
 	return nil
+}
+
+type ReorderRolesParams struct {
+	ServerID uuid.UUID
+	UserID   string
+	// RoleIDs is the full new hierarchy, highest first.
+	RoleIDs []uuid.UUID
+}
+
+// ReorderRoles sets the server's role hierarchy to RoleIDs (#56). RoleIDs must
+// be exactly the server's current roles -- not a subset, not extra or repeated
+// ids -- so a stale client list can't silently drop or reshuffle roles. A
+// non-owner administrator may only rearrange the roles below their own
+// highest role (CA2). Both checks run inside the repository's transaction,
+// against the roles as they are at write time.
+func (s *RoleService) ReorderRoles(ctx context.Context, p ReorderRolesParams) ([]role.Role, error) {
+	srv, err := s.servers.GetByID(ctx, p.ServerID)
+	if err != nil {
+		return nil, err
+	}
+	actor, err := service.ResolveStanding(ctx, s.members, srv, p.UserID)
+	if err != nil {
+		return nil, err
+	}
+	if err := service.RequireManageRoles(actor); err != nil {
+		return nil, err
+	}
+
+	roles, err := s.roles.Reorder(ctx, p.ServerID, p.RoleIDs, func(current []role.Role) error {
+		if !sameRoleSet(current, p.RoleIDs) {
+			return model.ErrRoleReorderInvalid
+		}
+		if !role.CanReorder(actor, current, p.RoleIDs) {
+			return model.ErrRoleReorderAboveOwn
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	// TODO(events): publicar "roles.roles_reordered" en discordia.events cuando exista un consumidor real (ver Canales).
+	return roles, nil
+}
+
+// sameRoleSet reports whether ids is a permutation of current's ids.
+func sameRoleSet(current []role.Role, ids []uuid.UUID) bool {
+	if len(current) != len(ids) {
+		return false
+	}
+	pending := make(map[uuid.UUID]bool, len(current))
+	for _, rl := range current {
+		pending[rl.ID] = true
+	}
+	for _, id := range ids {
+		if !pending[id] {
+			return false // unknown or repeated
+		}
+		delete(pending, id)
+	}
+	return true
 }
 
 type DeleteRoleParams struct {

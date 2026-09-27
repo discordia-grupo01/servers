@@ -74,7 +74,54 @@ func (r *RoleRepository) GetByID(ctx context.Context, id uuid.UUID) (role.Role, 
 }
 
 func (r *RoleRepository) ListByServer(ctx context.Context, serverID uuid.UUID) ([]role.Role, error) {
-	rows, err := r.pool.Query(ctx, `
+	return listByServer(ctx, r.pool, serverID)
+}
+
+// Reorder rewrites the positions of serverID's roles to 1..N following
+// orderedIDs (highest first) and returns the roles in their new order.
+//
+// check receives the server's current roles (highest first) read under the
+// same server-row lock that Create takes, so the validation can't race a
+// concurrent create, delete or reorder: if check returns an error, nothing is
+// written and that error is returned as-is.
+func (r *RoleRepository) Reorder(ctx context.Context, serverID uuid.UUID, orderedIDs []uuid.UUID, check func(current []role.Role) error) ([]role.Role, error) {
+	var reordered []role.Role
+	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `SELECT 1 FROM servers WHERE id = $1 FOR NO KEY UPDATE`, serverID); err != nil {
+			return fmt.Errorf("lock server: %w", err)
+		}
+		current, err := listByServer(ctx, tx, serverID)
+		if err != nil {
+			return err
+		}
+		if err := check(current); err != nil {
+			return err
+		}
+		// uq_roles_server_position is DEFERRABLE INITIALLY DEFERRED, so the
+		// transient duplicates while rewriting are fine: it's checked at commit.
+		for i, id := range orderedIDs {
+			if _, err := tx.Exec(ctx,
+				`UPDATE roles SET position = $1 WHERE id = $2 AND server_id = $3`,
+				i+1, id, serverID); err != nil {
+				return fmt.Errorf("update role position: %w", err)
+			}
+		}
+		reordered, err = listByServer(ctx, tx, serverID)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return reordered, nil
+}
+
+// querier is what listByServer needs, satisfied by both the pool and a tx.
+type querier interface {
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+}
+
+func listByServer(ctx context.Context, q querier, serverID uuid.UUID) ([]role.Role, error) {
+	rows, err := q.Query(ctx, `
 		SELECT id, server_id, name, color, permissions, position, created_at, updated_at
 		  FROM roles WHERE server_id = $1 ORDER BY position, id`, serverID)
 	if err != nil {

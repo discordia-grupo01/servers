@@ -63,6 +63,11 @@ type fakeRoleUseCases struct {
 
 	deleteErr error
 	gotDelete role_service.DeleteRoleParams
+
+	reorderErr    error
+	reorderResult []role.Role
+	gotReorder    role_service.ReorderRolesParams
+	reorderCalled bool
 }
 
 func (f *fakeRoleUseCases) CreateRole(_ context.Context, p role_service.CreateRoleParams) (role.Role, error) {
@@ -114,6 +119,14 @@ func (f *fakeRoleUseCases) SetDefaultRole(_ context.Context, p role_service.SetD
 func (f *fakeRoleUseCases) DeleteRole(_ context.Context, p role_service.DeleteRoleParams) error {
 	f.gotDelete = p
 	return f.deleteErr
+}
+
+func (f *fakeRoleUseCases) ReorderRoles(_ context.Context, p role_service.ReorderRolesParams) ([]role.Role, error) {
+	f.reorderCalled, f.gotReorder = true, p
+	if f.reorderErr != nil {
+		return nil, f.reorderErr
+	}
+	return f.reorderResult, nil
 }
 
 type okPinger struct{}

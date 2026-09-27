@@ -42,6 +42,8 @@ var (
 	ErrInvalidPermission   = errors.New("unknown permission")
 	ErrRoleServerMismatch  = errors.New("role does not belong to this server")
 	ErrRoleIsServerDefault = errors.New("role is the server's default role; set a different default role before deleting it")
+	ErrRoleReorderInvalid  = errors.New("the role list must match exactly the roles currently in this server")
+	ErrRoleReorderAboveOwn = errors.New("you can only reorder roles below your highest role")
 
 	ErrMemberNotFound     = errors.New("member not found")
 	ErrMemberRoleNotFound = errors.New("member does not have this role")

@@ -23,6 +23,7 @@ type RoleUseCases interface {
 	UpdateRolePermissions(ctx context.Context, p role_service.UpdateRolePermissionsParams) (role.Role, error)
 	SetDefaultRole(ctx context.Context, p role_service.SetDefaultRoleParams) error
 	DeleteRole(ctx context.Context, p role_service.DeleteRoleParams) error
+	ReorderRoles(ctx context.Context, p role_service.ReorderRolesParams) ([]role.Role, error)
 }
 
 type Handler struct {
@@ -180,6 +181,67 @@ func (h *Handler) UpdateRolePermissions(c *gin.Context) {
 
 type setDefaultRoleRequest struct {
 	RoleID string `json:"role_id"`
+}
+
+type reorderRolesRequest struct {
+	RoleIDs []string `json:"role_ids"`
+}
+
+// ReorderRoles godoc
+// @Summary      Reorder the server's role hierarchy
+// @Description  Administrators only (the owner, or a member with ADMINISTRATOR). `role_ids` is the full, final hierarchy, highest first: it must contain every role of the server exactly once. Positions are rewritten to 1..N. A non-owner administrator can only rearrange the roles below their own highest role.
+// @Tags         roles
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        serverId  path  string               true  "Server ID"
+// @Param        body      body  reorderRolesRequest  true  "Role IDs in their new order, highest first"
+// @Success      200  {array}   roleview.Response
+// @Failure      400  {object}  apierr.ErrorResponse  "invalid body, or the list doesn't match the server's roles"
+// @Failure      401  {object}  apierr.ErrorResponse
+// @Failure      403  {object}  apierr.ErrorResponse  "not a server administrator, or moving a role at or above your highest role"
+// @Failure      404  {object}  apierr.ErrorResponse
+// @Router       /v1/servers/{serverId}/roles/reorder [patch]
+func (h *Handler) ReorderRoles(c *gin.Context) {
+	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
+	if !ok {
+		return
+	}
+
+	var req reorderRolesRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		apierr.RespondError(c, http.StatusBadRequest, "invalid request body", map[string]any{"reason": "invalid_json"})
+		return
+	}
+	if req.RoleIDs == nil {
+		apierr.RespondError(c, http.StatusBadRequest, "role_ids must be provided", apierr.FieldErr("role_ids", "required"))
+		return
+	}
+	roleIDs := make([]uuid.UUID, 0, len(req.RoleIDs))
+	for _, raw := range req.RoleIDs {
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			apierr.RespondError(c, http.StatusBadRequest, "invalid role id in role_ids", apierr.FieldErr("role_ids", "invalid_uuid"))
+			return
+		}
+		roleIDs = append(roleIDs, id)
+	}
+
+	roles, err := h.uc.ReorderRoles(c.Request.Context(), role_service.ReorderRolesParams{
+		ServerID: serverID,
+		UserID:   middleware.UserID(c),
+		RoleIDs:  roleIDs,
+	})
+	if err != nil {
+		apierr.WriteDomainError(c, err)
+		return
+	}
+
+	resp := make([]roleview.Response, 0, len(roles))
+	for _, rl := range roles {
+		resp = append(resp, roleview.ToResponse(rl))
+	}
+	c.JSON(http.StatusOK, resp)
 }
 
 // SetDefaultRole godoc

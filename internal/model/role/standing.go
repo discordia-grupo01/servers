@@ -1,13 +1,19 @@
 package role
 
+import "github.com/google/uuid"
+
 // Standing is what a user is allowed to do in a server: whether they are a
-// member, whether they own it, and the union of the permissions of every role
-// assigned to them. Authorization rules are written against a Standing so
-// they stay pure (no DB access) and live in one place.
+// member, whether they own it, the union of the permissions of every role
+// assigned to them, and their rank in the role hierarchy. Authorization rules
+// are written against a Standing so they stay pure (no DB access) and live in
+// one place.
 type Standing struct {
 	IsMember    bool
 	IsOwner     bool
 	Permissions Permission
+	// TopPosition is the position of the user's highest role (1 is the top of
+	// the hierarchy); nil when they hold no role, which ranks below everyone.
+	TopPosition *int
 }
 
 // IsAdmin reports whether the user administers the server: the owner always
@@ -29,6 +35,44 @@ func (s Standing) Has(p Permission) bool {
 // themselves (after = 0). The owner is exempt -- they administer the server
 // regardless of their roles, so the server can never be left without an
 // administrator.
+// Outranks reports whether s is strictly above o in the server's hierarchy.
+// The owner outranks everyone and nobody outranks the owner; otherwise the
+// lower TopPosition wins, a user without roles ranks below any role, and two
+// users at the same rank don't outrank each other.
+func (s Standing) Outranks(o Standing) bool {
+	switch {
+	case o.IsOwner:
+		return false
+	case s.IsOwner:
+		return true
+	case s.TopPosition == nil:
+		return false
+	case o.TopPosition == nil:
+		return true
+	default:
+		return *s.TopPosition < *o.TopPosition
+	}
+}
+
+// CanReorder reports whether actor may turn current (the server's roles,
+// highest first) into newOrder (role ids, highest first). The owner may
+// reorder anything. Anyone else may only rearrange the roles strictly below
+// their own highest role: every role at or above it must keep its index, so
+// they can neither move those roles nor push a lower role above them (#56 CA2).
+// It assumes newOrder is already a permutation of current.
+func CanReorder(actor Standing, current []Role, newOrder []uuid.UUID) bool {
+	if actor.IsOwner {
+		return true
+	}
+	for i, rl := range current {
+		protected := actor.TopPosition == nil || rl.Position <= *actor.TopPosition
+		if protected && (i >= len(newOrder) || newOrder[i] != rl.ID) {
+			return false
+		}
+	}
+	return true
+}
+
 func RemovesOwnAdmin(actor Standing, actorHasRole bool, before, after Permission) bool {
 	return !actor.IsOwner &&
 		actorHasRole &&

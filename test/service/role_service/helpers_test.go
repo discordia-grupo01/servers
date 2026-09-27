@@ -46,6 +46,12 @@ type fakeRoles struct {
 	deleteErr    error
 	deletedID    uuid.UUID
 	deleteCalled bool
+
+	// Reorder runs check against listRoles (the "current" roles) and, if it
+	// passes, records the written order.
+	reorderErr     error
+	reorderCalls   int
+	reorderWritten []uuid.UUID
 }
 
 // Create mimics the repo: the new role goes at the bottom of the hierarchy,
@@ -80,6 +86,28 @@ func (f *fakeRoles) Update(_ context.Context, r role.Role) error {
 	}
 	f.updated = r
 	return nil
+}
+
+func (f *fakeRoles) Reorder(_ context.Context, _ uuid.UUID, orderedIDs []uuid.UUID, check func([]role.Role) error) ([]role.Role, error) {
+	f.reorderCalls++
+	if f.reorderErr != nil {
+		return nil, f.reorderErr
+	}
+	if err := check(f.listRoles); err != nil {
+		return nil, err
+	}
+	f.reorderWritten = orderedIDs
+	byID := make(map[uuid.UUID]role.Role, len(f.listRoles))
+	for _, rl := range f.listRoles {
+		byID[rl.ID] = rl
+	}
+	out := make([]role.Role, 0, len(orderedIDs))
+	for i, id := range orderedIDs {
+		rl := byID[id]
+		rl.Position = i + 1
+		out = append(out, rl)
+	}
+	return out, nil
 }
 
 func (f *fakeRoles) Delete(_ context.Context, id uuid.UUID) error {

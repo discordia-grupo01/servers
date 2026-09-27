@@ -62,6 +62,9 @@ func (fakeRoleUseCases) SetDefaultRole(context.Context, role_service.SetDefaultR
 func (fakeRoleUseCases) DeleteRole(context.Context, role_service.DeleteRoleParams) error {
 	return nil
 }
+func (fakeRoleUseCases) ReorderRoles(context.Context, role_service.ReorderRolesParams) ([]role.Role, error) {
+	return nil, nil
+}
 
 type fakeMemberRoleUseCases struct {
 	assignErr    error
