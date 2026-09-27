@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/discordia-grupo01/servers/internal/model"
+	"github.com/discordia-grupo01/servers/internal/model/role"
 	"github.com/discordia-grupo01/servers/internal/service/channel_service"
 )
 
@@ -37,6 +38,32 @@ func TestAdministrator_CanManageChannels(t *testing.T) {
 	}
 	if err := svc.DeleteChannel(ctx, channel_service.DeleteChannelParams{ChannelID: ch.ID, UserID: testAdmin}); err != nil {
 		t.Errorf("DeleteChannel: %v", err)
+	}
+}
+
+func TestGranularManageChannels_Allowed(t *testing.T) {
+	srv := ownerServer()
+	ch := model.Channel{ID: uuid.New(), ServerID: srv.ID}
+	standing := role.Standing{IsMember: true, Permissions: role.PermManageChannels}
+	svc := newServiceWithStandings(&fakeServers{server: srv}, &fakeCategories{}, &fakeChannels{getByIDChannel: ch}, &fakeStandings{standing: standing})
+
+	if _, err := svc.CreateChannel(context.Background(), channel_service.CreateChannelParams{ServerID: srv.ID, Name: "general", Kind: "text", UserID: "mod-1"}); err != nil {
+		t.Errorf("CreateChannel: %v", err)
+	}
+	newName := "renamed"
+	if _, err := svc.UpdateChannel(context.Background(), channel_service.UpdateChannelParams{ChannelID: ch.ID, UserID: "mod-1", Name: &newName}); err != nil {
+		t.Errorf("UpdateChannel: %v", err)
+	}
+}
+
+func TestManageChannelsWithoutPermission_Forbidden(t *testing.T) {
+	srv := ownerServer()
+	standing := role.Standing{IsMember: true, Permissions: role.PermSendMessages}
+	svc := newServiceWithStandings(&fakeServers{server: srv}, &fakeCategories{}, &fakeChannels{}, &fakeStandings{standing: standing})
+
+	_, err := svc.CreateChannel(context.Background(), channel_service.CreateChannelParams{ServerID: srv.ID, Name: "general", Kind: "text", UserID: "member-1"})
+	if !errors.Is(err, model.ErrForbiddenNotAdmin) {
+		t.Errorf("err = %v, want ErrForbiddenNotAdmin", err)
 	}
 }
 
