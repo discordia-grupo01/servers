@@ -12,12 +12,19 @@ import (
 	"github.com/discordia-grupo01/servers/internal/service"
 )
 
-// Every "as an administrator" capability shares the same rule: the owner, or
-// a member holding ADMINISTRATOR.
+// Every "manage X" capability shares the same rule: the owner, a member
+// holding ADMINISTRATOR, or a member whose roles grant the specific
+// permission for that capability
 var manageChecks = map[string]func(role.Standing) error{
 	"RequireManageRoles":    service.RequireManageRoles,
 	"RequireManageChannels": service.RequireManageChannels,
 	"RequireManageServer":   service.RequireManageServer,
+}
+
+var manageChecksPermission = map[string]role.Permission{
+	"RequireManageRoles":    role.PermManageRoles,
+	"RequireManageChannels": role.PermManageChannels,
+	"RequireManageServer":   role.PermManageServer,
 }
 
 func TestRequireManage_OwnerAllowed(t *testing.T) {
@@ -37,16 +44,39 @@ func TestRequireManage_AdministratorAllowed(t *testing.T) {
 	}
 }
 
-func TestRequireManage_NonAdminForbidden(t *testing.T) {
+func TestRequireManage_WithoutRelevantPermission_Forbidden(t *testing.T) {
 	cases := map[string]role.Standing{
-		"non member":                 {},
-		"member without roles":       {IsMember: true},
-		"member with granular perms": {IsMember: true, Permissions: role.PermManageRoles | role.PermManageChannels | role.PermManageServer},
+		"non member":                  {},
+		"member without roles":        {IsMember: true},
+		"member with unrelated perms": {IsMember: true, Permissions: role.PermSendMessages | role.PermCreateInvite},
 	}
 	for checkName, check := range manageChecks {
 		for caseName, st := range cases {
 			if err := check(st); !errors.Is(err, model.ErrForbiddenNotAdmin) {
 				t.Errorf("%s / %s: err = %v, want ErrForbiddenNotAdmin", checkName, caseName, err)
+			}
+		}
+	}
+}
+
+func TestRequireManage_GranularPermissionAlone_Allowed(t *testing.T) {
+	for name, check := range manageChecks {
+		st := role.Standing{IsMember: true, Permissions: manageChecksPermission[name]}
+		if err := check(st); err != nil {
+			t.Errorf("%s: unexpected error for a member holding only its own permission: %v", name, err)
+		}
+	}
+}
+
+func TestRequireManage_OtherManagePermissionAlone_Forbidden(t *testing.T) {
+	for checkName, check := range manageChecks {
+		for otherName, otherPerm := range manageChecksPermission {
+			if otherName == checkName {
+				continue
+			}
+			st := role.Standing{IsMember: true, Permissions: otherPerm}
+			if err := check(st); !errors.Is(err, model.ErrForbiddenNotAdmin) {
+				t.Errorf("%s with only %s: err = %v, want ErrForbiddenNotAdmin", checkName, otherName, err)
 			}
 		}
 	}
