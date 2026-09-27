@@ -53,9 +53,9 @@ func (r *ServerRepository) CreateServer(ctx context.Context, srv model.Server, c
 				defaultKind = &s
 			}
 			if _, err := tx.Exec(ctx, `
-				INSERT INTO categories (id, server_id, name, position, default_kind, created_at)
-				VALUES ($1, $2, $3, $4, $5, $6)`,
-				cat.ID, cat.ServerID, cat.Name, cat.Position, defaultKind, cat.CreatedAt,
+				INSERT INTO categories (id, server_id, name, name_key, position, default_kind, created_at)
+				VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+				cat.ID, cat.ServerID, cat.Name, cat.NameKey, cat.Position, defaultKind, cat.CreatedAt,
 			); err != nil {
 				return fmt.Errorf("insert category %s: %w", cat.Name, err)
 			}
