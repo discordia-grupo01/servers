@@ -290,9 +290,30 @@ func TestMoveChannelToCategory_Valid_MovesIt(t *testing.T) {
 	}
 }
 
-func TestMoveChannelToCategory_ToNoCategory_PassesNil(t *testing.T) {
-	srv := ownerServer()
-	ch := model.Channel{ID: uuid.New(), ServerID: srv.ID}
+func TestMoveChannelToCategory_NoCategoryID_DefaultsToNativeCategoryForKind(t *testing.T) {
+	srv := withNativeCategories(ownerServer())
+	ch := model.Channel{ID: uuid.New(), ServerID: srv.ID, Kind: model.ChannelText}
+	channels := &fakeChannels{getByIDChannel: ch}
+	svc := newService(&fakeServers{server: srv}, &fakeCategories{}, channels)
+
+	got, err := svc.MoveChannelToCategory(context.Background(), channel_service.MoveChannelToCategoryParams{
+		ChannelID: ch.ID, UserID: testOwner, CategoryID: nil,
+	})
+	if err != nil {
+		t.Fatalf("MoveChannelToCategory: %v", err)
+	}
+	wantCategory := findNativeCategory(t, srv, model.ChannelText)
+	if got.CategoryID == nil || *got.CategoryID != wantCategory.ID {
+		t.Errorf("got.CategoryID = %v, want %s", got.CategoryID, wantCategory.ID)
+	}
+	if !channels.moveCalled || channels.movedCategory == nil || *channels.movedCategory != wantCategory.ID {
+		t.Errorf("repo.MoveToCategory got categoryID=%v, want %s", channels.movedCategory, wantCategory.ID)
+	}
+}
+
+func TestMoveChannelToCategory_NoCategoryID_NoNativeCategory_FallsBackToNil(t *testing.T) {
+	srv := ownerServer() // no Categories at all
+	ch := model.Channel{ID: uuid.New(), ServerID: srv.ID, Kind: model.ChannelText}
 	channels := &fakeChannels{getByIDChannel: ch}
 	svc := newService(&fakeServers{server: srv}, &fakeCategories{}, channels)
 
