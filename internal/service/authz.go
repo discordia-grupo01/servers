@@ -6,27 +6,29 @@ import (
 )
 
 // RequireManageRoles checks whether the actor may manage roles (and role
-// assignments). It is named after the capability it represents, not after
-// who holds it today, so that making it more granular (e.g. letting
-// MANAGE_ROLES alone suffice) only means changing this function -- not every
-// call site.
+// assignments): the owner, or a member whose roles grant MANAGE_ROLES.
+// ADMINISTRATOR implies it too, since Standing.Has treats admins as holding
+// every permission -- once a role grants a permission, it must take effect
+// for its members immediately, not only for full administrators.
 //
 // Exported because role_service and member_role_service live in their own
 // subpackages and need to call it from outside package service.
 func RequireManageRoles(actor role.Standing) error {
-	return requireAdmin(actor)
+	return requirePermission(actor, role.PermManageRoles)
 }
 
 // RequireManageChannels checks whether the actor may manage channels and
-// categories. Same "administrators only" scope as RequireManageRoles.
+// categories: the owner, or a member whose roles grant MANAGE_CHANNELS (or
+// ADMINISTRATOR)
 func RequireManageChannels(actor role.Standing) error {
-	return requireAdmin(actor)
+	return requirePermission(actor, role.PermManageChannels)
 }
 
 // RequireManageServer checks whether the actor may edit the server's
-// settings. Same "administrators only" scope as RequireManageRoles.
+// settings: the owner, or a member whose roles grant MANAGE_SERVER (or
+// ADMINISTRATOR)
 func RequireManageServer(actor role.Standing) error {
-	return requireAdmin(actor)
+	return requirePermission(actor, role.PermManageServer)
 }
 
 // RequireCreateInvite checks whether the actor may generate invitations and
@@ -49,10 +51,8 @@ func RequireRevokeInvite(actor role.Standing, actorID string, inv model.Invitati
 	return nil
 }
 
-// requireAdmin is the rule every "as an administrator" user story shares:
-// the owner, or a member holding ADMINISTRATOR.
-func requireAdmin(actor role.Standing) error {
-	if !actor.IsAdmin() {
+func requirePermission(actor role.Standing, p role.Permission) error {
+	if !actor.IsMember || !actor.Has(p) {
 		return model.ErrForbiddenNotAdmin
 	}
 	return nil
