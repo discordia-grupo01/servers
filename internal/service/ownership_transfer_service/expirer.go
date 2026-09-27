@@ -38,12 +38,12 @@ func (e *Expirer) Start(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			e.sweepOnce(ctx)
+			e.SweepOnce(ctx)
 		}
 	}
 }
 
-func (e *Expirer) sweepOnce(ctx context.Context) {
+func (e *Expirer) SweepOnce(ctx context.Context) {
 	now := e.now()
 	n, err := e.transfers.ExpireStalePending(ctx, now.Add(-model.OwnershipTransferTTL), now)
 	if err != nil {
