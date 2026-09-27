@@ -134,6 +134,7 @@ type roleJSON struct {
 	Name        string   `json:"name"`
 	Color       string   `json:"color"`
 	Permissions []string `json:"permissions"`
+	Position    int      `json:"position"`
 }
 
 func newRouter(t *testing.T, roles *fakeRoleUseCases) *gin.Engine {

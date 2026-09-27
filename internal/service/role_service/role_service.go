@@ -25,7 +25,9 @@ type Servers interface {
 
 // Repo is the slice of RoleRepository this service needs.
 type Repo interface {
-	Create(ctx context.Context, r role.Role) error
+	// Create persists r at the bottom of the hierarchy and returns it with
+	// its assigned Position.
+	Create(ctx context.Context, r role.Role) (role.Role, error)
 	GetByID(ctx context.Context, id uuid.UUID) (role.Role, error)
 	ListByServer(ctx context.Context, serverID uuid.UUID) ([]role.Role, error)
 	Update(ctx context.Context, r role.Role) error
@@ -92,7 +94,8 @@ func (s *RoleService) CreateRole(ctx context.Context, p CreateRoleParams) (role.
 		UpdatedAt:   now,
 	}
 
-	if err := s.roles.Create(ctx, rl); err != nil {
+	rl, err = s.roles.Create(ctx, rl)
+	if err != nil {
 		return role.Role{}, err
 	}
 	// TODO(events): publicar "roles.role_created" en discordia.events cuando exista un consumidor real (ver Canales).

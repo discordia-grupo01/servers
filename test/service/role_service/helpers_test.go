@@ -48,13 +48,16 @@ type fakeRoles struct {
 	deleteCalled bool
 }
 
-func (f *fakeRoles) Create(_ context.Context, r role.Role) error {
+// Create mimics the repo: the new role goes at the bottom of the hierarchy,
+// after the roles in listRoles.
+func (f *fakeRoles) Create(_ context.Context, r role.Role) (role.Role, error) {
 	f.createCalls++
 	if f.createErr != nil {
-		return f.createErr
+		return role.Role{}, f.createErr
 	}
+	r.Position = len(f.listRoles) + 1
 	f.created = r
-	return nil
+	return r, nil
 }
 
 func (f *fakeRoles) GetByID(_ context.Context, _ uuid.UUID) (role.Role, error) {

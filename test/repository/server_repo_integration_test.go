@@ -60,6 +60,7 @@ func newRepo(t *testing.T) (*repository.ServerRepository, *pgxpool.Pool) {
 		"../../migrations/0009_server_banner.up.sql",
 		"../../migrations/0010_native_categories.up.sql",
 		"../../migrations/0011_outbox_events.up.sql",
+		"../../migrations/0012_role_positions.up.sql",
 	} {
 		schema, err := os.ReadFile(path)
 		if err != nil {

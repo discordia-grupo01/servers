@@ -84,6 +84,7 @@ func setupE2E(t *testing.T) (*gin.Engine, <-chan amqp.Delivery) {
 		"0006_ownership_transfers.up.sql", "0007_categories.up.sql",
 		"0008_ownership_transfer_cancelled_status.up.sql", "0009_server_banner.up.sql",
 		"0010_native_categories.up.sql", "0011_outbox_events.up.sql",
+		"0012_role_positions.up.sql",
 	} {
 		schema, err := os.ReadFile("../../migrations/" + f)
 		if err != nil {

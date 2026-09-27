@@ -54,6 +54,7 @@ func newRepo(t *testing.T) (*member_repo.MemberRepository, *repository.ServerRep
 		"../../../migrations/0004_member_roles.up.sql",
 		"../../../migrations/0005_default_role.up.sql",
 		"../../../migrations/0011_outbox_events.up.sql",
+		"../../../migrations/0012_role_positions.up.sql",
 	} {
 		schema, err := os.ReadFile(file)
 		if err != nil {
@@ -88,10 +89,11 @@ func seedRole(ctx context.Context, t *testing.T, roles *role_repo.RoleRepository
 	t.Helper()
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	rl := role.Role{ID: uuid.New(), ServerID: serverID, Name: name, Color: "#FF00AA", CreatedAt: now, UpdatedAt: now}
-	if err := roles.Create(ctx, rl); err != nil {
+	created, err := roles.Create(ctx, rl)
+	if err != nil {
 		t.Fatalf("seed role: %v", err)
 	}
-	return rl
+	return created
 }
 
 func TestMemberRepo_IsMember_TrueForAMemberFalseOtherwise(t *testing.T) {

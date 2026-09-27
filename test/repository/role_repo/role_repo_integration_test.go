@@ -52,6 +52,7 @@ func newRepo(t *testing.T) (*role_repo.RoleRepository, *repository.ServerReposit
 		"../../../migrations/0004_member_roles.up.sql",
 		"../../../migrations/0005_default_role.up.sql",
 		"../../../migrations/0011_outbox_events.up.sql",
+		"../../../migrations/0012_role_positions.up.sql",
 	} {
 		schema, err := os.ReadFile(file)
 		if err != nil {
@@ -84,7 +85,7 @@ func TestRoleRepo_Create_ThenGetByID_ReturnsIt(t *testing.T) {
 	}
 
 	rl := roleFixture(srv.ID, "Moderator")
-	if err := roles.Create(ctx, rl); err != nil {
+	if _, err := roles.Create(ctx, rl); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 
@@ -117,13 +118,13 @@ func TestRoleRepo_ListByServer_ReturnsOnlyThatServersRoles(t *testing.T) {
 		t.Fatalf("seed server B: %v", err)
 	}
 
-	if err := roles.Create(ctx, roleFixture(srvA.ID, "A1")); err != nil {
+	if _, err := roles.Create(ctx, roleFixture(srvA.ID, "A1")); err != nil {
 		t.Fatal(err)
 	}
-	if err := roles.Create(ctx, roleFixture(srvA.ID, "A2")); err != nil {
+	if _, err := roles.Create(ctx, roleFixture(srvA.ID, "A2")); err != nil {
 		t.Fatal(err)
 	}
-	if err := roles.Create(ctx, roleFixture(srvB.ID, "B1")); err != nil {
+	if _, err := roles.Create(ctx, roleFixture(srvB.ID, "B1")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -138,7 +139,7 @@ func TestRoleRepo_ListByServer_ReturnsOnlyThatServersRoles(t *testing.T) {
 
 func TestRoleRepo_Create_RoleOfDeletedServer_Fails(t *testing.T) {
 	roles, _, _ := newRepo(t)
-	err := roles.Create(context.Background(), roleFixture(uuid.New(), "Orphan"))
+	_, err := roles.Create(context.Background(), roleFixture(uuid.New(), "Orphan"))
 	if err == nil {
 		t.Error("expected a foreign key violation for a nonexistent server")
 	}

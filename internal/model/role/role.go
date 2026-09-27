@@ -18,6 +18,7 @@ type Role struct {
 	Name        string
 	Color       string
 	Permissions int64
+	Position    int // rank in the server's hierarchy: 1 is the highest
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }

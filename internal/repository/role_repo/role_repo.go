@@ -22,25 +22,49 @@ func NewRoleRepository(pool *pgxpool.Pool) *RoleRepository {
 	return &RoleRepository{pool: pool}
 }
 
-func (r *RoleRepository) Create(ctx context.Context, rl role.Role) error {
-	_, err := r.pool.Exec(ctx, `
-		INSERT INTO roles (id, server_id, name, color, permissions, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		rl.ID, rl.ServerID, rl.Name, rl.Color, rl.Permissions, rl.CreatedAt, rl.UpdatedAt,
-	)
+// Create inserts rl at the bottom of its server's hierarchy (MAX(position)+1,
+// or 1 for the first role) and returns it with its assigned Position.
+//
+// The server row is locked first so two concurrent creations can't both read
+// the same MAX and collide on the position. FOR NO KEY UPDATE (not FOR UPDATE)
+// serializes role creations without blocking the FK checks of unrelated
+// inserts that reference the server (members joining, channels, ...).
+func (r *RoleRepository) Create(ctx context.Context, rl role.Role) (role.Role, error) {
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("insert role: %w", err)
+		return role.Role{}, fmt.Errorf("begin: %w", err)
 	}
-	return nil
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if _, err := tx.Exec(ctx, `SELECT 1 FROM servers WHERE id = $1 FOR NO KEY UPDATE`, rl.ServerID); err != nil {
+		return role.Role{}, fmt.Errorf("lock server: %w", err)
+	}
+
+	err = tx.QueryRow(ctx, `
+		INSERT INTO roles (id, server_id, name, color, permissions, position, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5,
+		        (SELECT COALESCE(MAX(position), 0) + 1 FROM roles WHERE server_id = $2),
+		        $6, $7)
+		RETURNING position`,
+		rl.ID, rl.ServerID, rl.Name, rl.Color, rl.Permissions, rl.CreatedAt, rl.UpdatedAt,
+	).Scan(&rl.Position)
+	if err != nil {
+		return role.Role{}, fmt.Errorf("insert role: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return role.Role{}, fmt.Errorf("commit: %w", err)
+	}
+	return rl, nil
 }
 
 func (r *RoleRepository) GetByID(ctx context.Context, id uuid.UUID) (role.Role, error) {
 	row := r.pool.QueryRow(ctx, `
-		SELECT id, server_id, name, color, permissions, created_at, updated_at
+		SELECT id, server_id, name, color, permissions, position, created_at, updated_at
 		  FROM roles WHERE id = $1`, id)
 
 	var rl role.Role
-	if err := row.Scan(&rl.ID, &rl.ServerID, &rl.Name, &rl.Color, &rl.Permissions, &rl.CreatedAt, &rl.UpdatedAt); err != nil {
+	if err := row.Scan(&rl.ID, &rl.ServerID, &rl.Name, &rl.Color, &rl.Permissions, &rl.Position, &rl.CreatedAt, &rl.UpdatedAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return role.Role{}, model.ErrRoleNotFound
 		}
@@ -51,8 +75,8 @@ func (r *RoleRepository) GetByID(ctx context.Context, id uuid.UUID) (role.Role, 
 
 func (r *RoleRepository) ListByServer(ctx context.Context, serverID uuid.UUID) ([]role.Role, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, server_id, name, color, permissions, created_at, updated_at
-		  FROM roles WHERE server_id = $1 ORDER BY created_at`, serverID)
+		SELECT id, server_id, name, color, permissions, position, created_at, updated_at
+		  FROM roles WHERE server_id = $1 ORDER BY position, id`, serverID)
 	if err != nil {
 		return nil, fmt.Errorf("list roles: %w", err)
 	}
@@ -61,7 +85,7 @@ func (r *RoleRepository) ListByServer(ctx context.Context, serverID uuid.UUID) (
 	roles := make([]role.Role, 0)
 	for rows.Next() {
 		var rl role.Role
-		if err := rows.Scan(&rl.ID, &rl.ServerID, &rl.Name, &rl.Color, &rl.Permissions, &rl.CreatedAt, &rl.UpdatedAt); err != nil {
+		if err := rows.Scan(&rl.ID, &rl.ServerID, &rl.Name, &rl.Color, &rl.Permissions, &rl.Position, &rl.CreatedAt, &rl.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan role: %w", err)
 		}
 		roles = append(roles, rl)
