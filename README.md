@@ -162,6 +162,21 @@ El proyecto de Supabase es **compartido entre todos los servicios de Discordia**
    ```
 3. Correr `make migrate` y despues `make run`. Confirmar con `GET /readyz` (200).
 
+### Migraciones en el deploy
+En cada push a `main`, el CI corre `make migrate` contra la base de
+produccion (job `migrate`, despues de publicar la imagen y **antes** de
+cambiarla en la VM). Si una migracion falla, no se despliega. Necesita estos
+secrets del repo (Settings > Secrets and variables > Actions), con los mismos
+valores que `DATABASE_*` en `~/servers.env` de la VM: `PROD_DATABASE_HOST`,
+`PROD_DATABASE_PORT`, `PROD_DATABASE_NAME`, `PROD_DATABASE_USER`,
+`PROD_DATABASE_PASSWORD`, `PROD_DATABASE_SSLMODE` y `PROD_DATABASE_SCHEMA`.
+
+Como la migracion se aplica antes del deploy, si despues el smoke test falla y
+`deploy.sh` vuelve a la imagen anterior, esa imagen corre contra el schema
+nuevo. Por eso las migraciones tienen que ser compatibles con la version
+anterior del codigo: agregar columnas nullable o con default, y no renombrar ni
+borrar nada en el mismo deploy en que se deja de usar.
+
 ## Roles, permisos y jerarquía
 Cada rol tiene un conjunto de permisos del catálogo cerrado
 (`internal/model/role/permission.go`): `VIEW_CHANNELS`, `SEND_MESSAGES`,
