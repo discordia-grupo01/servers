@@ -29,6 +29,16 @@ func (s Standing) Has(p Permission) bool {
 	return s.IsAdmin() || s.Permissions&p == p
 }
 
+// Effective is the set of permissions the user actually holds, by the same
+// rule as Has: every permission for administrators (the owner included), and
+// the union of their roles' permissions otherwise.
+func (s Standing) Effective() Permission {
+	if s.IsAdmin() {
+		return AllPermissions
+	}
+	return s.Permissions
+}
+
 // RemovesOwnAdmin reports whether an operation would take ADMINISTRATOR away
 // from the actor through a role they hold: editing that role's permissions
 // from before to after, deleting it (after = 0) or unassigning it from

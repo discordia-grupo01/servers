@@ -74,15 +74,13 @@ type fakeMemberRoleUseCases struct {
 	removeErr error
 	gotRemove member_role_service.RemoveRoleParams
 
-	listResult      []role.Role
-	listErr         error
-	gotListServerID uuid.UUID
-	gotListUserID   string
+	listResult []role.Role
+	listErr    error
+	gotList    member_role_service.MemberLookupParams
 
 	permissionsResult []string
 	permissionsErr    error
-	gotPermServerID   uuid.UUID
-	gotPermUserID     string
+	gotPerm           member_role_service.MemberLookupParams
 }
 
 func (f *fakeMemberRoleUseCases) AssignRole(_ context.Context, p member_role_service.AssignRoleParams) (role.Role, error) {
@@ -98,16 +96,16 @@ func (f *fakeMemberRoleUseCases) RemoveRole(_ context.Context, p member_role_ser
 	return f.removeErr
 }
 
-func (f *fakeMemberRoleUseCases) ListMemberRoles(_ context.Context, serverID uuid.UUID, userID string) ([]role.Role, error) {
-	f.gotListServerID, f.gotListUserID = serverID, userID
+func (f *fakeMemberRoleUseCases) ListMemberRoles(_ context.Context, p member_role_service.MemberLookupParams) ([]role.Role, error) {
+	f.gotList = p
 	if f.listErr != nil {
 		return nil, f.listErr
 	}
 	return f.listResult, nil
 }
 
-func (f *fakeMemberRoleUseCases) GetMemberPermissions(_ context.Context, serverID uuid.UUID, userID string) ([]string, error) {
-	f.gotPermServerID, f.gotPermUserID = serverID, userID
+func (f *fakeMemberRoleUseCases) GetMemberPermissions(_ context.Context, p member_role_service.MemberLookupParams) ([]string, error) {
+	f.gotPerm = p
 	if f.permissionsErr != nil {
 		return nil, f.permissionsErr
 	}

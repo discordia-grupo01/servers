@@ -20,8 +20,8 @@ import (
 type MemberRoleUseCases interface {
 	AssignRole(ctx context.Context, p member_role_service.AssignRoleParams) (role.Role, error)
 	RemoveRole(ctx context.Context, p member_role_service.RemoveRoleParams) error
-	ListMemberRoles(ctx context.Context, serverID uuid.UUID, userID string) ([]role.Role, error)
-	GetMemberPermissions(ctx context.Context, serverID uuid.UUID, userID string) ([]string, error)
+	ListMemberRoles(ctx context.Context, p member_role_service.MemberLookupParams) ([]role.Role, error)
+	GetMemberPermissions(ctx context.Context, p member_role_service.MemberLookupParams) ([]string, error)
 }
 
 type Handler struct {
@@ -85,7 +85,7 @@ func (h *Handler) AssignRole(c *gin.Context) {
 
 // RemoveRole godoc
 // @Summary      Remove a role from a member
-// @Description  Administrators only (the owner, or a member with ADMINISTRATOR). Idempotent.
+// @Description  Administrators only (the owner, or a member with ADMINISTRATOR).
 // @Tags         member-roles
 // @Security     BearerAuth
 // @Param        serverId  path  string  true  "Server ID"
@@ -94,7 +94,7 @@ func (h *Handler) AssignRole(c *gin.Context) {
 // @Success      204  "no content"
 // @Failure      401  {object}  apierr.ErrorResponse
 // @Failure      403  {object}  apierr.ErrorResponse  "not a server administrator, or unassigning a role with ADMINISTRATOR from yourself"
-// @Failure      404  {object}  apierr.ErrorResponse
+// @Failure      404  {object}  apierr.ErrorResponse  "server or role not found, or the member doesn't have the role"
 // @Router       /v1/servers/{serverId}/members/{userId}/roles/{roleId} [delete]
 func (h *Handler) RemoveRole(c *gin.Context) {
 	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
@@ -122,6 +122,7 @@ func (h *Handler) RemoveRole(c *gin.Context) {
 
 // ListMemberRoles godoc
 // @Summary      List a member's roles
+// @Description  Any member of the server can look up any other member.
 // @Tags         member-roles
 // @Produce      json
 // @Security     BearerAuth
@@ -129,7 +130,8 @@ func (h *Handler) RemoveRole(c *gin.Context) {
 // @Param        userId    path  string  true  "Target member's user ID"
 // @Success      200  {array}   roleview.Response
 // @Failure      401  {object}  apierr.ErrorResponse
-// @Failure      404  {object}  apierr.ErrorResponse
+// @Failure      403  {object}  apierr.ErrorResponse  "the caller is not a member of the server"
+// @Failure      404  {object}  apierr.ErrorResponse  "server not found, or the user is not a member"
 // @Router       /v1/servers/{serverId}/members/{userId}/roles [get]
 func (h *Handler) ListMemberRoles(c *gin.Context) {
 	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
@@ -138,7 +140,11 @@ func (h *Handler) ListMemberRoles(c *gin.Context) {
 	}
 	targetUserID := c.Param("userId")
 
-	roles, err := h.uc.ListMemberRoles(c.Request.Context(), serverID, targetUserID)
+	roles, err := h.uc.ListMemberRoles(c.Request.Context(), member_role_service.MemberLookupParams{
+		ServerID:     serverID,
+		TargetUserID: targetUserID,
+		ActorUserID:  middleware.UserID(c),
+	})
 	if err != nil {
 		apierr.WriteDomainError(c, err)
 		return
@@ -159,7 +165,7 @@ type memberPermissionsResponse struct {
 
 // GetMemberPermissions godoc
 // @Summary      Get a member's effective permissions
-// @Description  Union of the permissions of every role assigned to the member.
+// @Description  The permissions the member actually holds: every permission for the owner and for members with ADMINISTRATOR, otherwise the union of the permissions of their roles. Any member of the server can look up any other member.
 // @Tags         member-roles
 // @Produce      json
 // @Security     BearerAuth
@@ -167,7 +173,8 @@ type memberPermissionsResponse struct {
 // @Param        userId    path  string  true  "Target member's user ID"
 // @Success      200  {object}  memberPermissionsResponse
 // @Failure      401  {object}  apierr.ErrorResponse
-// @Failure      404  {object}  apierr.ErrorResponse
+// @Failure      403  {object}  apierr.ErrorResponse  "the caller is not a member of the server"
+// @Failure      404  {object}  apierr.ErrorResponse  "server not found, or the user is not a member"
 // @Router       /v1/servers/{serverId}/members/{userId}/permissions [get]
 func (h *Handler) GetMemberPermissions(c *gin.Context) {
 	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
@@ -176,7 +183,11 @@ func (h *Handler) GetMemberPermissions(c *gin.Context) {
 	}
 	targetUserID := c.Param("userId")
 
-	permissions, err := h.uc.GetMemberPermissions(c.Request.Context(), serverID, targetUserID)
+	permissions, err := h.uc.GetMemberPermissions(c.Request.Context(), member_role_service.MemberLookupParams{
+		ServerID:     serverID,
+		TargetUserID: targetUserID,
+		ActorUserID:  middleware.UserID(c),
+	})
 	if err != nil {
 		apierr.WriteDomainError(c, err)
 		return

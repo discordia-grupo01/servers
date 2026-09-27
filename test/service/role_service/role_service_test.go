@@ -118,8 +118,10 @@ func TestCreateRole_PersistsThroughTheRepositoryOnce(t *testing.T) {
 	if roles.created.ID != rl.ID || roles.created.ServerID != srv.ID {
 		t.Errorf("repo got role=%+v", roles.created)
 	}
-	if rl.Permissions != 0 {
-		t.Errorf("permissions = %d, want 0 on creation", rl.Permissions)
+	// #21 CA1: a new role starts with VIEW_CHANNELS and SEND_MESSAGES.
+	if rl.Permissions != role.PermViewChannels|role.PermSendMessages || roles.created.Permissions != rl.Permissions {
+		t.Errorf("permissions = %v (repo got %v), want VIEW_CHANNELS|SEND_MESSAGES on creation",
+			role.PermissionNames(rl.Permissions), role.PermissionNames(roles.created.Permissions))
 	}
 }
 

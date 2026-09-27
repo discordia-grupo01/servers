@@ -90,7 +90,7 @@ func (s *RoleService) CreateRole(ctx context.Context, p CreateRoleParams) (role.
 		ServerID:    p.ServerID,
 		Name:        name,
 		Color:       p.Color,
-		Permissions: 0,
+		Permissions: role.DefaultPermissions,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
