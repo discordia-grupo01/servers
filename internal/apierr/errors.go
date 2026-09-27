@@ -157,6 +157,8 @@ func WriteDomainError(c *gin.Context, err error) {
 		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("name", "name_too_long"))
 	case errors.Is(err, model.ErrCategoryNameInvalidChars):
 		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("name", "name_invalid_chars"))
+	case errors.Is(err, model.ErrCategoryNameTaken):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("name", "name_taken"))
 	case errors.Is(err, model.ErrCategoryServerMismatch):
 		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("category_id", "category_server_mismatch"))
 	case errors.Is(err, model.ErrCategoryReorderInvalid):

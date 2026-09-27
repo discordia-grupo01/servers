@@ -77,7 +77,7 @@ func (s *Service) CreateServer(ctx context.Context, p CreateServerParams) (model
 	srv := model.Server{
 		ID:        id,
 		Name:      name,
-		NameKey:   nameKey(name),
+		NameKey:   NameKey(name),
 		OwnerID:   p.OwnerID,
 		CreatedAt: now,
 	}
@@ -87,10 +87,12 @@ func (s *Service) CreateServer(ctx context.Context, p CreateServerParams) (model
 	categories := []model.Category{
 		{
 			ID: textCategoryID, ServerID: id, Name: model.DefaultTextCategoryName,
+			NameKey:  NameKey(model.DefaultTextCategoryName),
 			Position: 0, DefaultKind: &textKind, CreatedAt: now,
 		},
 		{
 			ID: voiceCategoryID, ServerID: id, Name: model.DefaultVoiceCategoryName,
+			NameKey:  NameKey(model.DefaultVoiceCategoryName),
 			Position: 1, DefaultKind: &voiceKind, CreatedAt: now,
 		},
 	}
@@ -189,7 +191,7 @@ func (s *Service) UpdateServer(ctx context.Context, p UpdateServerParams) (model
 		if err != nil {
 			return model.Server{}, err
 		}
-		key = nameKey(name)
+		key = NameKey(name)
 	}
 
 	oldIconURL, oldBannerURL := srv.IconURL, srv.BannerURL

@@ -25,7 +25,7 @@ type Repo interface {
 	Create(ctx context.Context, cat model.Category) error
 	GetByID(ctx context.Context, id uuid.UUID) (model.Category, error)
 	ListByServer(ctx context.Context, serverID uuid.UUID) ([]model.Category, error)
-	Update(ctx context.Context, id uuid.UUID, name string) error
+	Update(ctx context.Context, id uuid.UUID, name, nameKey string) error
 	ReorderPositions(ctx context.Context, orderedIDs []uuid.UUID) error
 }
 
@@ -81,6 +81,7 @@ func (s *CategoryService) CreateCategory(ctx context.Context, p CreateCategoryPa
 		ID:        uuid.New(),
 		ServerID:  p.ServerID,
 		Name:      name,
+		NameKey:   service.NameKey(name),
 		CreatedAt: time.Now().UTC(),
 	}
 	if err := s.repo.Create(ctx, cat); err != nil {
@@ -119,12 +120,14 @@ func (s *CategoryService) UpdateCategory(ctx context.Context, p UpdateCategoryPa
 		return model.Category{}, err
 	}
 
-	if err := s.repo.Update(ctx, p.CategoryID, name); err != nil {
+	nameKey := service.NameKey(name)
+	if err := s.repo.Update(ctx, p.CategoryID, name, nameKey); err != nil {
 		return model.Category{}, err
 	}
 	// TODO(events): publicar "channels.category_updated" en discordia.events cuando exista un consumidor real.
 
 	cat.Name = name
+	cat.NameKey = nameKey
 	return cat, nil
 }
 

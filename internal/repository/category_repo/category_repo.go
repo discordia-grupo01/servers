@@ -8,10 +8,21 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/discordia-grupo01/servers/internal/model"
 )
+
+const pgUniqueViolation = "23505"
+
+func nameTakenErr(err error) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == pgUniqueViolation && pgErr.ConstraintName == "uq_categories_server_name_key" {
+		return model.ErrCategoryNameTaken
+	}
+	return nil
+}
 
 type CategoryRepository struct {
 	pool *pgxpool.Pool
@@ -43,11 +54,14 @@ func defaultKindFromString(s *string) *model.ChannelKind {
 
 func (r *CategoryRepository) Create(ctx context.Context, cat model.Category) error {
 	_, err := r.pool.Exec(ctx, `
-		INSERT INTO categories (id, server_id, name, position, default_kind, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6)`,
-		cat.ID, cat.ServerID, cat.Name, cat.Position, defaultKindString(cat.DefaultKind), cat.CreatedAt,
+		INSERT INTO categories (id, server_id, name, name_key, position, default_kind, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		cat.ID, cat.ServerID, cat.Name, cat.NameKey, cat.Position, defaultKindString(cat.DefaultKind), cat.CreatedAt,
 	)
 	if err != nil {
+		if taken := nameTakenErr(err); taken != nil {
+			return taken
+		}
 		return fmt.Errorf("insert category: %w", err)
 	}
 	return nil
@@ -95,9 +109,12 @@ func (r *CategoryRepository) ListByServer(ctx context.Context, serverID uuid.UUI
 	return categories, nil
 }
 
-func (r *CategoryRepository) Update(ctx context.Context, id uuid.UUID, name string) error {
-	tag, err := r.pool.Exec(ctx, `UPDATE categories SET name = $1 WHERE id = $2`, name, id)
+func (r *CategoryRepository) Update(ctx context.Context, id uuid.UUID, name, nameKey string) error {
+	tag, err := r.pool.Exec(ctx, `UPDATE categories SET name = $1, name_key = $2 WHERE id = $3`, name, nameKey, id)
 	if err != nil {
+		if taken := nameTakenErr(err); taken != nil {
+			return taken
+		}
 		return fmt.Errorf("update category: %w", err)
 	}
 	if tag.RowsAffected() == 0 {

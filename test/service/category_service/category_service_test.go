@@ -60,6 +60,32 @@ func TestCreateCategory_NotAdmin_ErrForbidden(t *testing.T) {
 	}
 }
 
+func TestCreateCategory_NameTakenFromRepo_Propagates(t *testing.T) {
+	svc := newService(&fakeServers{server: ownerServer()}, &fakeCategories{createErr: model.ErrCategoryNameTaken})
+	_, err := svc.CreateCategory(context.Background(), category_service.CreateCategoryParams{
+		ServerID: uuid.New(), Name: "Eventos", UserID: testOwner,
+	})
+	if !errors.Is(err, model.ErrCategoryNameTaken) {
+		t.Errorf("err = %v, want ErrCategoryNameTaken", err)
+	}
+}
+
+func TestCreateCategory_ComputesNameKey_CaseAndAccentInsensitive(t *testing.T) {
+	srv := ownerServer()
+	repo := &fakeCategories{}
+	svc := newService(&fakeServers{server: srv}, repo)
+
+	_, err := svc.CreateCategory(context.Background(), category_service.CreateCategoryParams{
+		ServerID: srv.ID, Name: "  Eventós  Especiales ", UserID: testOwner,
+	})
+	if err != nil {
+		t.Fatalf("CreateCategory: %v", err)
+	}
+	if repo.created.NameKey != "eventos especiales" {
+		t.Errorf("created.NameKey = %q, want %q", repo.created.NameKey, "eventos especiales")
+	}
+}
+
 func TestUpdateCategory_Valid_RenamesIt(t *testing.T) {
 	srv := ownerServer()
 	cat := model.Category{ID: uuid.New(), ServerID: srv.ID, Name: "old"}
@@ -78,6 +104,9 @@ func TestUpdateCategory_Valid_RenamesIt(t *testing.T) {
 	if repo.updatedID != cat.ID || repo.updateName != "new-name" {
 		t.Errorf("repo.Update called with id=%v name=%q", repo.updatedID, repo.updateName)
 	}
+	if repo.updateNameKey != "new-name" {
+		t.Errorf("repo.updateNameKey = %q, want %q", repo.updateNameKey, "new-name")
+	}
 }
 
 func TestUpdateCategory_EmptyName_ErrNameRequired(t *testing.T) {
@@ -90,6 +119,20 @@ func TestUpdateCategory_EmptyName_ErrNameRequired(t *testing.T) {
 	})
 	if !errors.Is(err, model.ErrCategoryNameRequired) {
 		t.Errorf("err = %v, want ErrCategoryNameRequired", err)
+	}
+}
+
+func TestUpdateCategory_NameTakenFromRepo_Propagates(t *testing.T) {
+	srv := ownerServer()
+	cat := model.Category{ID: uuid.New(), ServerID: srv.ID, Name: "old"}
+	repo := &fakeCategories{getByIDCategory: cat, updateErr: model.ErrCategoryNameTaken}
+	svc := newService(&fakeServers{server: srv}, repo)
+
+	_, err := svc.UpdateCategory(context.Background(), category_service.UpdateCategoryParams{
+		CategoryID: cat.ID, UserID: testOwner, Name: "Eventos",
+	})
+	if !errors.Is(err, model.ErrCategoryNameTaken) {
+		t.Errorf("err = %v, want ErrCategoryNameTaken", err)
 	}
 }
 

@@ -60,6 +60,7 @@ func newRepo(t *testing.T) (*repository.ServerRepository, *pgxpool.Pool) {
 		"../../migrations/0009_server_banner.up.sql",
 		"../../migrations/0010_native_categories.up.sql",
 		"../../migrations/0011_outbox_events.up.sql",
+		"../../migrations/0012_category_name_key.up.sql",
 	} {
 		schema, err := os.ReadFile(path)
 		if err != nil {
@@ -131,8 +132,8 @@ func TestRepo_CreateServer_PersistsNativeCategoriesAndChannelCategoryID(t *testi
 	textCatID, voiceCatID := uuid.New(), uuid.New()
 	srv := model.Server{ID: id, Name: "With Categories", NameKey: "with categories", OwnerID: owner, CreatedAt: now}
 	categories := []model.Category{
-		{ID: textCatID, ServerID: id, Name: model.DefaultTextCategoryName, Position: 0, DefaultKind: &textKind, CreatedAt: now},
-		{ID: voiceCatID, ServerID: id, Name: model.DefaultVoiceCategoryName, Position: 1, DefaultKind: &voiceKind, CreatedAt: now},
+		{ID: textCatID, ServerID: id, Name: model.DefaultTextCategoryName, NameKey: "canales de texto", Position: 0, DefaultKind: &textKind, CreatedAt: now},
+		{ID: voiceCatID, ServerID: id, Name: model.DefaultVoiceCategoryName, NameKey: "canales de voz", Position: 1, DefaultKind: &voiceKind, CreatedAt: now},
 	}
 	chans := []model.Channel{
 		{ID: uuid.New(), ServerID: id, Name: "general", Kind: model.ChannelText, CategoryID: &textCatID, CreatedAt: now},
