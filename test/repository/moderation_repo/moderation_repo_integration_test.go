@@ -13,6 +13,7 @@ import (
 
 	"github.com/discordia-grupo01/servers/internal/model"
 	"github.com/discordia-grupo01/servers/internal/model/moderation"
+	"github.com/discordia-grupo01/servers/internal/model/role"
 	"github.com/discordia-grupo01/servers/internal/outbox"
 	"github.com/discordia-grupo01/servers/internal/repository"
 	"github.com/discordia-grupo01/servers/internal/repository/moderation_repo"
@@ -110,6 +111,10 @@ func events() []outbox.Event {
 	}
 }
 
+// allowAll is a check that lets every ban through, for tests about what the
+// transaction writes rather than about who may ban.
+func allowAll(_, _ role.Standing) error { return nil }
+
 func newBan(serverID uuid.UUID, userID string) moderation.Ban {
 	reason, by := "spam", "mod-1"
 	return moderation.Ban{ServerID: serverID, UserID: userID, Reason: &reason, BannedBy: &by, BannedAt: time.Now().UTC().Truncate(time.Millisecond)}
@@ -130,7 +135,7 @@ func TestBanMember_RemovesMemberRecordsBanCancelsTransferAndWritesEvents(t *test
 	exec(ctx, t, pool, `INSERT INTO ownership_transfers (id, server_id, from_user_id, to_user_id) VALUES ($1, $2, $3, 'target')`, transferID, serverID, owner)
 
 	ban := newBan(serverID, "target")
-	if err := repo.BanMember(ctx, ban, events()...); err != nil {
+	if err := repo.BanMember(ctx, ban, allowAll, events()...); err != nil {
 		t.Fatalf("BanMember: %v", err)
 	}
 
@@ -174,7 +179,7 @@ func TestBanMember_NotAMember_RollsBackEverything(t *testing.T) {
 	ctx := context.Background()
 	serverID := seedServer(ctx, t, pool)
 
-	err := repo.BanMember(ctx, newBan(serverID, "stranger"), events()...)
+	err := repo.BanMember(ctx, newBan(serverID, "stranger"), allowAll, events()...)
 	if !errors.Is(err, model.ErrMemberNotFound) {
 		t.Fatalf("err = %v, want ErrMemberNotFound", err)
 	}
@@ -192,7 +197,7 @@ func TestBanMember_AlreadyBanned_Conflict(t *testing.T) {
 	serverID := seedServer(ctx, t, pool)
 	exec(ctx, t, pool, `INSERT INTO server_bans (server_id, user_id) VALUES ($1, 'banned')`, serverID)
 
-	err := repo.BanMember(ctx, newBan(serverID, "banned"), events()...)
+	err := repo.BanMember(ctx, newBan(serverID, "banned"), allowAll, events()...)
 	if !errors.Is(err, model.ErrAlreadyBanned) {
 		t.Fatalf("err = %v, want ErrAlreadyBanned", err)
 	}
@@ -209,7 +214,7 @@ func TestBanMember_TargetIsTheOwner(t *testing.T) {
 	serverID := seedServer(ctx, t, pool, "target")
 	exec(ctx, t, pool, `UPDATE servers SET owner_id = 'target' WHERE id = $1`, serverID)
 
-	err := repo.BanMember(ctx, newBan(serverID, "target"), events()...)
+	err := repo.BanMember(ctx, newBan(serverID, "target"), allowAll, events()...)
 	if !errors.Is(err, model.ErrCannotBanOwner) {
 		t.Fatalf("err = %v, want ErrCannotBanOwner", err)
 	}
@@ -220,7 +225,7 @@ func TestBanMember_TargetIsTheOwner(t *testing.T) {
 
 func TestBanMember_ServerNotFound(t *testing.T) {
 	repo, _ := newRepo(t)
-	err := repo.BanMember(context.Background(), newBan(uuid.New(), "x"), events()...)
+	err := repo.BanMember(context.Background(), newBan(uuid.New(), "x"), allowAll, events()...)
 	if !errors.Is(err, model.ErrServerNotFound) {
 		t.Fatalf("err = %v, want ErrServerNotFound", err)
 	}
@@ -239,7 +244,7 @@ func TestBanMember_ConcurrentBans_OnlyOneWins(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			errs[i] = repo.BanMember(ctx, newBan(serverID, "target"), events()...)
+			errs[i] = repo.BanMember(ctx, newBan(serverID, "target"), allowAll, events()...)
 		}(i)
 	}
 	wg.Wait()
@@ -272,7 +277,7 @@ func TestUnbanMember_DeletesBanAndWritesEvent(t *testing.T) {
 	repo, pool := newRepo(t)
 	ctx := context.Background()
 	serverID := seedServer(ctx, t, pool, "target")
-	if err := repo.BanMember(ctx, newBan(serverID, "target")); err != nil {
+	if err := repo.BanMember(ctx, newBan(serverID, "target"), allowAll); err != nil {
 		t.Fatalf("BanMember: %v", err)
 	}
 
@@ -397,4 +402,77 @@ func userIDs(bans []moderation.Ban) []string {
 		out[i] = b.UserID
 	}
 	return out
+}
+
+// seedRoleFor gives userID a role at the given position with perms.
+func seedRoleFor(ctx context.Context, t *testing.T, pool *pgxpool.Pool, serverID uuid.UUID, userID string, position int, perms role.Permission) {
+	t.Helper()
+	id := uuid.New()
+	exec(ctx, t, pool, `INSERT INTO roles (id, server_id, name, color, permissions, position) VALUES ($1, $2, 'R', '#FFFFFF', $3, $4)`, id, serverID, perms, position)
+	exec(ctx, t, pool, `INSERT INTO member_roles (server_id, user_id, role_id) VALUES ($1, $2, $3)`, serverID, userID, id)
+}
+
+// #25 CA2 at write time: the check gets the actor's and the target's
+// standings read inside the transaction, under the server lock -- here, what
+// the database says right now, including the owner.
+func TestBanMember_CheckGetsTheStandingsReadUnderTheLock(t *testing.T) {
+	repo, pool := newRepo(t)
+	ctx := context.Background()
+	serverID := seedServer(ctx, t, pool, "mod-1", "target")
+	seedRoleFor(ctx, t, pool, serverID, "mod-1", 1, role.PermBanMembers)
+	seedRoleFor(ctx, t, pool, serverID, "target", 2, role.PermSendMessages)
+
+	var gotActor, gotTarget role.Standing
+	err := repo.BanMember(ctx, newBan(serverID, "target"), func(actor, target role.Standing) error {
+		gotActor, gotTarget = actor, target
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("BanMember: %v", err)
+	}
+	if !gotActor.IsMember || gotActor.Permissions != role.PermBanMembers || gotActor.TopPosition == nil || *gotActor.TopPosition != 1 {
+		t.Errorf("actor = %+v", gotActor)
+	}
+	if !gotTarget.IsMember || gotTarget.TopPosition == nil || *gotTarget.TopPosition != 2 {
+		t.Errorf("target = %+v", gotTarget)
+	}
+
+	// The owner is resolved from the locked server row.
+	other := seedServer(ctx, t, pool, "target")
+	ownerBan := newBan(other, "target")
+	by := owner
+	ownerBan.BannedBy = &by
+	if err := repo.BanMember(ctx, ownerBan, func(actor, _ role.Standing) error {
+		gotActor = actor
+		return nil
+	}); err != nil {
+		t.Fatalf("BanMember by owner: %v", err)
+	}
+	if !gotActor.IsOwner {
+		t.Errorf("owner's standing = %+v, want IsOwner", gotActor)
+	}
+}
+
+// If the check rejects the ban (e.g. the target was just given a higher
+// role), its error comes back as-is and nothing is written.
+func TestBanMember_CheckRejects_WritesNothing(t *testing.T) {
+	repo, pool := newRepo(t)
+	ctx := context.Background()
+	serverID := seedServer(ctx, t, pool, "target")
+
+	err := repo.BanMember(ctx, newBan(serverID, "target"), func(_, _ role.Standing) error {
+		return model.ErrTargetOutranksActor
+	}, events()...)
+	if !errors.Is(err, model.ErrTargetOutranksActor) {
+		t.Fatalf("err = %v, want ErrTargetOutranksActor", err)
+	}
+	if n := count(ctx, t, pool, `SELECT COUNT(*) FROM server_bans`); n != 0 {
+		t.Errorf("%d bans written", n)
+	}
+	if n := count(ctx, t, pool, `SELECT COUNT(*) FROM server_members WHERE server_id = $1 AND user_id = 'target'`, serverID); n != 1 {
+		t.Error("the member was removed")
+	}
+	if n := count(ctx, t, pool, `SELECT COUNT(*) FROM outbox_events`); n != 0 {
+		t.Errorf("outbox has %d events", n)
+	}
 }

@@ -44,6 +44,7 @@ var (
 	ErrRoleIsServerDefault = errors.New("role is the server's default role; set a different default role before deleting it")
 	ErrRoleReorderInvalid  = errors.New("the role list must match exactly the roles currently in this server")
 	ErrRoleReorderAboveOwn = errors.New("you can only reorder roles below your highest role")
+	ErrRoleAboveOwn        = errors.New("you can only manage roles below your highest role")
 
 	ErrForbiddenMissingPermission = errors.New("you do not have permission to perform this action")
 	ErrBanTargetRequired          = errors.New("user_id must be provided")

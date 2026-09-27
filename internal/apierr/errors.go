@@ -145,7 +145,7 @@ func WriteDomainError(c *gin.Context, err error) {
 		RespondError(c, http.StatusBadRequest, err.Error(), nil)
 	case errors.Is(err, model.ErrRoleReorderInvalid):
 		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("role_ids", "reorder_invalid"))
-	case errors.Is(err, model.ErrRoleReorderAboveOwn):
+	case errors.Is(err, model.ErrRoleReorderAboveOwn), errors.Is(err, model.ErrRoleAboveOwn):
 		RespondError(c, http.StatusForbidden, err.Error(), map[string]any{"reason": "role_above_own"})
 	case errors.Is(err, model.ErrForbiddenMissingPermission):
 		RespondError(c, http.StatusForbidden, err.Error(), map[string]any{"reason": "missing_permission"})

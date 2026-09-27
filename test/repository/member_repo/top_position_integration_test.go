@@ -71,8 +71,8 @@ func TestMemberRepo_MemberStanding_FollowsReorder(t *testing.T) {
 		t.Fatalf("before reorder: member %v vs other %v", before.TopPosition, otherSt.TopPosition)
 	}
 
-	noCheck := func([]role.Role) error { return nil }
-	if _, err := roles.Reorder(ctx, srv.ID, []uuid.UUID{low.ID, top.ID}, noCheck); err != nil {
+	noCheck := func(role.Standing, []role.Role) error { return nil }
+	if _, err := roles.Reorder(ctx, srv.ID, "", []uuid.UUID{low.ID, top.ID}, noCheck); err != nil {
 		t.Fatalf("Reorder: %v", err)
 	}
 

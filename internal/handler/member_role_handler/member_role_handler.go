@@ -49,7 +49,7 @@ type assignRoleRequest struct {
 // @Success      200  {object}  roleview.Response
 // @Failure      400  {object}  apierr.ErrorResponse
 // @Failure      401  {object}  apierr.ErrorResponse
-// @Failure      403  {object}  apierr.ErrorResponse  "not a server administrator"
+// @Failure      403  {object}  apierr.ErrorResponse  "not a server administrator, or the role is not below your highest role"
 // @Failure      404  {object}  apierr.ErrorResponse
 // @Router       /v1/servers/{serverId}/members/{userId}/roles [post]
 func (h *Handler) AssignRole(c *gin.Context) {
@@ -93,7 +93,7 @@ func (h *Handler) AssignRole(c *gin.Context) {
 // @Param        roleId    path  string  true  "Role ID"
 // @Success      204  "no content"
 // @Failure      401  {object}  apierr.ErrorResponse
-// @Failure      403  {object}  apierr.ErrorResponse  "not a server administrator, or unassigning a role with ADMINISTRATOR from yourself"
+// @Failure      403  {object}  apierr.ErrorResponse  "not a server administrator, or unassigning a role with ADMINISTRATOR from yourself, or the role is not below your highest role"
 // @Failure      404  {object}  apierr.ErrorResponse  "server or role not found, or the member doesn't have the role"
 // @Router       /v1/servers/{serverId}/members/{userId}/roles/{roleId} [delete]
 func (h *Handler) RemoveRole(c *gin.Context) {

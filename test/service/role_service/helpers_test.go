@@ -30,6 +30,14 @@ func (f *fakeServers) SetDefaultRole(_ context.Context, _, _ uuid.UUID) error {
 }
 
 type fakeRoles struct {
+	// members answers the actor's standing inside Reorder, the way the real
+	// repository re-reads it under the server lock; wired by newService.
+	members *fakeMembers
+	// txStanding, if set, is the actor's standing as seen inside the
+	// transaction, to simulate a rank that changed after the service's
+	// first check.
+	txStanding *role.Standing
+
 	createErr   error
 	created     role.Role
 	createCalls int
@@ -88,12 +96,19 @@ func (f *fakeRoles) Update(_ context.Context, r role.Role) error {
 	return nil
 }
 
-func (f *fakeRoles) Reorder(_ context.Context, _ uuid.UUID, orderedIDs []uuid.UUID, check func([]role.Role) error) ([]role.Role, error) {
+func (f *fakeRoles) Reorder(_ context.Context, _ uuid.UUID, actorID string, orderedIDs []uuid.UUID, check func(role.Standing, []role.Role) error) ([]role.Role, error) {
 	f.reorderCalls++
 	if f.reorderErr != nil {
 		return nil, f.reorderErr
 	}
-	if err := check(f.listRoles); err != nil {
+	actor := f.members.standing
+	if actorID == testOwner {
+		actor = role.Standing{IsMember: true, IsOwner: true}
+	}
+	if f.txStanding != nil {
+		actor = *f.txStanding
+	}
+	if err := check(actor, f.listRoles); err != nil {
 		return nil, err
 	}
 	f.reorderWritten = orderedIDs
@@ -147,9 +162,12 @@ func (f *fakeMembers) HasRole(_ context.Context, _ uuid.UUID, _ string, _ uuid.U
 	return f.hasRole, nil
 }
 
-// adminStanding is a non-owner member holding ADMINISTRATOR through a role.
+// adminStanding is a non-owner member holding ADMINISTRATOR through a role
+// at the top of the hierarchy (position 1): the roles the tests act on sit
+// below it unless a test says otherwise.
 func adminStanding() role.Standing {
-	return role.Standing{IsMember: true, Permissions: role.PermAdministrator}
+	top := 1
+	return role.Standing{IsMember: true, Permissions: role.PermAdministrator, TopPosition: &top}
 }
 
 const testAdmin = "admin-1"
@@ -159,6 +177,7 @@ func newService(servers *fakeServers, roles *fakeRoles) *role_service.RoleServic
 }
 
 func newServiceWithMembers(servers *fakeServers, roles *fakeRoles, members *fakeMembers) *role_service.RoleService {
+	roles.members = members
 	return role_service.New(servers, roles, members)
 }
 

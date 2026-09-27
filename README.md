@@ -212,6 +212,12 @@ nombres; la máscara de bits es interna.
     lista completa de roles, del más alto al más bajo): un administrador
     no-owner solo puede mover los roles que están por debajo de su rol más alto.
   - **Banear**: solo se puede banear a alguien de rango estrictamente menor.
+  - **Gestionar roles**: un administrador no-owner solo puede editar, borrar,
+    asignar, quitar o poner como rol por defecto los roles que están
+    **estrictamente por debajo** de su rol más alto (`403` con
+    `reason: role_above_own`). Así no puede darse (ni sacarle a otro) un rol
+    que lo supere para después banear o reordenar por encima de su rango.
+    Tampoco puede editar su propio rol más alto. El dueño puede todo.
 
 ## Moderación
 - **Banear** (`POST /v1/servers/{serverId}/bans`, `user_id` y `reason`

@@ -331,7 +331,7 @@ paths:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "403":
           description: not a server administrator, or deleting a role with ADMINISTRATOR
-            that you hold
+            that you hold, or the role is not below your highest role
           content:
             "*/*":
               schema:
@@ -425,7 +425,7 @@ paths:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "403":
           description: not a server administrator, or removing ADMINISTRATOR from a role
-            you hold
+            you hold, or the role is not below your highest role
           content:
             application/json:
               schema:
@@ -1073,7 +1073,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "403":
-          description: not a server administrator
+          description: not a server administrator, or the role is not below your highest
+            role
           content:
             "*/*":
               schema:
@@ -1468,7 +1469,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "403":
-          description: not a server administrator
+          description: not a server administrator, or the role is not below your highest
+            role
           content:
             application/json:
               schema:
@@ -1517,7 +1519,8 @@ paths:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "403":
           description: not a server administrator, or unassigning a role with
-            ADMINISTRATOR from yourself
+            ADMINISTRATOR from yourself, or the role is not below your highest
+            role
           content:
             "*/*":
               schema:

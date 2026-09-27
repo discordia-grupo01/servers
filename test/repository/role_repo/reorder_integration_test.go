@@ -40,7 +40,7 @@ func TestRoleRepo_Reorder_RewritesPositionsOneToN(t *testing.T) {
 	a, b, c := ids[0], ids[1], ids[2]
 
 	var seen []role.Role
-	got, err := roles.Reorder(ctx, serverID, []uuid.UUID{c, a, b}, func(current []role.Role) error {
+	got, err := roles.Reorder(ctx, serverID, "", []uuid.UUID{c, a, b}, func(_ role.Standing, current []role.Role) error {
 		seen = current
 		return nil
 	})
@@ -69,7 +69,7 @@ func TestRoleRepo_Reorder_CheckErrorWritesNothing(t *testing.T) {
 	roles, serverID, ids := seedRoles(ctx, t, "A", "B")
 	rejected := errors.New("rejected")
 
-	_, err := roles.Reorder(ctx, serverID, []uuid.UUID{ids[1], ids[0]}, func([]role.Role) error { return rejected })
+	_, err := roles.Reorder(ctx, serverID, "", []uuid.UUID{ids[1], ids[0]}, func(role.Standing, []role.Role) error { return rejected })
 	if !errors.Is(err, rejected) {
 		t.Fatalf("err = %v, want the check's error as-is", err)
 	}
@@ -93,7 +93,7 @@ func TestRoleRepo_Reorder_FillsGapsLeftByDeletions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := roles.Reorder(ctx, srv.ID, []uuid.UUID{c.ID, a.ID}, func([]role.Role) error { return nil })
+	got, err := roles.Reorder(ctx, srv.ID, "", []uuid.UUID{c.ID, a.ID}, func(role.Standing, []role.Role) error { return nil })
 	if err != nil {
 		t.Fatalf("Reorder: %v", err)
 	}
@@ -120,7 +120,7 @@ func TestRoleRepo_Reorder_ConcurrentWithCreate_NoDuplicatePositions(t *testing.T
 			defer wg.Done()
 			// The list may be stale if a creation committed first; then the
 			// check rejects it -- exactly what the service does.
-			_, _ = roles.Reorder(ctx, serverID, []uuid.UUID{ids[2], ids[1], ids[0]}, func(current []role.Role) error {
+			_, _ = roles.Reorder(ctx, serverID, "", []uuid.UUID{ids[2], ids[1], ids[0]}, func(_ role.Standing, current []role.Role) error {
 				if len(current) != 3 {
 					return errors.New("stale list")
 				}
@@ -143,5 +143,43 @@ func TestRoleRepo_Reorder_ConcurrentWithCreate_NoDuplicatePositions(t *testing.T
 	}
 	if len(listed) != 13 {
 		t.Errorf("got %d roles, want 13", len(listed))
+	}
+}
+
+// The check gets the actor's standing read under the server lock: the owner
+// (resolved from the locked server row) or the member's current rank.
+func TestRoleRepo_Reorder_CheckGetsTheActorStanding(t *testing.T) {
+	ctx := context.Background()
+	roles, servers, pool := newRepo(t)
+	ownerID := "owner-" + uuid.NewString()
+	srv, chans := serverFixture(ownerID)
+	if err := servers.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
+		t.Fatalf("seed server: %v", err)
+	}
+	top, err := roles.Create(ctx, roleFixture(srv.ID, "Top"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO server_members (server_id, user_id) VALUES ($1, 'admin')`, srv.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO member_roles (server_id, user_id, role_id) VALUES ($1, 'admin', $2)`, srv.ID, top.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	var got role.Standing
+	capture := func(actor role.Standing, _ []role.Role) error { got = actor; return nil }
+
+	if _, err := roles.Reorder(ctx, srv.ID, ownerID, []uuid.UUID{top.ID}, capture); err != nil {
+		t.Fatalf("Reorder by owner: %v", err)
+	}
+	if !got.IsOwner {
+		t.Errorf("owner's standing = %+v, want IsOwner", got)
+	}
+	if _, err := roles.Reorder(ctx, srv.ID, "admin", []uuid.UUID{top.ID}, capture); err != nil {
+		t.Fatalf("Reorder by admin: %v", err)
+	}
+	if got.IsOwner || !got.IsMember || got.TopPosition == nil || *got.TopPosition != 1 {
+		t.Errorf("admin's standing = %+v, want member at position 1", got)
 	}
 }

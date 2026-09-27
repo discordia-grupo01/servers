@@ -69,6 +69,17 @@ func RequireOutranks(actor, target role.Standing) error {
 	return nil
 }
 
+// RequireRoleBelow checks that the actor may act on rl (edit, delete, assign,
+// unassign or make it the default role): the owner always, anyone else only
+// if rl is strictly below their own highest role. It keeps the hierarchy of
+// #25 CA2 and #56 CA2 from being bypassed through role management.
+func RequireRoleBelow(actor role.Standing, rl role.Role) error {
+	if !actor.CanManageRole(rl) {
+		return model.ErrRoleAboveOwn
+	}
+	return nil
+}
+
 // requireAdmin is the rule every "as an administrator" user story shares:
 // the owner, or a member holding ADMINISTRATOR.
 func requireAdmin(actor role.Standing) error {

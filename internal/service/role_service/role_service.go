@@ -32,7 +32,7 @@ type Repo interface {
 	ListByServer(ctx context.Context, serverID uuid.UUID) ([]role.Role, error)
 	Update(ctx context.Context, r role.Role) error
 	Delete(ctx context.Context, id uuid.UUID) error
-	Reorder(ctx context.Context, serverID uuid.UUID, orderedIDs []uuid.UUID, check func(current []role.Role) error) ([]role.Role, error)
+	Reorder(ctx context.Context, serverID uuid.UUID, actorID string, orderedIDs []uuid.UUID, check func(actor role.Standing, current []role.Role) error) ([]role.Role, error)
 }
 
 // Members is the slice of MemberRepository this service needs: the actor's
@@ -202,6 +202,9 @@ func (s *RoleService) UpdateRolePermissions(ctx context.Context, p UpdateRolePer
 		}
 		rl.Color = *p.Color
 	}
+	if err := service.RequireRoleBelow(actor, rl); err != nil {
+		return role.Role{}, err
+	}
 	rl.UpdatedAt = time.Now().UTC()
 
 	if err := s.roles.Update(ctx, rl); err != nil {
@@ -237,6 +240,11 @@ func (s *RoleService) SetDefaultRole(ctx context.Context, p SetDefaultRoleParams
 	if rl.ServerID != p.ServerID {
 		return model.ErrRoleServerMismatch
 	}
+	// Every new member gets the default role, so making a role above your
+	// own the default would hand it out on your behalf.
+	if err := service.RequireRoleBelow(actor, rl); err != nil {
+		return err
+	}
 
 	if err := s.servers.SetDefaultRole(ctx, p.ServerID, p.RoleID); err != nil {
 		return err
@@ -257,7 +265,7 @@ type ReorderRolesParams struct {
 // ids -- so a stale client list can't silently drop or reshuffle roles. A
 // non-owner administrator may only rearrange the roles below their own
 // highest role (CA2). Both checks run inside the repository's transaction,
-// against the roles as they are at write time.
+// against the roles and the actor's rank as they are at write time.
 func (s *RoleService) ReorderRoles(ctx context.Context, p ReorderRolesParams) ([]role.Role, error) {
 	srv, err := s.servers.GetByID(ctx, p.ServerID)
 	if err != nil {
@@ -271,7 +279,12 @@ func (s *RoleService) ReorderRoles(ctx context.Context, p ReorderRolesParams) ([
 		return nil, err
 	}
 
-	roles, err := s.roles.Reorder(ctx, p.ServerID, p.RoleIDs, func(current []role.Role) error {
+	// The check above fails fast; this one decides, with the actor's rank
+	// and the roles re-read under the server lock.
+	roles, err := s.roles.Reorder(ctx, p.ServerID, p.UserID, p.RoleIDs, func(actor role.Standing, current []role.Role) error {
+		if err := service.RequireManageRoles(actor); err != nil {
+			return err
+		}
 		if !sameRoleSet(current, p.RoleIDs) {
 			return model.ErrRoleReorderInvalid
 		}
@@ -331,6 +344,9 @@ func (s *RoleService) DeleteRole(ctx context.Context, p DeleteRoleParams) error 
 		return model.ErrRoleIsServerDefault
 	}
 	if err := s.requireNotRemovingOwnAdmin(ctx, actor, p.UserID, rl, 0); err != nil {
+		return err
+	}
+	if err := service.RequireRoleBelow(actor, rl); err != nil {
 		return err
 	}
 

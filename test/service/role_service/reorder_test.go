@@ -151,3 +151,28 @@ func TestReorderRoles_RepoErrorPropagates(t *testing.T) {
 		t.Fatalf("err = %v, want %v", err, boom)
 	}
 }
+
+// The decision uses the actor's rank as it is at write time: if the admin was
+// moved down (or lost ADMINISTRATOR) after the service's first check, the
+// check inside the transaction rejects the reorder and nothing is written.
+func TestReorderRoles_RechecksTheActorInsideTheTransaction(t *testing.T) {
+	srv := ownerServer()
+	current, a, b, c := threeRoles(srv.ID)
+
+	demoted := adminAt(3)
+	roles := &fakeRoles{listRoles: current, txStanding: &demoted}
+	svc := newServiceWithMembers(&fakeServers{server: srv}, roles, &fakeMembers{standing: adminAt(1)})
+	if _, err := reorderAs(svc, srv.ID, testAdmin, a, c, b); !errors.Is(err, model.ErrRoleReorderAboveOwn) {
+		t.Errorf("demoted admin: err = %v, want ErrRoleReorderAboveOwn", err)
+	}
+	if roles.reorderWritten != nil {
+		t.Errorf("demoted admin: positions written: %v", roles.reorderWritten)
+	}
+
+	noLongerAdmin := role.Standing{IsMember: true}
+	roles = &fakeRoles{listRoles: current, txStanding: &noLongerAdmin}
+	svc = newServiceWithMembers(&fakeServers{server: srv}, roles, &fakeMembers{standing: adminAt(1)})
+	if _, err := reorderAs(svc, srv.ID, testAdmin, a, c, b); !errors.Is(err, model.ErrForbiddenNotAdmin) {
+		t.Errorf("admin lost ADMINISTRATOR: err = %v, want ErrForbiddenNotAdmin", err)
+	}
+}

@@ -14,7 +14,9 @@ import (
 
 	"github.com/discordia-grupo01/servers/internal/model"
 	"github.com/discordia-grupo01/servers/internal/model/moderation"
+	"github.com/discordia-grupo01/servers/internal/model/role"
 	"github.com/discordia-grupo01/servers/internal/outbox"
+	"github.com/discordia-grupo01/servers/internal/repository"
 )
 
 const (
@@ -40,10 +42,16 @@ func NewRepository(pool *pgxpool.Pool) *Repository {
 //     commits.
 //
 // The server row is locked first. That serializes the ban with an ownership
-// transfer being accepted (which rewrites servers.owner_id), so the owner
-// check here can't be outdated: banning whoever owns the server at commit
-// time fails with ErrCannotBanOwner.
-func (r *Repository) BanMember(ctx context.Context, ban moderation.Ban, events ...outbox.Event) error {
+// transfer being accepted (which rewrites servers.owner_id) and with every
+// change to roles or role assignments (see repository.LockServerShared), so
+// nothing read here can be outdated:
+//
+//   - banning whoever owns the server at commit time fails with
+//     ErrCannotBanOwner,
+//   - check receives the actor's (ban.BannedBy) and the target's standing as
+//     they are now, and its error, if any, is returned as-is with nothing
+//     written. It is where the permission and the hierarchy are decided.
+func (r *Repository) BanMember(ctx context.Context, ban moderation.Ban, check func(actor, target role.Standing) error, events ...outbox.Event) error {
 	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
 		var ownerID string
 		err := tx.QueryRow(ctx,
@@ -57,6 +65,22 @@ func (r *Repository) BanMember(ctx context.Context, ban moderation.Ban, events .
 		}
 		if ownerID == ban.UserID {
 			return model.ErrCannotBanOwner
+		}
+
+		var actorID string
+		if ban.BannedBy != nil {
+			actorID = *ban.BannedBy
+		}
+		actor, err := repository.StandingOf(ctx, tx, ban.ServerID, ownerID, actorID)
+		if err != nil {
+			return err
+		}
+		target, err := repository.StandingOf(ctx, tx, ban.ServerID, ownerID, ban.UserID)
+		if err != nil {
+			return err
+		}
+		if err := check(actor, target); err != nil {
+			return err
 		}
 
 		_, err = tx.Exec(ctx, `

@@ -82,3 +82,29 @@ func TestCanReorder_NoRoles(t *testing.T) {
 		t.Error("an empty hierarchy should be reorderable (to itself)")
 	}
 }
+
+// The owner manages any role; anyone else only roles strictly below their
+// highest one (a member without roles manages none).
+func TestStanding_CanManageRole(t *testing.T) {
+	owner := role.Standing{IsMember: true, IsOwner: true}
+	admin := role.Standing{IsMember: true, Permissions: role.PermAdministrator, TopPosition: pos(3)}
+	noRoles := role.Standing{IsMember: true}
+
+	cases := []struct {
+		name string
+		st   role.Standing
+		at   int
+		want bool
+	}{
+		{"owner, top role", owner, 1, true},
+		{"admin, role above", admin, 2, false},
+		{"admin, their own top role", admin, 3, false},
+		{"admin, role below", admin, 4, true},
+		{"member without roles", noRoles, 9, false},
+	}
+	for _, tc := range cases {
+		if got := tc.st.CanManageRole(role.Role{Position: tc.at}); got != tc.want {
+			t.Errorf("%s: CanManageRole(position %d) = %v, want %v", tc.name, tc.at, got, tc.want)
+		}
+	}
+}

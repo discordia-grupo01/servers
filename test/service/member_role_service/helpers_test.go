@@ -77,9 +77,12 @@ func (f *fakeMembers) HasRole(_ context.Context, _ uuid.UUID, _ string, _ uuid.U
 	return f.hasRole, nil
 }
 
-// adminStanding is a non-owner member holding ADMINISTRATOR through a role.
+// adminStanding is a non-owner member holding ADMINISTRATOR through a role
+// at the top of the hierarchy (position 1): the roles the tests act on sit
+// below it unless a test says otherwise.
 func adminStanding() role.Standing {
-	return role.Standing{IsMember: true, Permissions: role.PermAdministrator}
+	top := 1
+	return role.Standing{IsMember: true, Permissions: role.PermAdministrator, TopPosition: &top}
 }
 
 const testAdmin = "admin-1"

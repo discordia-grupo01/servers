@@ -42,6 +42,14 @@ func (f *fakeStandings) MemberStanding(_ context.Context, _ uuid.UUID, userID st
 }
 
 type fakeRepo struct {
+	// standings and ownerID let BanMember hand the check the standings the
+	// real repository re-reads under the server lock; wired by newFixture.
+	standings *fakeStandings
+	ownerID   string
+	// txActor/txTarget, if set, replace those standings to simulate a rank
+	// that changed after the service's first check.
+	txActor, txTarget *role.Standing
+
 	banErr   error
 	banCalls int
 	banned   moderation.Ban
@@ -60,10 +68,22 @@ type fakeRepo struct {
 	gotOffset int
 }
 
-func (f *fakeRepo) BanMember(_ context.Context, ban moderation.Ban, events ...outbox.Event) error {
+func (f *fakeRepo) BanMember(_ context.Context, ban moderation.Ban, check func(actor, target role.Standing) error, events ...outbox.Event) error {
 	f.banCalls++
 	if f.banErr != nil {
 		return f.banErr
+	}
+	if f.standings != nil {
+		actor, target := f.standingOf(*ban.BannedBy), f.standingOf(ban.UserID)
+		if f.txActor != nil {
+			actor = *f.txActor
+		}
+		if f.txTarget != nil {
+			target = *f.txTarget
+		}
+		if err := check(actor, target); err != nil {
+			return err
+		}
 	}
 	f.banned, f.events = ban, events
 	return nil
@@ -81,6 +101,13 @@ func (f *fakeRepo) UnbanMember(_ context.Context, serverID uuid.UUID, userID str
 func (f *fakeRepo) ListBans(_ context.Context, _ uuid.UUID, limit, offset int) ([]moderation.Ban, int, error) {
 	f.gotLimit, f.gotOffset = limit, offset
 	return f.listBans, f.listTotal, f.listErr
+}
+
+func (f *fakeRepo) standingOf(userID string) role.Standing {
+	if userID == f.ownerID {
+		return role.Standing{IsMember: true, IsOwner: true}
+	}
+	return f.standings.byUser[userID]
 }
 
 func rank(p int) *int { return &p }
@@ -105,7 +132,7 @@ func newFixture() *fixture {
 		moderatorID: member(rank(2), role.PermBanMembers),
 		memberID:    member(nil, 0),
 	}}
-	repo := &fakeRepo{}
+	repo := &fakeRepo{standings: st, ownerID: ownerID}
 	return &fixture{
 		server:    srv,
 		standings: st,

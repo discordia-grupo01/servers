@@ -111,7 +111,16 @@ func (s *Service) BanMember(ctx context.Context, p BanParams) (moderation.Ban, e
 		return moderation.Ban{}, err
 	}
 
-	if err := s.repo.BanMember(ctx, ban, memberLeft, memberBanned); err != nil {
+	// The checks above fail fast with a precise error; this one decides,
+	// with both standings re-read under the server lock, so a role change
+	// racing the ban can't slip through.
+	recheck := func(actor, target role.Standing) error {
+		if err := service.RequirePermission(actor, role.PermBanMembers); err != nil {
+			return err
+		}
+		return service.RequireOutranks(actor, target)
+	}
+	if err := s.repo.BanMember(ctx, ban, recheck, memberLeft, memberBanned); err != nil {
 		return moderation.Ban{}, err
 	}
 	return ban, nil

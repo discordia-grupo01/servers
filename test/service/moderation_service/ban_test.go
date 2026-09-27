@@ -214,3 +214,25 @@ func TestBanMember_StandingErrorPropagates(t *testing.T) {
 		t.Fatalf("err = %v, want %v", err, boom)
 	}
 }
+
+// #25 CA2 at write time: the service's first checks pass, but inside the
+// transaction the target already outranks the moderator (or the moderator lost
+// BAN_MEMBERS). The ban is rejected with the right error.
+func TestBanMember_RechecksInsideTheTransaction(t *testing.T) {
+	f := newFixture()
+	promoted := member(rank(1), 0)
+	f.repo.txTarget = &promoted
+	if _, err := f.ban(moderatorID, memberID, nil); !errors.Is(err, model.ErrTargetOutranksActor) {
+		t.Errorf("target promoted: err = %v, want ErrTargetOutranksActor", err)
+	}
+	if f.repo.banned.UserID != "" {
+		t.Error("target promoted: the ban was recorded")
+	}
+
+	f = newFixture()
+	demoted := member(rank(2), 0)
+	f.repo.txActor = &demoted
+	if _, err := f.ban(moderatorID, memberID, nil); !errors.Is(err, model.ErrForbiddenMissingPermission) {
+		t.Errorf("moderator lost BAN_MEMBERS: err = %v, want ErrForbiddenMissingPermission", err)
+	}
+}

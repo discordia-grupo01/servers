@@ -154,7 +154,7 @@ type updateRolePermissionsRequest struct {
 // @Success      200  {object}  roleview.Response
 // @Failure      400  {object}  apierr.ErrorResponse
 // @Failure      401  {object}  apierr.ErrorResponse
-// @Failure      403  {object}  apierr.ErrorResponse  "not a server administrator, or removing ADMINISTRATOR from a role you hold"
+// @Failure      403  {object}  apierr.ErrorResponse  "not a server administrator, or removing ADMINISTRATOR from a role you hold, or the role is not below your highest role"
 // @Failure      404  {object}  apierr.ErrorResponse
 // @Router       /v1/roles/{roleId} [patch]
 func (h *Handler) UpdateRolePermissions(c *gin.Context) {
@@ -259,7 +259,7 @@ func (h *Handler) ReorderRoles(c *gin.Context) {
 // @Success      204  "no content"
 // @Failure      400  {object}  apierr.ErrorResponse
 // @Failure      401  {object}  apierr.ErrorResponse
-// @Failure      403  {object}  apierr.ErrorResponse  "not a server administrator"
+// @Failure      403  {object}  apierr.ErrorResponse  "not a server administrator, or the role is not below your highest role"
 // @Failure      404  {object}  apierr.ErrorResponse
 // @Router       /v1/servers/{serverId}/default-role [put]
 func (h *Handler) SetDefaultRole(c *gin.Context) {
@@ -299,7 +299,7 @@ func (h *Handler) SetDefaultRole(c *gin.Context) {
 // @Param        roleId  path  string  true  "Role ID"
 // @Success      204  "no content"
 // @Failure      401  {object}  apierr.ErrorResponse
-// @Failure      403  {object}  apierr.ErrorResponse  "not a server administrator, or deleting a role with ADMINISTRATOR that you hold"
+// @Failure      403  {object}  apierr.ErrorResponse  "not a server administrator, or deleting a role with ADMINISTRATOR that you hold, or the role is not below your highest role"
 // @Failure      404  {object}  apierr.ErrorResponse
 // @Router       /v1/roles/{roleId} [delete]
 func (h *Handler) DeleteRole(c *gin.Context) {

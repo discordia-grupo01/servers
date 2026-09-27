@@ -83,6 +83,18 @@ func CanReorder(actor Standing, current []Role, newOrder []uuid.UUID) bool {
 	return true
 }
 
+// CanManageRole reports whether the user may edit, delete, assign, unassign
+// or make default rl: the owner can act on any role, anyone else only on
+// roles strictly below their own highest role. Without this, an administrator
+// could hand themselves (or take away from others) a role above their own and
+// then act on members who outrank them.
+func (s Standing) CanManageRole(rl Role) bool {
+	if s.IsOwner {
+		return true
+	}
+	return s.TopPosition != nil && rl.Position > *s.TopPosition
+}
+
 func RemovesOwnAdmin(actor Standing, actorHasRole bool, before, after Permission) bool {
 	return !actor.IsOwner &&
 		actorHasRole &&
