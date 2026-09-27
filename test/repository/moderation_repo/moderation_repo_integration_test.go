@@ -262,6 +262,92 @@ func TestBanMember_ConcurrentBans_OnlyOneWins(t *testing.T) {
 	}
 }
 
+func unbannedEvent() outbox.Event {
+	return outbox.Event{RoutingKey: "servers.member_unbanned", Payload: []byte(`{"n":3}`)}
+}
+
+// #26 CA1: the ban row goes away and the event lands in the outbox, in the
+// same transaction. The user is not made a member again.
+func TestUnbanMember_DeletesBanAndWritesEvent(t *testing.T) {
+	repo, pool := newRepo(t)
+	ctx := context.Background()
+	serverID := seedServer(ctx, t, pool, "target")
+	if err := repo.BanMember(ctx, newBan(serverID, "target")); err != nil {
+		t.Fatalf("BanMember: %v", err)
+	}
+
+	if err := repo.UnbanMember(ctx, serverID, "target", unbannedEvent()); err != nil {
+		t.Fatalf("UnbanMember: %v", err)
+	}
+	if n := count(ctx, t, pool, `SELECT COUNT(*) FROM server_bans WHERE server_id = $1`, serverID); n != 0 {
+		t.Errorf("%d bans left, want 0", n)
+	}
+	if n := count(ctx, t, pool, `SELECT COUNT(*) FROM server_members WHERE server_id = $1 AND user_id = 'target'`, serverID); n != 0 {
+		t.Error("the unban made the user a member again")
+	}
+	if n := count(ctx, t, pool, `SELECT COUNT(*) FROM outbox_events WHERE routing_key = 'servers.member_unbanned'`); n != 1 {
+		t.Errorf("outbox has %d member_unbanned events, want 1", n)
+	}
+}
+
+func TestUnbanMember_NotBanned_NotFoundAndNoEvent(t *testing.T) {
+	repo, pool := newRepo(t)
+	ctx := context.Background()
+	serverID := seedServer(ctx, t, pool, "member")
+	// Banned on another server, which doesn't count.
+	other := seedServer(ctx, t, pool)
+	exec(ctx, t, pool, `INSERT INTO server_bans (server_id, user_id) VALUES ($1, 'member')`, other)
+
+	for _, user := range []string{"member", "stranger"} {
+		if err := repo.UnbanMember(ctx, serverID, user, unbannedEvent()); !errors.Is(err, model.ErrBanNotFound) {
+			t.Errorf("%s: err = %v, want ErrBanNotFound", user, err)
+		}
+	}
+	if n := count(ctx, t, pool, `SELECT COUNT(*) FROM server_bans WHERE server_id = $1`, other); n != 1 {
+		t.Error("the ban on the other server was touched")
+	}
+	if n := count(ctx, t, pool, `SELECT COUNT(*) FROM outbox_events`); n != 0 {
+		t.Errorf("outbox has %d events, want 0", n)
+	}
+}
+
+// Two moderators revoking the same ban at once: one wins, the others get
+// ErrBanNotFound, and the event is written once.
+func TestUnbanMember_ConcurrentUnbans_OnlyOneWins(t *testing.T) {
+	repo, pool := newRepo(t)
+	ctx := context.Background()
+	serverID := seedServer(ctx, t, pool)
+	exec(ctx, t, pool, `INSERT INTO server_bans (server_id, user_id) VALUES ($1, 'target')`, serverID)
+
+	var wg sync.WaitGroup
+	errs := make([]error, 5)
+	for i := range errs {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			errs[i] = repo.UnbanMember(ctx, serverID, "target", unbannedEvent())
+		}(i)
+	}
+	wg.Wait()
+
+	wins := 0
+	for _, err := range errs {
+		switch {
+		case err == nil:
+			wins++
+		case errors.Is(err, model.ErrBanNotFound):
+		default:
+			t.Errorf("unexpected error: %v", err)
+		}
+	}
+	if wins != 1 {
+		t.Errorf("%d unbans succeeded, want exactly 1", wins)
+	}
+	if n := count(ctx, t, pool, `SELECT COUNT(*) FROM outbox_events`); n != 1 {
+		t.Errorf("outbox has %d events, want 1", n)
+	}
+}
+
 func TestListBans_NewestFirstPaginatedAndScopedToTheServer(t *testing.T) {
 	repo, pool := newRepo(t)
 	ctx := context.Background()

@@ -647,6 +647,181 @@ paths:
       summary: Get a server's banner
       tags:
         - servers
+  "/v1/servers/{serverId}/bans":
+    get:
+      description: Requires BAN_MEMBERS (the owner and administrators hold it
+        implicitly). Newest first, paginated.
+      parameters:
+        - description: Server ID
+          in: path
+          name: serverId
+          required: true
+          schema:
+            type: string
+        - description: Page size (max 100)
+          in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+        - description: Items to skip
+          in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/moderation.BanListResponse"
+        "400":
+          description: invalid limit/offset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "403":
+          description: missing BAN_MEMBERS
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+      security:
+        - BearerAuth: []
+      summary: List the server's bans
+      tags:
+        - moderation
+    post:
+      description: Requires BAN_MEMBERS (the owner and administrators hold it
+        implicitly). The target must be a current member ranked strictly below
+        the caller in the role hierarchy; the owner and the caller themselves
+        can't be banned. The member is removed (with their roles), a pending
+        ownership transfer to them is cancelled, and they can't rejoin through
+        any invitation until the ban is revoked. `reason` is optional (max 512
+        characters).
+      parameters:
+        - description: Server ID
+          in: path
+          name: serverId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/moderation_handler.banRequest"
+        description: Who to ban and, optionally, why
+        required: true
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/moderation.BanResponse"
+        "400":
+          description: missing user_id, banning yourself, or invalid reason
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "403":
+          description: missing BAN_MEMBERS, target is the owner, or target has an equal or
+            higher role
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "404":
+          description: server not found, or target is not a member
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "409":
+          description: target is already banned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+      security:
+        - BearerAuth: []
+      summary: Ban a member from the server
+      tags:
+        - moderation
+  "/v1/servers/{serverId}/bans/{userId}":
+    delete:
+      description: "Requires BAN_MEMBERS (the owner and administrators hold it
+        implicitly). There is no hierarchy check. The user does not become a
+        member again: they can rejoin with any valid invitation, and get the
+        default role like any new member."
+      parameters:
+        - description: Server ID
+          in: path
+          name: serverId
+          required: true
+          schema:
+            type: string
+        - description: ID of the banned user
+          in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: invalid server id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "403":
+          description: missing BAN_MEMBERS
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "404":
+          description: server not found, or the user is not banned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+      security:
+        - BearerAuth: []
+      summary: Revoke a ban
+      tags:
+        - moderation
   "/v1/servers/{serverId}/categories":
     post:
       description: Administrators only (the owner, or a member with ADMINISTRATOR).
@@ -1684,6 +1859,66 @@ paths:
       summary: Create a role
       tags:
         - roles
+  "/v1/servers/{serverId}/roles/reorder":
+    patch:
+      description: "Administrators only (the owner, or a member with ADMINISTRATOR).
+        `role_ids` is the full, final hierarchy, highest first: it must contain
+        every role of the server exactly once. Positions are rewritten to 1..N.
+        A non-owner administrator can only rearrange the roles below their own
+        highest role."
+      parameters:
+        - description: Server ID
+          in: path
+          name: serverId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/role_handler.reorderRolesRequest"
+        description: Role IDs in their new order, highest first
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/roleview.Response"
+                type: array
+        "400":
+          description: invalid body, or the list doesn't match the server's roles
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "403":
+          description: not a server administrator, or moving a role at or above your
+            highest role
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+      security:
+        - BearerAuth: []
+      summary: Reorder the server's role hierarchy
+      tags:
+        - roles
 servers:
   - url: /
 components:
@@ -1903,12 +2138,52 @@ components:
         to_user_id:
           type: string
       type: object
+    moderation.BanListResponse:
+      properties:
+        bans:
+          items:
+            $ref: "#/components/schemas/moderation.BanResponse"
+          type: array
+        limit:
+          type: integer
+        offset:
+          type: integer
+        total:
+          type: integer
+      type: object
+    moderation.BanResponse:
+      properties:
+        banned_at:
+          type: string
+        banned_by:
+          type: string
+        reason:
+          type: string
+        server_id:
+          type: string
+        user_id:
+          type: string
+      type: object
+    moderation_handler.banRequest:
+      properties:
+        reason:
+          type: string
+        user_id:
+          type: string
+      type: object
     role_handler.createRoleRequest:
       properties:
         color:
           type: string
         name:
           type: string
+      type: object
+    role_handler.reorderRolesRequest:
+      properties:
+        role_ids:
+          items:
+            type: string
+          type: array
       type: object
     role_handler.setDefaultRoleRequest:
       properties:
@@ -1940,6 +2215,8 @@ components:
           items:
             type: string
           type: array
+        position:
+          type: integer
         server_id:
           type: string
         updated_at:

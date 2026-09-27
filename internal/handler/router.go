@@ -108,6 +108,7 @@ func NewRouter(d Deps) *gin.Engine {
 
 	v1.POST("/servers/:serverId/bans", moderationH.Ban)
 	v1.GET("/servers/:serverId/bans", moderationH.ListBans)
+	v1.DELETE("/servers/:serverId/bans/:userId", moderationH.Unban)
 
 	invitation.NewHandler(d.Invitations).Register(v1)
 

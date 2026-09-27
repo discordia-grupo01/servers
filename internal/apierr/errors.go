@@ -159,6 +159,8 @@ func WriteDomainError(c *gin.Context, err error) {
 		RespondError(c, http.StatusForbidden, err.Error(), map[string]any{"reason": "target_outranks_actor"})
 	case errors.Is(err, model.ErrAlreadyBanned):
 		RespondError(c, http.StatusConflict, err.Error(), map[string]any{"reason": "already_banned"})
+	case errors.Is(err, model.ErrBanNotFound):
+		RespondError(c, http.StatusNotFound, err.Error(), map[string]any{"reason": "ban_not_found"})
 	case errors.Is(err, moderation.ErrReasonTooLong):
 		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("reason", "reason_too_long"))
 	case errors.Is(err, moderation.ErrReasonInvalidChars):

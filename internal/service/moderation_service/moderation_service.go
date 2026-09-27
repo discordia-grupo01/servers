@@ -1,5 +1,5 @@
 // Package moderation_service implements the Moderación epic: banning members
-// (#25) and listing bans.
+// (#25), revoking bans (#26) and listing bans.
 package moderation_service
 
 import (
@@ -115,6 +115,43 @@ func (s *Service) BanMember(ctx context.Context, p BanParams) (moderation.Ban, e
 		return moderation.Ban{}, err
 	}
 	return ban, nil
+}
+
+// UnbanMember revokes a ban (#26). Like banning, it needs BAN_MEMBERS (CA2),
+// but there is no hierarchy check: the user is not a member anymore, so they
+// have no rank. It does not make them a member again: they can rejoin with
+// any valid invitation and get the default role like any new member (CA1).
+func (s *Service) UnbanMember(ctx context.Context, p UnbanParams) error {
+	if p.ActorUserID == "" {
+		return model.ErrUnauthorized
+	}
+	target := strings.TrimSpace(p.TargetUserID)
+	if target == "" {
+		return model.ErrBanTargetRequired
+	}
+
+	srv, err := s.servers.GetByID(ctx, p.ServerID)
+	if err != nil {
+		return err
+	}
+	actor, err := service.ResolveStanding(ctx, s.standings, srv, p.ActorUserID)
+	if err != nil {
+		return err
+	}
+	if err := service.RequirePermission(actor, role.PermBanMembers); err != nil {
+		return err
+	}
+
+	memberUnbanned, err := outbox.New(moderationevents.RoutingKeyMemberUnbanned, moderationevents.MemberUnbanned{
+		Meta:       envelope.Meta{EventID: uuid.NewString(), OccurredAt: s.now()},
+		ServerID:   p.ServerID.String(),
+		UserID:     target,
+		UnbannedBy: p.ActorUserID,
+	})
+	if err != nil {
+		return err
+	}
+	return s.repo.UnbanMember(ctx, p.ServerID, target, memberUnbanned)
 }
 
 // ListBans returns a page of the server's bans, newest first. Only who can

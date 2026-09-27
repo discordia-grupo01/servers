@@ -138,7 +138,7 @@ func setupE2E(t *testing.T) (*gin.Engine, <-chan amqp.Delivery) {
 	if err != nil {
 		t.Fatalf("QueueDeclare: %v", err)
 	}
-	for _, key := range []string{membership.RoutingKeyMemberJoined, membership.RoutingKeyMemberLeft, moderationevents.RoutingKeyMemberBanned} {
+	for _, key := range []string{membership.RoutingKeyMemberJoined, membership.RoutingKeyMemberLeft, moderationevents.RoutingKeyMemberBanned, moderationevents.RoutingKeyMemberUnbanned} {
 		if err := ch.QueueBind(q.Name, key, "discordia.events", false, nil); err != nil {
 			t.Fatalf("QueueBind %s: %v", key, err)
 		}

@@ -41,10 +41,11 @@ func nextDeliveries(t *testing.T, deliveries <-chan amqp.Delivery, n int) map[st
 	return got
 }
 
-// #25 CA1, end to end over HTTP: the owner bans a member, both
+// #25 and #26 CA1, end to end over HTTP: the owner bans a member, both
 // servers.member_left and servers.member_banned reach the discordia.events
-// exchange, and the banned user can't rejoin with any invitation.
-func TestModerationEvents_BanEndToEnd(t *testing.T) {
+// exchange, and the banned user can't rejoin with any invitation until the
+// ban is revoked.
+func TestModerationEvents_BanAndUnbanEndToEnd(t *testing.T) {
 	router, deliveries := setupE2E(t)
 
 	owner := "owner-" + uuid.NewString()
@@ -123,6 +124,30 @@ func TestModerationEvents_BanEndToEnd(t *testing.T) {
 	_ = json.Unmarshal(w.Body.Bytes(), &list)
 	if w.Code != http.StatusOK || list.Total != 1 || list.Bans[0].UserID != target || list.Bans[0].BannedBy != owner {
 		t.Errorf("list bans: code=%d body=%s", w.Code, w.Body.String())
+	}
+
+	// #26 CA1: revoking the ban publishes servers.member_unbanned, and the
+	// user can rejoin with an invitation (they are not made a member by the
+	// unban itself).
+	if w = doAsUser(t, router, http.MethodDelete, "/v1/servers/"+srv.ID+"/bans/"+target, owner); w.Code != http.StatusNoContent {
+		t.Fatalf("unban: code=%d body=%s", w.Code, w.Body.String())
+	}
+	unbanned := nextDeliveries(t, deliveries, 1)[moderationevents.RoutingKeyMemberUnbanned]
+	var unbannedEvt moderationevents.MemberUnbanned
+	_ = json.Unmarshal(unbanned.Body, &unbannedEvt)
+	if unbannedEvt.ServerID != srv.ID || unbannedEvt.UserID != target || unbannedEvt.UnbannedBy != owner || unbannedEvt.EventID == "" {
+		t.Errorf("member_unbanned = %+v (body %s)", unbannedEvt, unbanned.Body)
+	}
+
+	if w = doAsUser(t, router, http.MethodDelete, "/v1/servers/"+srv.ID+"/bans/"+target, owner); w.Code != http.StatusNotFound {
+		t.Errorf("second unban: code=%d body=%s, want 404", w.Code, w.Body.String())
+	}
+
+	if w = doAsUser(t, router, http.MethodPost, "/v1/invites/"+inv.Code+"/join", target); w.Code != http.StatusCreated {
+		t.Fatalf("rejoin after unban: code=%d body=%s", w.Code, w.Body.String())
+	}
+	if evt := waitForEvent(t, deliveries, membership.RoutingKeyMemberJoined); evt.ServerID != srv.ID || evt.UserID != target {
+		t.Errorf("rejoin event = %+v", evt)
 	}
 }
 

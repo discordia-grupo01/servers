@@ -47,6 +47,12 @@ type fakeRepo struct {
 	banned   moderation.Ban
 	events   []outbox.Event
 
+	unbanErr      error
+	unbanCalls    int
+	unbanServerID uuid.UUID
+	unbanUserID   string
+	unbanEvents   []outbox.Event
+
 	listBans  []moderation.Ban
 	listTotal int
 	listErr   error
@@ -60,6 +66,15 @@ func (f *fakeRepo) BanMember(_ context.Context, ban moderation.Ban, events ...ou
 		return f.banErr
 	}
 	f.banned, f.events = ban, events
+	return nil
+}
+
+func (f *fakeRepo) UnbanMember(_ context.Context, serverID uuid.UUID, userID string, events ...outbox.Event) error {
+	f.unbanCalls++
+	if f.unbanErr != nil {
+		return f.unbanErr
+	}
+	f.unbanServerID, f.unbanUserID, f.unbanEvents = serverID, userID, events
 	return nil
 }
 
@@ -102,6 +117,12 @@ func newFixture() *fixture {
 func (f *fixture) ban(actor, target string, reason *string) (moderation.Ban, error) {
 	return f.svc.BanMember(context.Background(), moderation_service.BanParams{
 		ServerID: f.server.ID, ActorUserID: actor, TargetUserID: target, Reason: reason,
+	})
+}
+
+func (f *fixture) unban(actor, target string) error {
+	return f.svc.UnbanMember(context.Background(), moderation_service.UnbanParams{
+		ServerID: f.server.ID, ActorUserID: actor, TargetUserID: target,
 	})
 }
 

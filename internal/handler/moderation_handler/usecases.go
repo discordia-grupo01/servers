@@ -9,5 +9,6 @@ import (
 
 type UseCases interface {
 	BanMember(ctx context.Context, p moderation_service.BanParams) (moderation.Ban, error)
+	UnbanMember(ctx context.Context, p moderation_service.UnbanParams) error
 	ListBans(ctx context.Context, p moderation_service.ListBansParams) (moderation.BanPage, error)
 }

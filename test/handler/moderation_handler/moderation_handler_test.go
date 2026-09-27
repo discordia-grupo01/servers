@@ -28,6 +28,10 @@ type fakeModeration struct {
 	gotBan    moderation_service.BanParams
 	banResult moderation.Ban
 
+	unbanErr    error
+	unbanCalled bool
+	gotUnban    moderation_service.UnbanParams
+
 	listErr    error
 	listCalled bool
 	gotList    moderation_service.ListBansParams
@@ -37,6 +41,11 @@ type fakeModeration struct {
 func (f *fakeModeration) BanMember(_ context.Context, p moderation_service.BanParams) (moderation.Ban, error) {
 	f.banCalled, f.gotBan = true, p
 	return f.banResult, f.banErr
+}
+
+func (f *fakeModeration) UnbanMember(_ context.Context, p moderation_service.UnbanParams) error {
+	f.unbanCalled, f.gotUnban = true, p
+	return f.unbanErr
 }
 
 func (f *fakeModeration) ListBans(_ context.Context, p moderation_service.ListBansParams) (moderation.BanPage, error) {
@@ -221,6 +230,58 @@ func TestListBans_InvalidPagination_BadRequest(t *testing.T) {
 		w := do(t, newRouter(f), http.MethodGet, bansPath(uuid.New())+q, testUser, "")
 		if w.Code != http.StatusBadRequest || f.listCalled {
 			t.Errorf("%s: code=%d called=%v", q, w.Code, f.listCalled)
+		}
+	}
+}
+
+func TestUnban_Returns204(t *testing.T) {
+	serverID := uuid.New()
+	f := &fakeModeration{}
+	w := do(t, newRouter(f), http.MethodDelete, bansPath(serverID)+"/banned-1", testUser, "")
+	if w.Code != http.StatusNoContent || w.Body.Len() != 0 {
+		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
+	}
+	if f.gotUnban.ServerID != serverID || f.gotUnban.ActorUserID != testUser || f.gotUnban.TargetUserID != "banned-1" {
+		t.Errorf("service got %+v", f.gotUnban)
+	}
+}
+
+func TestUnban_InvalidServerID_BadRequest(t *testing.T) {
+	f := &fakeModeration{}
+	w := do(t, newRouter(f), http.MethodDelete, "/v1/servers/nope/bans/banned-1", testUser, "")
+	if w.Code != http.StatusBadRequest || f.unbanCalled {
+		t.Fatalf("code=%d called=%v", w.Code, f.unbanCalled)
+	}
+}
+
+func TestUnban_MissingIdentity_Returns401(t *testing.T) {
+	w := do(t, newRouter(&fakeModeration{}), http.MethodDelete, bansPath(uuid.New())+"/banned-1", "", "")
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("code=%d", w.Code)
+	}
+}
+
+func TestUnban_DomainErrorsMapToHTTP(t *testing.T) {
+	cases := map[string]struct {
+		err    error
+		status int
+		reason string
+	}{
+		"missing BAN_MEMBERS (CA2)":  {model.ErrForbiddenMissingPermission, http.StatusForbidden, "missing_permission"},
+		"not banned":                 {model.ErrBanNotFound, http.StatusNotFound, "ban_not_found"},
+		"server not found":           {model.ErrServerNotFound, http.StatusNotFound, ""},
+		"unexpected error is hidden": {errors.New("pq: boom"), http.StatusInternalServerError, ""},
+	}
+	for name, tc := range cases {
+		w := do(t, newRouter(&fakeModeration{unbanErr: tc.err}), http.MethodDelete, bansPath(uuid.New())+"/banned-1", testUser, "")
+		if w.Code != tc.status {
+			t.Errorf("%s: code=%d, want %d", name, w.Code, tc.status)
+			continue
+		}
+		if tc.reason != "" {
+			if e := decodeError(t, w); e.Error.Details["reason"] != tc.reason {
+				t.Errorf("%s: details = %v", name, e.Error.Details)
+			}
 		}
 	}
 }

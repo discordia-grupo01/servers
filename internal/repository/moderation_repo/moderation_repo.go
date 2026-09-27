@@ -100,6 +100,31 @@ func (r *Repository) BanMember(ctx context.Context, ban moderation.Ban, events .
 	})
 }
 
+// UnbanMember revokes userID's ban on serverID and writes events to the
+// outbox in the same transaction. ErrBanNotFound if there is no ban; with two
+// concurrent unbans the second one gets it, so the event is written once.
+// Membership is not restored: the user has to join again with an invitation.
+func (r *Repository) UnbanMember(ctx context.Context, serverID uuid.UUID, userID string, events ...outbox.Event) error {
+	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx,
+			`DELETE FROM server_bans WHERE server_id = $1 AND user_id = $2`,
+			serverID, userID,
+		)
+		if err != nil {
+			return fmt.Errorf("delete ban: %w", err)
+		}
+		if tag.RowsAffected() == 0 {
+			return model.ErrBanNotFound
+		}
+		for _, evt := range events {
+			if err := outbox.Insert(ctx, tx, evt); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 // ListBans returns a page of serverID's bans, newest first, and the total
 // number of bans.
 func (r *Repository) ListBans(ctx context.Context, serverID uuid.UUID, limit, offset int) ([]moderation.Ban, int, error) {

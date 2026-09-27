@@ -1,5 +1,5 @@
 // Package moderation_handler exposes the Moderación epic over HTTP: banning
-// members (#25) and listing bans.
+// members (#25), revoking bans (#26) and listing bans.
 package moderation_handler
 
 import (
@@ -65,6 +65,38 @@ func (h *Handler) Ban(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusCreated, moderation.ToResponse(ban))
+}
+
+// Unban godoc
+// @Summary      Revoke a ban
+// @Description  Requires BAN_MEMBERS (the owner and administrators hold it implicitly). There is no hierarchy check. The user does not become a member again: they can rejoin with any valid invitation, and get the default role like any new member.
+// @Tags         moderation
+// @Produce      json
+// @Security     BearerAuth
+// @Param        serverId  path  string  true  "Server ID"
+// @Param        userId    path  string  true  "ID of the banned user"
+// @Success      204
+// @Failure      400  {object}  apierr.ErrorResponse  "invalid server id"
+// @Failure      401  {object}  apierr.ErrorResponse
+// @Failure      403  {object}  apierr.ErrorResponse  "missing BAN_MEMBERS"
+// @Failure      404  {object}  apierr.ErrorResponse  "server not found, or the user is not banned"
+// @Router       /v1/servers/{serverId}/bans/{userId} [delete]
+func (h *Handler) Unban(c *gin.Context) {
+	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
+	if !ok {
+		return
+	}
+
+	err := h.uc.UnbanMember(c.Request.Context(), moderation_service.UnbanParams{
+		ServerID:     serverID,
+		ActorUserID:  middleware.UserID(c),
+		TargetUserID: c.Param("userId"),
+	})
+	if err != nil {
+		apierr.WriteDomainError(c, err)
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
 // ListBans godoc

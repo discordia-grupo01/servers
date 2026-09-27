@@ -17,5 +17,6 @@ type Standings = service.StandingReader
 // Repository is the slice of moderation_repo.Repository this service needs.
 type Repository interface {
 	BanMember(ctx context.Context, ban moderation.Ban, events ...outbox.Event) error
+	UnbanMember(ctx context.Context, serverID uuid.UUID, userID string, events ...outbox.Event) error
 	ListBans(ctx context.Context, serverID uuid.UUID, limit, offset int) ([]moderation.Ban, int, error)
 }
