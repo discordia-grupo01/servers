@@ -14,6 +14,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/outbox"
 	"github.com/discordia-grupo01/servers/internal/repository"
 	"github.com/discordia-grupo01/servers/internal/repository/category_repo"
+	"github.com/discordia-grupo01/servers/internal/service"
 )
 
 // testOutboxEvent is a valid placeholder for CreateServer's outbox event in
@@ -50,6 +51,7 @@ func newRepo(t *testing.T) (*category_repo.CategoryRepository, *repository.Serve
 		"../../../migrations/0007_categories.up.sql",
 		"../../../migrations/0010_native_categories.up.sql",
 		"../../../migrations/0011_outbox_events.up.sql",
+		"../../../migrations/0012_category_name_key.up.sql",
 	} {
 		schema, err := os.ReadFile(file)
 		if err != nil {
@@ -70,7 +72,8 @@ func serverFixture(owner string) (model.Server, []model.Channel) {
 
 func categoryFixture(serverID uuid.UUID, name string, position int) model.Category {
 	return model.Category{
-		ID: uuid.New(), ServerID: serverID, Name: name, Position: position,
+		ID: uuid.New(), ServerID: serverID, Name: name, NameKey: service.NameKey(name),
+		Position:  position,
 		CreatedAt: time.Now().UTC().Truncate(time.Millisecond),
 	}
 }
@@ -94,6 +97,84 @@ func TestCategoryRepo_Create_ThenGetByID_ReturnsIt(t *testing.T) {
 	}
 	if got.Name != "Texto" || got.ServerID != srv.ID {
 		t.Errorf("got = %+v", got)
+	}
+}
+
+func TestCategoryRepo_Create_DuplicateNameSameServer_ErrCategoryNameTaken(t *testing.T) {
+	categories, servers, _ := newRepo(t)
+	ctx := context.Background()
+	srv, chans := serverFixture("owner-" + uuid.NewString())
+	if err := servers.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
+		t.Fatalf("seed server: %v", err)
+	}
+
+	if err := categories.Create(ctx, categoryFixture(srv.ID, "Eventos", 0)); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	err := categories.Create(ctx, categoryFixture(srv.ID, "Eventos", 1))
+	if !errors.Is(err, model.ErrCategoryNameTaken) {
+		t.Errorf("err = %v, want ErrCategoryNameTaken", err)
+	}
+}
+
+func TestCategoryRepo_Create_DuplicateNameKeyDifferentCaseAndAccents_ErrCategoryNameTaken(t *testing.T) {
+	categories, servers, _ := newRepo(t)
+	ctx := context.Background()
+	srv, chans := serverFixture("owner-" + uuid.NewString())
+	if err := servers.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
+		t.Fatalf("seed server: %v", err)
+	}
+
+	if err := categories.Create(ctx, categoryFixture(srv.ID, "Eventós", 0)); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	err := categories.Create(ctx, categoryFixture(srv.ID, "  EVENTOS ", 1))
+	if !errors.Is(err, model.ErrCategoryNameTaken) {
+		t.Errorf("err = %v, want ErrCategoryNameTaken", err)
+	}
+}
+
+func TestCategoryRepo_Create_SameNameDifferentServer_Succeeds(t *testing.T) {
+	categories, servers, _ := newRepo(t)
+	ctx := context.Background()
+	srvA, chansA := serverFixture("owner-" + uuid.NewString())
+	srvB, chansB := serverFixture("owner-" + uuid.NewString())
+	if err := servers.CreateServer(ctx, srvA, nil, chansA, testOutboxEvent()); err != nil {
+		t.Fatalf("seed server A: %v", err)
+	}
+	if err := servers.CreateServer(ctx, srvB, nil, chansB, testOutboxEvent()); err != nil {
+		t.Fatalf("seed server B: %v", err)
+	}
+
+	if err := categories.Create(ctx, categoryFixture(srvA.ID, "Eventos", 0)); err != nil {
+		t.Fatalf("Create in server A: %v", err)
+	}
+	if err := categories.Create(ctx, categoryFixture(srvB.ID, "Eventos", 0)); err != nil {
+		t.Errorf("Create in server B should have succeeded, got: %v", err)
+	}
+}
+
+func TestCategoryRepo_Update_DuplicateName_ErrCategoryNameTaken(t *testing.T) {
+	categories, servers, _ := newRepo(t)
+	ctx := context.Background()
+	srv, chans := serverFixture("owner-" + uuid.NewString())
+	if err := servers.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
+		t.Fatalf("seed server: %v", err)
+	}
+
+	if err := categories.Create(ctx, categoryFixture(srv.ID, "Eventos", 0)); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	other := categoryFixture(srv.ID, "Anuncios", 1)
+	if err := categories.Create(ctx, other); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	err := categories.Update(ctx, other.ID, "Eventos", service.NameKey("Eventos"))
+	if !errors.Is(err, model.ErrCategoryNameTaken) {
+		t.Errorf("err = %v, want ErrCategoryNameTaken", err)
 	}
 }
 
@@ -199,7 +280,7 @@ func TestCategoryRepo_Update_ChangesName(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 
-	if err := categories.Update(ctx, cat.ID, "new-name"); err != nil {
+	if err := categories.Update(ctx, cat.ID, "new-name", service.NameKey("new-name")); err != nil {
 		t.Fatalf("Update: %v", err)
 	}
 
@@ -214,7 +295,7 @@ func TestCategoryRepo_Update_ChangesName(t *testing.T) {
 
 func TestCategoryRepo_Update_NotFound_ErrCategoryNotFound(t *testing.T) {
 	categories, _, _ := newRepo(t)
-	err := categories.Update(context.Background(), uuid.New(), "name")
+	err := categories.Update(context.Background(), uuid.New(), "name", service.NameKey("name"))
 	if !errors.Is(err, model.ErrCategoryNotFound) {
 		t.Errorf("err = %v, want ErrCategoryNotFound", err)
 	}

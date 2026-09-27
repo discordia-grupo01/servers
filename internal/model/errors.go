@@ -71,6 +71,7 @@ var (
 	ErrCategoryNameRequired     = errors.New("category name must be provided")
 	ErrCategoryNameTooLong      = errors.New("category name is too long")
 	ErrCategoryNameInvalidChars = errors.New("category name contains control characters")
+	ErrCategoryNameTaken        = errors.New("a category with that name already exists in this server")
 	ErrCategoryServerMismatch   = errors.New("category does not belong to this server")
 
 	ErrChannelReorderInvalid  = errors.New("the channel list must match exactly the channels currently in that category")

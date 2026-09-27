@@ -15,7 +15,7 @@ func normalizeName(s string) string {
 
 var accentStripper = transform.Chain(norm.NFD, runes.Remove(runes.In(unicode.Mn)), norm.NFC)
 
-func nameKey(s string) string {
+func NameKey(s string) string {
 	stripped, _, err := transform.String(accentStripper, s)
 	if err != nil {
 		stripped = s

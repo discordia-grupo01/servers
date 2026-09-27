@@ -123,6 +123,33 @@ func TestRemoveRole_HasRoleError_Propagates(t *testing.T) {
 	}
 }
 
+func TestGranularManageRoles_CanAssignAndRemoveRoles(t *testing.T) {
+	srv := ownerServer()
+	rl := role.Role{ID: uuid.New(), ServerID: srv.ID, Name: "Mods"}
+	members := &fakeMembers{isMember: true, standing: role.Standing{IsMember: true, Permissions: role.PermManageRoles}}
+	svc := newService(&fakeServers{server: srv}, &fakeRoles{role: rl}, members)
+	ctx := context.Background()
+
+	if _, err := svc.AssignRole(ctx, member_role_service.AssignRoleParams{ServerID: srv.ID, TargetUserID: testUser, RoleID: rl.ID, ActorUserID: "mod-1"}); err != nil {
+		t.Errorf("AssignRole: %v", err)
+	}
+	if err := svc.RemoveRole(ctx, member_role_service.RemoveRoleParams{ServerID: srv.ID, TargetUserID: testUser, RoleID: rl.ID, ActorUserID: "mod-1"}); err != nil {
+		t.Errorf("RemoveRole: %v", err)
+	}
+}
+
+func TestAssignRoleWithoutPermission_Forbidden(t *testing.T) {
+	srv := ownerServer()
+	rl := role.Role{ID: uuid.New(), ServerID: srv.ID, Name: "Mods"}
+	members := &fakeMembers{isMember: true, standing: role.Standing{IsMember: true, Permissions: role.PermSendMessages}}
+	svc := newService(&fakeServers{server: srv}, &fakeRoles{role: rl}, members)
+
+	_, err := svc.AssignRole(context.Background(), member_role_service.AssignRoleParams{ServerID: srv.ID, TargetUserID: testUser, RoleID: rl.ID, ActorUserID: "member-1"})
+	if !errors.Is(err, model.ErrForbiddenNotAdmin) {
+		t.Errorf("err = %v, want ErrForbiddenNotAdmin", err)
+	}
+}
+
 func TestAssignRole_StandingLookupError_Propagates(t *testing.T) {
 	srv := ownerServer()
 	boom := errors.New("db down")

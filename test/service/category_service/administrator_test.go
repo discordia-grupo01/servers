@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/discordia-grupo01/servers/internal/model"
+	"github.com/discordia-grupo01/servers/internal/model/role"
 	"github.com/discordia-grupo01/servers/internal/service/category_service"
 )
 
@@ -30,6 +31,28 @@ func TestAdministrator_CanManageCategories(t *testing.T) {
 	}
 	if err := svc.ReorderCategories(ctx, category_service.ReorderCategoriesParams{ServerID: srv.ID, UserID: testAdmin, CategoryIDs: []uuid.UUID{id2, id1}}); err != nil {
 		t.Errorf("ReorderCategories: %v", err)
+	}
+}
+
+func TestGranularManageChannels_CanManageCategories(t *testing.T) {
+	srv := ownerServer()
+	cat := model.Category{ID: uuid.New(), ServerID: srv.ID, Name: "old"}
+	standing := role.Standing{IsMember: true, Permissions: role.PermManageChannels}
+	svc := newServiceWithStandings(&fakeServers{server: srv}, &fakeCategories{getByIDCategory: cat}, &fakeStandings{standing: standing})
+
+	if _, err := svc.CreateCategory(context.Background(), category_service.CreateCategoryParams{ServerID: srv.ID, Name: "Voice", UserID: "mod-1"}); err != nil {
+		t.Errorf("CreateCategory: %v", err)
+	}
+}
+
+func TestManageCategoriesWithoutPermission_Forbidden(t *testing.T) {
+	srv := ownerServer()
+	standing := role.Standing{IsMember: true, Permissions: role.PermSendMessages}
+	svc := newServiceWithStandings(&fakeServers{server: srv}, &fakeCategories{}, &fakeStandings{standing: standing})
+
+	_, err := svc.CreateCategory(context.Background(), category_service.CreateCategoryParams{ServerID: srv.ID, Name: "Voice", UserID: "member-1"})
+	if !errors.Is(err, model.ErrForbiddenNotAdmin) {
+		t.Errorf("err = %v, want ErrForbiddenNotAdmin", err)
 	}
 }
 
