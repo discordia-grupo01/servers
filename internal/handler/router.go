@@ -12,6 +12,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/handler/invitation"
 	"github.com/discordia-grupo01/servers/internal/handler/member_role_handler"
 	"github.com/discordia-grupo01/servers/internal/handler/membership_handler"
+	"github.com/discordia-grupo01/servers/internal/handler/moderation_handler"
 	"github.com/discordia-grupo01/servers/internal/handler/ownership_transfer_handler"
 	"github.com/discordia-grupo01/servers/internal/handler/role_handler"
 	"github.com/discordia-grupo01/servers/internal/middleware"
@@ -31,6 +32,7 @@ type Deps struct {
 	Invitations        invitation.UseCases
 	Channels           channel_handler.ChannelUseCases
 	Categories         category_handler.CategoryUseCases
+	Moderation         moderation_handler.UseCases
 	Auth               middleware.AuthConfig
 	DB                 Pinger
 }
@@ -43,6 +45,7 @@ func NewRouter(d Deps) *gin.Engine {
 	transferH := ownership_transfer_handler.New(d.OwnershipTransfers)
 	channelH := channel_handler.New(d.Channels)
 	categoryH := category_handler.New(d.Categories)
+	moderationH := moderation_handler.New(d.Moderation)
 
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery())
@@ -102,6 +105,9 @@ func NewRouter(d Deps) *gin.Engine {
 	v1.POST("/servers/:serverId/ownership-transfers/:transferId/accept", transferH.Accept)
 	v1.POST("/servers/:serverId/ownership-transfers/:transferId/reject", transferH.Reject)
 	v1.POST("/servers/:serverId/ownership-transfers/:transferId/cancel", transferH.Cancel)
+
+	v1.POST("/servers/:serverId/bans", moderationH.Ban)
+	v1.GET("/servers/:serverId/bans", moderationH.ListBans)
 
 	invitation.NewHandler(d.Invitations).Register(v1)
 

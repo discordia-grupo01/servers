@@ -45,6 +45,13 @@ var (
 	ErrRoleReorderInvalid  = errors.New("the role list must match exactly the roles currently in this server")
 	ErrRoleReorderAboveOwn = errors.New("you can only reorder roles below your highest role")
 
+	ErrForbiddenMissingPermission = errors.New("you do not have permission to perform this action")
+	ErrBanTargetRequired          = errors.New("user_id must be provided")
+	ErrCannotBanSelf              = errors.New("you cannot ban yourself")
+	ErrCannotBanOwner             = errors.New("the server owner cannot be banned")
+	ErrTargetOutranksActor        = errors.New("target has an equal or higher role")
+	ErrAlreadyBanned              = errors.New("user is already banned from this server")
+
 	ErrMemberNotFound     = errors.New("member not found")
 	ErrMemberRoleNotFound = errors.New("member does not have this role")
 

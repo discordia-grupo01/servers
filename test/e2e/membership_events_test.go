@@ -23,6 +23,7 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 
 	"github.com/discordia-grupo01/events-contract/membership"
+	moderationevents "github.com/discordia-grupo01/events-contract/moderation"
 	"github.com/discordia-grupo01/servers/internal/events"
 	"github.com/discordia-grupo01/servers/internal/handler"
 	"github.com/discordia-grupo01/servers/internal/iconstore"
@@ -30,9 +31,11 @@ import (
 	"github.com/discordia-grupo01/servers/internal/outbox"
 	"github.com/discordia-grupo01/servers/internal/repository"
 	"github.com/discordia-grupo01/servers/internal/repository/member_repo"
+	"github.com/discordia-grupo01/servers/internal/repository/moderation_repo"
 	"github.com/discordia-grupo01/servers/internal/service"
 	"github.com/discordia-grupo01/servers/internal/service/invitation"
 	"github.com/discordia-grupo01/servers/internal/service/membership_service"
+	"github.com/discordia-grupo01/servers/internal/service/moderation_service"
 )
 
 func env(k, def string) string {
@@ -45,7 +48,7 @@ func env(k, def string) string {
 // setupE2E wires the real router (server creation, invites, membership)
 // against a real Postgres and a real RabbitMQ, and returns a channel
 // delivering every message published to discordia.events under
-// servers.member_joined / servers.member_left. Skipped unless both
+// servers.member_joined / servers.member_left / servers.member_banned. Skipped unless both
 // DATABASE_HOST and RABBITMQ_URL are set, same gate style as the rest of
 // this repo's integration tests.
 func setupE2E(t *testing.T) (*gin.Engine, <-chan amqp.Delivery) {
@@ -84,7 +87,7 @@ func setupE2E(t *testing.T) (*gin.Engine, <-chan amqp.Delivery) {
 		"0006_ownership_transfers.up.sql", "0007_categories.up.sql",
 		"0008_ownership_transfer_cancelled_status.up.sql", "0009_server_banner.up.sql",
 		"0010_native_categories.up.sql", "0011_outbox_events.up.sql",
-		"0012_role_positions.up.sql",
+		"0012_role_positions.up.sql", "0013_server_bans_banned_by.up.sql",
 	} {
 		schema, err := os.ReadFile("../../migrations/" + f)
 		if err != nil {
@@ -111,6 +114,7 @@ func setupE2E(t *testing.T) (*gin.Engine, <-chan amqp.Delivery) {
 		Icons:       icons,
 		Membership:  membership_service.New(serverRepo, memberRepo),
 		Invitations: invitation.NewService(repository.NewInvitationRepository(pool), serverRepo, memberRepo),
+		Moderation:  moderation_service.New(serverRepo, memberRepo, moderation_repo.NewRepository(pool)),
 		Auth:        middleware.AuthConfig{UserIDHeader: "X-User-Id"},
 		DB:          pool,
 	})
@@ -134,7 +138,7 @@ func setupE2E(t *testing.T) (*gin.Engine, <-chan amqp.Delivery) {
 	if err != nil {
 		t.Fatalf("QueueDeclare: %v", err)
 	}
-	for _, key := range []string{membership.RoutingKeyMemberJoined, membership.RoutingKeyMemberLeft} {
+	for _, key := range []string{membership.RoutingKeyMemberJoined, membership.RoutingKeyMemberLeft, moderationevents.RoutingKeyMemberBanned} {
 		if err := ch.QueueBind(q.Name, key, "discordia.events", false, nil); err != nil {
 			t.Fatalf("QueueBind %s: %v", key, err)
 		}

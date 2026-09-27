@@ -49,6 +49,26 @@ func RequireRevokeInvite(actor role.Standing, actorID string, inv model.Invitati
 	return nil
 }
 
+// RequirePermission checks whether the actor holds p in the server, through a
+// role or implicitly as an administrator (#25/#26 use BAN_MEMBERS). Like
+// RequireCreateInvite, it also requires membership: permission bits without
+// membership don't authorize anything.
+func RequirePermission(actor role.Standing, p role.Permission) error {
+	if !actor.IsMember || !actor.Has(p) {
+		return model.ErrForbiddenMissingPermission
+	}
+	return nil
+}
+
+// RequireOutranks checks that the actor is strictly above target in the role
+// hierarchy (#25 CA2: nobody can act on someone with an equal or higher role).
+func RequireOutranks(actor, target role.Standing) error {
+	if !actor.Outranks(target) {
+		return model.ErrTargetOutranksActor
+	}
+	return nil
+}
+
 // requireAdmin is the rule every "as an administrator" user story shares:
 // the owner, or a member holding ADMINISTRATOR.
 func requireAdmin(actor role.Standing) error {
