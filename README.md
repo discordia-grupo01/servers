@@ -13,16 +13,20 @@ moderación). Historias cubiertas hasta ahora:
 - **Asignar/quitar rol a un miembro** (#23).
 - **Definir rol por defecto para nuevos miembros** (#24).
 - **Eliminar rol** (optativa).
+- **Reordenar jerarquía de roles** (#56, optativa).
 - **Crear/editar/eliminar canal**.
 - **Organizar canales en categorías** (crear categoría, mover un canal a una categoría o sacarlo).
 - **Reordenar canales dentro de una categoría, y categorías entre sí** (optativa).
+- **Banear miembro del servidor** (#25).
+- **Revocar baneo** (#26).
 
 ## Stack
 - Lenguaje: Go
 - Framework: Gin (github.com/gin-gonic/gin)
 - BDD: PostgreSQL (driver `pgx/v5`)
 - Auth: el JWT lo valida el gateway (Kong). Este servicio confía en eso y solo
-  toma el user id (del header que inyecta Kong, o del claim `sub` del token).
+  toma el user id del claim `sub` del token (el header `X-User-Id` es solo
+  para desarrollo local, ver `USER_ID_HEADER`).
 - Infra extra: volumen para iconos
 
 ## Setup local
@@ -158,6 +162,64 @@ El proyecto de Supabase es **compartido entre todos los servicios de Discordia**
    ```
 3. Correr `make migrate` y despues `make run`. Confirmar con `GET /readyz` (200).
 
+## Roles, permisos y jerarquía
+Cada rol tiene un conjunto de permisos del catálogo cerrado
+(`internal/model/role/permission.go`): `VIEW_CHANNELS`, `SEND_MESSAGES`,
+`MANAGE_CHANNELS`, `MANAGE_ROLES`, `KICK_MEMBERS`, `BAN_MEMBERS`,
+`MANAGE_SERVER`, `ADMINISTRATOR` y `CREATE_INVITE`. La API siempre usa los
+nombres; la máscara de bits es interna.
+
+- **Administradores.** Son el dueño del servidor y los miembros con algún rol
+  que tenga `ADMINISTRATOR`. Tienen todos los permisos de forma implícita y
+  son los únicos que gestionan roles, canales, categorías y la configuración
+  del servidor. Lo que es solo del dueño (transferir la propiedad, no poder
+  abandonar el servidor) sigue siendo solo del dueño. Un administrador no-owner
+  no puede sacarse `ADMINISTRATOR` a sí mismo (ni editando, ni borrando, ni
+  desasignando el rol que se lo da).
+- **Permisos de un rol nuevo.** Todo rol se crea con `VIEW_CHANNELS` y
+  `SEND_MESSAGES` (`role.DefaultPermissions`); después se editan con
+  `PATCH /v1/roles/{roleId}`. Los roles creados antes de este default no se
+  tocaron.
+- **Los permisos solo suman.** Los permisos de un miembro son la **unión** de
+  los de todos sus roles (no hay permisos que "nieguen"). Por eso, quitarle un
+  rol no le saca un permiso que también le da otro rol, y los cambios en un rol
+  se aplican de inmediato a todos los que lo tienen.
+  `GET /v1/servers/{serverId}/members/{userId}/permissions` devuelve los
+  permisos **efectivos**, con la misma regla que usa el servicio para
+  autorizar: todos para el dueño y los administradores, la unión de sus roles
+  para el resto. El cliente puede decidir qué mostrar con un solo "incluye X".
+- **Jerarquía.** Cada rol tiene una `position` (1 = el más alto); los roles
+  nuevos se crean al final. El rango de un miembro es su rol más alto, y el
+  dueño está por encima de todos. Como los permisos solo suman, la jerarquía
+  **no resuelve conflictos de permisos** (no los hay): define el **rango**, y
+  se usa para:
+  - **Reordenar roles** (`PATCH /v1/servers/{serverId}/roles/reorder`, con la
+    lista completa de roles, del más alto al más bajo): un administrador
+    no-owner solo puede mover los roles que están por debajo de su rol más alto.
+  - **Banear**: solo se puede banear a alguien de rango estrictamente menor.
+
+## Moderación
+- **Banear** (`POST /v1/servers/{serverId}/bans`, `user_id` y `reason`
+  opcional de hasta 512 caracteres): requiere `BAN_MEMBERS` (los
+  administradores lo tienen implícito) y que el objetivo sea un miembro de
+  rango menor; nunca el dueño ni uno mismo. En una sola transacción se registra
+  el baneo, se saca al miembro (con sus roles), se cancela una transferencia de
+  propiedad pendiente hacia él y se encolan los eventos `servers.member_left` y
+  `servers.member_banned` (sin el motivo). Mientras el baneo esté activo, no
+  puede volver a unirse con ninguna invitación.
+- **Listar baneos** (`GET /v1/servers/{serverId}/bans`): requiere
+  `BAN_MEMBERS`; paginado, más nuevo primero.
+- **Revocar un baneo** (`DELETE /v1/servers/{serverId}/bans/{userId}`):
+  requiere `BAN_MEMBERS`, sin chequeo de jerarquía (el baneado ya no es
+  miembro). Borra el baneo y encola `servers.member_unbanned`. **No** lo vuelve
+  a hacer miembro: puede volver a unirse con cualquier invitación válida, y
+  entra como miembro nuevo (con el rol por defecto, sin los roles que tenía).
+
+Eventos que publica el servicio (exchange `discordia.events`, contratos en
+`github.com/discordia-grupo01/events-contract` y AsyncAPI en `discordia-docs`):
+`servers.member_joined`, `servers.member_left`, `servers.member_banned` y
+`servers.member_unbanned`.
+
 ## Endpoints
 Ver [`openapi.yaml`](openapi.yaml) -- **generado automáticamente y actualizado
 solo**, no se edita a mano ni hace falta correr nada vos. Sale de las
@@ -170,44 +232,52 @@ run nuevo). Si querés verlo vos antes de pushear, `make openapi` local hace
 lo mismo (necesita Go y Node).
 
 La tabla de abajo es una referencia rápida (puede quedar desactualizada
-antes que `openapi.yaml`, que es la fuente de verdad real).
+antes que `openapi.yaml`, que es la fuente de verdad real). En la columna
+Auth, "admin" es el dueño o un miembro con `ADMINISTRATOR`, y un permiso
+(p. ej. `BAN_MEMBERS`) significa que alcanza con tenerlo por algún rol (los
+admins lo tienen implícito); ver "Roles, permisos y jerarquía".
 
 | Metodo | Ruta | Auth | Descripcion |
 |---|---|---|---|
 | POST | `/v1/servers` | si | Crear servidor (multipart: `name`, `icon?`). Sin `icon`, se genera un ícono default de color random. |
 | GET | `/v1/servers` | si | Mis servidores (de los que soy owner o miembro), con sus canales y categorias. |
 | GET | `/v1/servers/{serverId}` | si | Un servidor puntual (nombre, canales, categorias, icon_url, banner_url). Ej.: después de un `join`, para obtener los datos con solo el `server_id`. Cada canal trae su `category_id` (`null` si esta "sin categoria"). |
-| PATCH | `/v1/servers/{serverId}` | si (owner) | Editar nombre, ícono y/o banner (multipart: `name?`, `icon?`, `banner?`, `remove_banner?`). Todos los campos son opcionales; sin permisos da 403, datos invalidos dan 400 sin persistir nada. |
+| PATCH | `/v1/servers/{serverId}` | si (admin) | Editar nombre, ícono y/o banner (multipart: `name?`, `icon?`, `banner?`, `remove_banner?`). Todos los campos son opcionales; sin permisos da 403, datos invalidos dan 400 sin persistir nada. |
 | GET | `/v1/servers/{serverId}/icon` | no (público) | Sirve el archivo del ícono (subido o el default generado). En produccion (Supabase) `icon_url` apunta directo al bucket público; esta ruta queda como fallback para setups sin Supabase. |
 | GET | `/v1/servers/{serverId}/banner` | no (público) | Sirve el archivo del banner. 404 si el server no tiene uno. Mismo esquema de URL que el icono. |
-| GET | `/v1/servers/{serverId}/members` | si | Listar los miembros del server (paginado). |
-| POST | `/v1/servers/:serverId/invites` | si | Generar invitación (JSON opcional: `max_uses?`; expira a los 7 días). |
-| GET | `/v1/servers/:serverId/invites` | si (miembro) | Listar todas las invitaciones del server (activas, revocadas o vencidas), más nueva primero. Sin filtro por estado del lado del back. |
-| DELETE | `/v1/invites/:code` | si | Revocar una invitación (idempotente). |
-| POST | `/v1/invites/:code/join` | si | Unirse a un servidor con una invitación. |
+| GET | `/v1/servers/{serverId}/members` | si (miembro) | Listar los miembros del server (paginado). |
+| POST | `/v1/servers/{serverId}/invites` | si (`CREATE_INVITE`) | Generar invitación (JSON opcional: `max_uses?`; expira a los 7 días). |
+| GET | `/v1/servers/{serverId}/invites` | si (`CREATE_INVITE`) | Listar todas las invitaciones del server (activas, revocadas o vencidas), más nueva primero. Sin filtro por estado del lado del back. |
+| DELETE | `/v1/invites/{code}` | si (admin o quien la creó) | Revocar una invitación (idempotente). |
+| POST | `/v1/invites/{code}/join` | si | Unirse a un servidor con una invitación. 403 si el usuario está baneado. Recibe el rol por defecto del server. |
 | DELETE | `/v1/servers/{serverId}/members/{userId}` | si (uno mismo) | Abandonar un servidor. `userId` debe ser el propio caller; el owner no puede abandonar así (409, primero tiene que transferir la propiedad o eliminar el servidor). |
 | POST | `/v1/servers/{serverId}/ownership-transfers` | si (owner) | Ofrecer la propiedad a otro miembro (`to_user_id`). Crea una transferencia pendiente; no cambia nada hasta que el destinatario responde. Rechaza si `to_user_id` no es miembro (400) o si ya hay una transferencia pendiente para ese server (409). |
 | GET | `/v1/servers/{serverId}/ownership-transfers/pending` | si (miembro) | Ver la transferencia pendiente del server, si hay una. |
 | POST | `/v1/servers/{serverId}/ownership-transfers/{transferId}/accept` | si (destinatario) | Aceptar: pasa a ser el nuevo owner y el anterior queda como miembro regular. |
 | POST | `/v1/servers/{serverId}/ownership-transfers/{transferId}/reject` | si (destinatario) | Rechazar: la propiedad no cambia. |
 | POST | `/v1/servers/{serverId}/ownership-transfers/{transferId}/cancel` | si (owner que la inicio) | Cancelar la transferencia pendiente antes de que el destinatario responda (p. ej. para ofrecersela a otro miembro). |
-| POST | `/v1/servers/{serverId}/roles` | si (owner) | Crear rol (`name`, `color`). |
-| GET | `/v1/servers/{serverId}/roles` | si | Listar roles de un server. |
+| POST | `/v1/servers/{serverId}/roles` | si (admin) | Crear rol (`name`, `color`). Se crea al final de la jerarquía, con `VIEW_CHANNELS` y `SEND_MESSAGES`. |
+| GET | `/v1/servers/{serverId}/roles` | si | Listar roles de un server, ordenados por jerarquía (`position` 1 = el más alto). |
+| PATCH | `/v1/servers/{serverId}/roles/reorder` | si (admin) | Reordenar la jerarquía (`role_ids`: todos los roles del server, del más alto al más bajo). 400 si la lista no coincide exactamente; 403 si un admin no-owner mueve un rol que no está por debajo de su rol más alto. |
 | GET | `/v1/roles/{roleId}` | si | Un rol puntual (mismo shape que un elemento de `GET /v1/servers/{serverId}/roles`). 404 si no existe. |
-| PATCH | `/v1/roles/{roleId}` | si (owner) | Editar permisos/nombre/color de un rol. |
-| POST | `/v1/servers/{serverId}/members/{userId}/roles` | si (owner) | Asignar un rol a un miembro (idempotente). |
-| DELETE | `/v1/servers/{serverId}/members/{userId}/roles/{roleId}` | si (owner) | Quitar un rol de un miembro. |
-| GET | `/v1/servers/{serverId}/members/{userId}/roles` | si | Listar los roles de un miembro. |
-| GET | `/v1/servers/{serverId}/members/{userId}/permissions` | si | Permisos efectivos del miembro (union de los permisos de todos sus roles). |
-| PUT | `/v1/servers/{serverId}/default-role` | si (owner) | Definir el rol por defecto del server. |
-| DELETE | `/v1/roles/{roleId}` | si (owner) | Eliminar un rol (optativa). Limpia asignaciones; rechaza con 409 si el rol es el default actual del server (hay que asignar otro default primero). |
-| POST | `/v1/servers/{serverId}/channels` | si (owner) | Crear canal de texto o voz (`name`, `kind`, `category_id?`). 400 si el nombre esta vacio o ya existe otro canal con ese nombre en la misma categoria (o en el "sin categoria", segun corresponda). |
-| PATCH | `/v1/channels/{channelId}` | si (owner) | Editar nombre y/o topic de un canal. |
-| DELETE | `/v1/channels/{channelId}` | si (owner) | Eliminar un canal. |
-| POST | `/v1/servers/{serverId}/categories` | si (owner) | Crear categoria (`name`). |
-| PATCH | `/v1/channels/{channelId}/category` | si (owner) | Mover un canal a una categoria (`category_id`), o sacarlo a "sin categoria" (`category_id: null`). |
-| PATCH | `/v1/servers/{serverId}/channels/reorder` | si (owner) | Reordenar los canales de una categoria (`category_id?`, `channel_ids`: el orden completo y exacto de esa categoria). 400 si la lista no coincide exactamente con los canales actuales de esa categoria. |
-| PATCH | `/v1/servers/{serverId}/categories/reorder` | si (owner) | Reordenar las categorias del server (`category_ids`: el orden completo y exacto). 400 si la lista no coincide exactamente. |
+| PATCH | `/v1/roles/{roleId}` | si (admin) | Editar permisos/nombre/color de un rol. |
+| POST | `/v1/servers/{serverId}/members/{userId}/roles` | si (admin) | Asignar un rol a un miembro (idempotente). |
+| DELETE | `/v1/servers/{serverId}/members/{userId}/roles/{roleId}` | si (admin) | Quitar un rol de un miembro. 404 si no lo tiene. |
+| GET | `/v1/servers/{serverId}/members/{userId}/roles` | si (miembro) | Listar los roles de un miembro. 404 si `userId` no es miembro. |
+| GET | `/v1/servers/{serverId}/members/{userId}/permissions` | si (miembro) | Permisos efectivos del miembro: todos si es el dueño o tiene `ADMINISTRATOR`, si no la unión de los de sus roles. 404 si `userId` no es miembro. |
+| PUT | `/v1/servers/{serverId}/default-role` | si (admin) | Definir el rol por defecto del server. |
+| DELETE | `/v1/roles/{roleId}` | si (admin) | Eliminar un rol (optativa). Limpia asignaciones; rechaza con 409 si el rol es el default actual del server (hay que asignar otro default primero). |
+| POST | `/v1/servers/{serverId}/channels` | si (admin) | Crear canal de texto o voz (`name`, `kind`, `category_id?`). 400 si el nombre esta vacio o ya existe otro canal con ese nombre en la misma categoria (o en el "sin categoria", segun corresponda). |
+| PATCH | `/v1/channels/{channelId}` | si (admin) | Editar nombre y/o topic de un canal. |
+| DELETE | `/v1/channels/{channelId}` | si (admin) | Eliminar un canal. |
+| POST | `/v1/servers/{serverId}/categories` | si (admin) | Crear categoria (`name`). |
+| PATCH | `/v1/categories/{categoryId}` | si (admin) | Renombrar una categoria (`name`). |
+| PATCH | `/v1/channels/{channelId}/category` | si (admin) | Mover un canal a una categoria (`category_id`), o sacarlo a "sin categoria" (`category_id: null`). |
+| PATCH | `/v1/servers/{serverId}/channels/reorder` | si (admin) | Reordenar los canales de una categoria (`category_id?`, `channel_ids`: el orden completo y exacto de esa categoria). 400 si la lista no coincide exactamente con los canales actuales de esa categoria. |
+| PATCH | `/v1/servers/{serverId}/categories/reorder` | si (admin) | Reordenar las categorias del server (`category_ids`: el orden completo y exacto). 400 si la lista no coincide exactamente. |
+| POST | `/v1/servers/{serverId}/bans` | si (`BAN_MEMBERS`) | Banear a un miembro de rango menor (`user_id`, `reason?`). 201 con el baneo; 403 si es el dueño o tiene rango igual o mayor; 404 si no es miembro; 409 si ya está baneado. |
+| GET | `/v1/servers/{serverId}/bans` | si (`BAN_MEMBERS`) | Listar los baneos del server (paginado: `limit`, `offset`; más nuevo primero). |
+| DELETE | `/v1/servers/{serverId}/bans/{userId}` | si (`BAN_MEMBERS`) | Revocar un baneo. 204; 404 si el usuario no está baneado. No lo vuelve miembro: tiene que volver a unirse con una invitación. |
 | GET | `/livez` `/readyz` | no | Health checks. |
 
 ## Health checks
