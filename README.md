@@ -141,12 +141,12 @@ toda la suite -- unitarios e integración -- corre en cada PR/push, no solo
 localmente a mano.
 
 ## Supabase (produccion)
-El proyecto de Supabase es **compartido entre todos los servicios de Discordia** (un solo proyecto, un schema por servicio). Pasos:
-1. Una sola vez por proyecto de Supabase: crear el schema de este servicio. Se puede hacer sin SQL desde **Database > Schemas > New schema** (nombre `servers`), o corriendo en el SQL Editor:
+Cada servicio de Discordia tiene su **propio proyecto de Supabase** (no comparten uno solo) -- este servicio usa el proyecto `discordia-servers`. Pasos:
+1. Opcional: si queres organizar las tablas en un schema propio en vez de `public`, crealo una sola vez desde **Database > Schemas > New schema** (nombre `servers`), o corriendo en el SQL Editor:
    ```sql
    CREATE SCHEMA IF NOT EXISTS servers;
    ```
-2. Completar en tu `.env` los datos de conexion de Supabase, tomados del boton **Connect** del proyecto, pestaña **Session pooler** (no "Direct connection": ese host solo resuelve por IPv6 y muchas redes no tienen esa salida; tampoco "Transaction pooler", que no sostiene el `search_path` por conexion):
+2. Completar en tu `.env` los datos de conexion del proyecto `discordia-servers`, tomados del boton **Connect**, pestaña **Session pooler** (no "Direct connection": ese host solo resuelve por IPv6 y muchas redes no tienen esa salida; tampoco "Transaction pooler", que no sostiene el `search_path` por conexion):
    ```
    DATABASE_HOST=aws-0-<region>.pooler.supabase.com
    DATABASE_PORT=5432
@@ -176,7 +176,7 @@ antes que `openapi.yaml`, que es la fuente de verdad real).
 |---|---|---|---|
 | POST | `/v1/servers` | si | Crear servidor (multipart: `name`, `icon?`). Sin `icon`, se genera un ícono default de color random. |
 | GET | `/v1/servers` | si | Mis servidores (de los que soy owner o miembro), con sus canales y categorias. |
-| GET | `/v1/servers/{serverId}` | si | Un servidor puntual (nombre, canales, categorias, icon_url, banner_url). Ej.: después de un `join`, para obtener los datos con solo el `server_id`. Cada canal trae su `category_id` (`null` si esta "sin categoria"). |
+| GET | `/v1/servers/{serverId}` | si | Un servidor puntual (nombre, canales, categorias, icon_url, banner_url). Ej.: después de un `join`, para obtener los datos con solo el `server_id`. Cada canal siempre trae un `category_id` -- "sin categoria" no es un estado valido, ver nota en `POST .../channels`. |
 | PATCH | `/v1/servers/{serverId}` | si (owner) | Editar nombre, ícono y/o banner (multipart: `name?`, `icon?`, `banner?`, `remove_banner?`). Todos los campos son opcionales; sin permisos da 403, datos invalidos dan 400 sin persistir nada. |
 | GET | `/v1/servers/{serverId}/icon` | no (público) | Sirve el archivo del ícono (subido o el default generado). En produccion (Supabase) `icon_url` apunta directo al bucket público; esta ruta queda como fallback para setups sin Supabase. |
 | GET | `/v1/servers/{serverId}/banner` | no (público) | Sirve el archivo del banner. 404 si el server no tiene uno. Mismo esquema de URL que el icono. |
@@ -201,11 +201,11 @@ antes que `openapi.yaml`, que es la fuente de verdad real).
 | GET | `/v1/servers/{serverId}/members/{userId}/permissions` | si | Permisos efectivos del miembro (union de los permisos de todos sus roles). |
 | PUT | `/v1/servers/{serverId}/default-role` | si (owner) | Definir el rol por defecto del server. |
 | DELETE | `/v1/roles/{roleId}` | si (owner) | Eliminar un rol (optativa). Limpia asignaciones; rechaza con 409 si el rol es el default actual del server (hay que asignar otro default primero). |
-| POST | `/v1/servers/{serverId}/channels` | si (owner) | Crear canal de texto o voz (`name`, `kind`, `category_id?`). 400 si el nombre esta vacio o ya existe otro canal con ese nombre en la misma categoria (o en el "sin categoria", segun corresponda). |
+| POST | `/v1/servers/{serverId}/channels` | si (owner) | Crear canal de texto o voz (`name`, `kind`, `category_id?`). `category_id` omitido cae en la categoria nativa del server para ese `kind` ("sin categoria" no es un estado valido). 400 si el nombre esta vacio o ya existe otro canal con ese nombre en la misma categoria. |
 | PATCH | `/v1/channels/{channelId}` | si (owner) | Editar nombre y/o topic de un canal. |
 | DELETE | `/v1/channels/{channelId}` | si (owner) | Eliminar un canal. |
-| POST | `/v1/servers/{serverId}/categories` | si (owner) | Crear categoria (`name`). |
-| PATCH | `/v1/channels/{channelId}/category` | si (owner) | Mover un canal a una categoria (`category_id`), o sacarlo a "sin categoria" (`category_id: null`). |
+| POST | `/v1/servers/{serverId}/categories` | si (owner) | Crear categoria (`name`). 400 si el nombre esta vacio o ya existe otra categoria con ese nombre en el server (comparacion sin distinguir mayusculas/tildes/espacios). |
+| PATCH | `/v1/channels/{channelId}/category` | si (owner) | Mover un canal a una categoria (`category_id`). `category_id` omitido/null cae en la categoria nativa del server para el `kind` del canal ("sin categoria" no es un estado valido). |
 | PATCH | `/v1/servers/{serverId}/channels/reorder` | si (owner) | Reordenar los canales de una categoria (`category_id?`, `channel_ids`: el orden completo y exacto de esa categoria). 400 si la lista no coincide exactamente con los canales actuales de esa categoria. |
 | PATCH | `/v1/servers/{serverId}/categories/reorder` | si (owner) | Reordenar las categorias del server (`category_ids`: el orden completo y exacto). 400 si la lista no coincide exactamente. |
 | GET | `/livez` `/readyz` | no | Health checks. |
