@@ -254,12 +254,17 @@ func (s *ChannelService) MoveChannelToCategory(ctx context.Context, p MoveChanne
 		return model.Channel{}, err
 	}
 
-	if err := s.channels.MoveToCategory(ctx, p.ChannelID, p.CategoryID); err != nil {
+	categoryID := p.CategoryID
+	if categoryID == nil {
+		categoryID = nativeCategoryID(srv.Categories, ch.Kind)
+	}
+
+	if err := s.channels.MoveToCategory(ctx, p.ChannelID, categoryID); err != nil {
 		return model.Channel{}, err
 	}
 	// TODO(events): publicar "channels.channel_moved" en discordia.events cuando exista un consumidor real.
 
-	ch.CategoryID = p.CategoryID
+	ch.CategoryID = categoryID
 	return ch, nil
 }
 
