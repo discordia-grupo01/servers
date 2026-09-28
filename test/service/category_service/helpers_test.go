@@ -35,9 +35,10 @@ type fakeCategories struct {
 	listResult []model.Category
 	listErr    error
 
-	updateErr  error
-	updatedID  uuid.UUID
-	updateName string
+	updateErr     error
+	updatedID     uuid.UUID
+	updateName    string
+	updateNameKey string
 
 	reorderErr   error
 	reorderedIDs []uuid.UUID
@@ -66,9 +67,10 @@ func (f *fakeCategories) ListByServer(_ context.Context, _ uuid.UUID) ([]model.C
 	return f.listResult, nil
 }
 
-func (f *fakeCategories) Update(_ context.Context, id uuid.UUID, name string) error {
+func (f *fakeCategories) Update(_ context.Context, id uuid.UUID, name, nameKey string) error {
 	f.updatedID = id
 	f.updateName = name
+	f.updateNameKey = nameKey
 	return f.updateErr
 }
 

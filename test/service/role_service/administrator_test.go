@@ -37,10 +37,21 @@ func TestAdministrator_CanManageRoles(t *testing.T) {
 	}
 }
 
-// Granular permissions alone don't make someone an administrator.
-func TestManageRolesWithoutAdministrator_Forbidden(t *testing.T) {
+// CA1 of "Editar permisos de un rol": MANAGE_ROLES alone (without
+// ADMINISTRATOR) is enough for a member to manage roles.
+func TestManageRolesWithGranularPermission_Allowed(t *testing.T) {
 	srv := ownerServer()
 	members := &fakeMembers{standing: role.Standing{IsMember: true, Permissions: role.PermManageRoles}}
+	svc := newServiceWithMembers(&fakeServers{server: srv}, &fakeRoles{}, members)
+
+	if _, err := svc.CreateRole(context.Background(), role_service.CreateRoleParams{ServerID: srv.ID, Name: "Mods", Color: "#00FF00", UserID: "member-1"}); err != nil {
+		t.Errorf("CreateRole: %v", err)
+	}
+}
+
+func TestManageRolesWithoutPermission_Forbidden(t *testing.T) {
+	srv := ownerServer()
+	members := &fakeMembers{standing: role.Standing{IsMember: true, Permissions: role.PermSendMessages}}
 	svc := newServiceWithMembers(&fakeServers{server: srv}, &fakeRoles{}, members)
 
 	_, err := svc.CreateRole(context.Background(), role_service.CreateRoleParams{ServerID: srv.ID, Name: "Mods", Color: "#00FF00", UserID: "member-1"})

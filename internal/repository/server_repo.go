@@ -47,15 +47,10 @@ func (r *ServerRepository) CreateServer(ctx context.Context, srv model.Server, c
 		}
 
 		for _, cat := range categories {
-			var defaultKind *string
-			if cat.DefaultKind != nil {
-				s := string(*cat.DefaultKind)
-				defaultKind = &s
-			}
 			if _, err := tx.Exec(ctx, `
-				INSERT INTO categories (id, server_id, name, position, default_kind, created_at)
-				VALUES ($1, $2, $3, $4, $5, $6)`,
-				cat.ID, cat.ServerID, cat.Name, cat.Position, defaultKind, cat.CreatedAt,
+				INSERT INTO categories (id, server_id, name, name_key, position, is_fallback, created_at)
+				VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+				cat.ID, cat.ServerID, cat.Name, cat.NameKey, cat.Position, cat.IsFallback, cat.CreatedAt,
 			); err != nil {
 				return fmt.Errorf("insert category %s: %w", cat.Name, err)
 			}
@@ -157,7 +152,7 @@ func (r *ServerRepository) channelsByServerID(ctx context.Context, serverID uuid
 // ListForUser (many), so the latter doesn't do one query per server.
 func (r *ServerRepository) categoriesByServerIDs(ctx context.Context, serverIDs []uuid.UUID) (map[uuid.UUID][]model.Category, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, server_id, name, position, default_kind, created_at
+		SELECT id, server_id, name, position, is_fallback, created_at
 		  FROM categories WHERE server_id = ANY($1) ORDER BY position`, serverIDs)
 	if err != nil {
 		return nil, fmt.Errorf("list categories: %w", err)
@@ -167,13 +162,8 @@ func (r *ServerRepository) categoriesByServerIDs(ctx context.Context, serverIDs 
 	byServer := make(map[uuid.UUID][]model.Category)
 	for rows.Next() {
 		var cat model.Category
-		var defaultKind *string
-		if err := rows.Scan(&cat.ID, &cat.ServerID, &cat.Name, &cat.Position, &defaultKind, &cat.CreatedAt); err != nil {
+		if err := rows.Scan(&cat.ID, &cat.ServerID, &cat.Name, &cat.Position, &cat.IsFallback, &cat.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan category: %w", err)
-		}
-		if defaultKind != nil {
-			kind := model.ChannelKind(*defaultKind)
-			cat.DefaultKind = &kind
 		}
 		byServer[cat.ServerID] = append(byServer[cat.ServerID], cat)
 	}

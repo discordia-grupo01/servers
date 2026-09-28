@@ -52,7 +52,7 @@ func newRepo(t *testing.T) (*role_repo.RoleRepository, *repository.ServerReposit
 		"../../../migrations/0004_member_roles.up.sql",
 		"../../../migrations/0005_default_role.up.sql",
 		"../../../migrations/0011_outbox_events.up.sql",
-		"../../../migrations/0012_role_positions.up.sql",
+		"../../../migrations/0015_role_positions.up.sql",
 	} {
 		schema, err := os.ReadFile(file)
 		if err != nil {

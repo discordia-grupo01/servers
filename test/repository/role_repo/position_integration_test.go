@@ -211,7 +211,7 @@ func TestMigration0012_BackfillsPositionsByCreationDate(t *testing.T) {
 		}
 	}
 
-	migration, err := os.ReadFile("../../../migrations/0012_role_positions.up.sql")
+	migration, err := os.ReadFile("../../../migrations/0015_role_positions.up.sql")
 	if err != nil {
 		t.Fatal(err)
 	}

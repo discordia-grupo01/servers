@@ -60,7 +60,10 @@ func newRepo(t *testing.T) (*repository.ServerRepository, *pgxpool.Pool) {
 		"../../migrations/0009_server_banner.up.sql",
 		"../../migrations/0010_native_categories.up.sql",
 		"../../migrations/0011_outbox_events.up.sql",
-		"../../migrations/0012_role_positions.up.sql",
+		"../../migrations/0012_category_name_key.up.sql",
+		"../../migrations/0013_unassigned_category.up.sql",
+		"../../migrations/0014_drop_default_kind.up.sql",
+		"../../migrations/0015_role_positions.up.sql",
 	} {
 		schema, err := os.ReadFile(path)
 		if err != nil {
@@ -128,12 +131,12 @@ func TestRepo_CreateServer_PersistsNativeCategoriesAndChannelCategoryID(t *testi
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	id := uuid.New()
 
-	textKind, voiceKind := model.ChannelText, model.ChannelVoice
-	textCatID, voiceCatID := uuid.New(), uuid.New()
+	textCatID, voiceCatID, unassignedCatID := uuid.New(), uuid.New(), uuid.New()
 	srv := model.Server{ID: id, Name: "With Categories", NameKey: "with categories", OwnerID: owner, CreatedAt: now}
 	categories := []model.Category{
-		{ID: textCatID, ServerID: id, Name: model.DefaultTextCategoryName, Position: 0, DefaultKind: &textKind, CreatedAt: now},
-		{ID: voiceCatID, ServerID: id, Name: model.DefaultVoiceCategoryName, Position: 1, DefaultKind: &voiceKind, CreatedAt: now},
+		{ID: textCatID, ServerID: id, Name: model.DefaultTextCategoryName, NameKey: "canales de texto", Position: 0, CreatedAt: now},
+		{ID: voiceCatID, ServerID: id, Name: model.DefaultVoiceCategoryName, NameKey: "canales de voz", Position: 1, CreatedAt: now},
+		{ID: unassignedCatID, ServerID: id, Name: model.DefaultUnassignedCategoryName, NameKey: "sin asignar", Position: 2, IsFallback: true, CreatedAt: now},
 	}
 	chans := []model.Channel{
 		{ID: uuid.New(), ServerID: id, Name: "general", Kind: model.ChannelText, CategoryID: &textCatID, CreatedAt: now},
@@ -146,16 +149,21 @@ func TestRepo_CreateServer_PersistsNativeCategoriesAndChannelCategoryID(t *testi
 
 	var nCategories int
 	_ = pool.QueryRow(ctx, `SELECT count(*) FROM categories WHERE server_id = $1`, id).Scan(&nCategories)
-	if nCategories != 2 {
-		t.Fatalf("categories = %d, want 2", nCategories)
+	if nCategories != 3 {
+		t.Fatalf("categories = %d, want 3", nCategories)
 	}
 
 	got, err := repo.GetByID(ctx, id)
 	if err != nil {
 		t.Fatalf("GetByID: %v", err)
 	}
-	if len(got.Categories) != 2 {
-		t.Fatalf("got.Categories = %d, want 2: %+v", len(got.Categories), got.Categories)
+	if len(got.Categories) != 3 {
+		t.Fatalf("got.Categories = %d, want 3: %+v", len(got.Categories), got.Categories)
+	}
+	for _, cat := range got.Categories {
+		if cat.ID == unassignedCatID && !cat.IsFallback {
+			t.Errorf("unassigned category round-tripped with IsFallback = false, want true")
+		}
 	}
 	for _, ch := range got.Channels {
 		switch ch.Kind {

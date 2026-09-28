@@ -15,6 +15,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/repository"
 	"github.com/discordia-grupo01/servers/internal/repository/category_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/channel_repo"
+	"github.com/discordia-grupo01/servers/internal/service"
 )
 
 // testOutboxEvent is a valid placeholder for CreateServer's outbox event in
@@ -51,6 +52,9 @@ func newRepo(t *testing.T) (*channel_repo.ChannelRepository, *category_repo.Cate
 		"../../../migrations/0007_categories.up.sql",
 		"../../../migrations/0010_native_categories.up.sql",
 		"../../../migrations/0011_outbox_events.up.sql",
+		"../../../migrations/0012_category_name_key.up.sql",
+		"../../../migrations/0013_unassigned_category.up.sql",
+		"../../../migrations/0014_drop_default_kind.up.sql",
 	} {
 		schema, err := os.ReadFile(file)
 		if err != nil {
@@ -130,7 +134,7 @@ func TestChannelRepo_Create_DuplicateNameSameCategory_ErrChannelNameTaken(t *tes
 	if err := servers.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
-	cat := model.Category{ID: uuid.New(), ServerID: srv.ID, Name: "Texto", CreatedAt: time.Now().UTC().Truncate(time.Millisecond)}
+	cat := model.Category{ID: uuid.New(), ServerID: srv.ID, Name: "Texto", NameKey: service.NameKey("Texto"), CreatedAt: time.Now().UTC().Truncate(time.Millisecond)}
 	if err := categories.Create(ctx, cat); err != nil {
 		t.Fatalf("seed category: %v", err)
 	}
@@ -151,8 +155,8 @@ func TestChannelRepo_Create_SameNameDifferentCategory_Allowed(t *testing.T) {
 	if err := servers.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
-	catA := model.Category{ID: uuid.New(), ServerID: srv.ID, Name: "A", CreatedAt: time.Now().UTC().Truncate(time.Millisecond)}
-	catB := model.Category{ID: uuid.New(), ServerID: srv.ID, Name: "B", CreatedAt: time.Now().UTC().Truncate(time.Millisecond)}
+	catA := model.Category{ID: uuid.New(), ServerID: srv.ID, Name: "A", NameKey: service.NameKey("A"), CreatedAt: time.Now().UTC().Truncate(time.Millisecond)}
+	catB := model.Category{ID: uuid.New(), ServerID: srv.ID, Name: "B", NameKey: service.NameKey("B"), CreatedAt: time.Now().UTC().Truncate(time.Millisecond)}
 	if err := categories.Create(ctx, catA); err != nil {
 		t.Fatal(err)
 	}
@@ -237,7 +241,7 @@ func TestChannelRepo_MoveToCategory_UpdatesCategoryID(t *testing.T) {
 	if err := servers.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
-	cat := model.Category{ID: uuid.New(), ServerID: srv.ID, Name: "Texto", CreatedAt: time.Now().UTC().Truncate(time.Millisecond)}
+	cat := model.Category{ID: uuid.New(), ServerID: srv.ID, Name: "Texto", NameKey: service.NameKey("Texto"), CreatedAt: time.Now().UTC().Truncate(time.Millisecond)}
 	if err := categories.Create(ctx, cat); err != nil {
 		t.Fatalf("seed category: %v", err)
 	}
@@ -276,7 +280,7 @@ func TestChannelRepo_ListByServerAndCategory_ScopesCorrectly(t *testing.T) {
 	if err := servers.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
-	cat := model.Category{ID: uuid.New(), ServerID: srv.ID, Name: "Texto", CreatedAt: time.Now().UTC().Truncate(time.Millisecond)}
+	cat := model.Category{ID: uuid.New(), ServerID: srv.ID, Name: "Texto", NameKey: service.NameKey("Texto"), CreatedAt: time.Now().UTC().Truncate(time.Millisecond)}
 	if err := categories.Create(ctx, cat); err != nil {
 		t.Fatalf("seed category: %v", err)
 	}

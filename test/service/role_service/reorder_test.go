@@ -86,11 +86,12 @@ func TestReorderRoles_AdminCannotTouchRolesAtOrAboveTheirOwn(t *testing.T) {
 	}
 }
 
-func TestReorderRoles_NonAdminForbidden(t *testing.T) {
+func TestReorderRoles_WithoutManageRolesForbidden(t *testing.T) {
 	srv := ownerServer()
 	current, a, b, c := threeRoles(srv.ID)
 	roles := &fakeRoles{listRoles: current}
-	members := &fakeMembers{standing: role.Standing{IsMember: true, Permissions: role.PermManageRoles}}
+	top := 1
+	members := &fakeMembers{standing: role.Standing{IsMember: true, Permissions: role.PermSendMessages, TopPosition: &top}}
 	svc := newServiceWithMembers(&fakeServers{server: srv}, roles, members)
 
 	_, err := reorderAs(svc, srv.ID, "member-1", c, b, a)
@@ -98,7 +99,24 @@ func TestReorderRoles_NonAdminForbidden(t *testing.T) {
 		t.Fatalf("err = %v, want ErrForbiddenNotAdmin", err)
 	}
 	if roles.reorderCalls != 0 {
-		t.Error("the repository was called for a non-administrator")
+		t.Error("the repository was called for a member without MANAGE_ROLES")
+	}
+}
+
+// MANAGE_ROLES alone is enough to reorder, still bound by the hierarchy.
+func TestReorderRoles_ManageRolesRearrangesRolesBelowTheirOwn(t *testing.T) {
+	srv := ownerServer()
+	current, a, b, c := threeRoles(srv.ID)
+	roles := &fakeRoles{listRoles: current}
+	top := 1
+	members := &fakeMembers{standing: role.Standing{IsMember: true, Permissions: role.PermManageRoles, TopPosition: &top}}
+	svc := newServiceWithMembers(&fakeServers{server: srv}, roles, members)
+
+	if _, err := reorderAs(svc, srv.ID, "member-1", a, c, b); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(roles.reorderWritten) != 3 || roles.reorderWritten[1] != c {
+		t.Errorf("written = %v", roles.reorderWritten)
 	}
 }
 

@@ -49,8 +49,8 @@ func newRepo(t *testing.T) (*moderation_repo.Repository, *pgxpool.Pool) {
 		"../../../migrations/0006_ownership_transfers.up.sql",
 		"../../../migrations/0008_ownership_transfer_cancelled_status.up.sql",
 		"../../../migrations/0011_outbox_events.up.sql",
-		"../../../migrations/0012_role_positions.up.sql",
-		"../../../migrations/0013_server_bans_banned_by.up.sql",
+		"../../../migrations/0015_role_positions.up.sql",
+		"../../../migrations/0016_server_bans_banned_by.up.sql",
 	} {
 		schema, err := os.ReadFile(file)
 		if err != nil {

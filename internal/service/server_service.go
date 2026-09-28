@@ -77,21 +77,29 @@ func (s *Service) CreateServer(ctx context.Context, p CreateServerParams) (model
 	srv := model.Server{
 		ID:        id,
 		Name:      name,
-		NameKey:   nameKey(name),
+		NameKey:   NameKey(name),
 		OwnerID:   p.OwnerID,
 		CreatedAt: now,
 	}
 
-	textKind, voiceKind := model.ChannelText, model.ChannelVoice
-	textCategoryID, voiceCategoryID := uuid.New(), uuid.New()
+	textCategoryID, voiceCategoryID, unassignedCategoryID := uuid.New(), uuid.New(), uuid.New()
 	categories := []model.Category{
 		{
 			ID: textCategoryID, ServerID: id, Name: model.DefaultTextCategoryName,
-			Position: 0, DefaultKind: &textKind, CreatedAt: now,
+			NameKey:  NameKey(model.DefaultTextCategoryName),
+			Position: 0, CreatedAt: now,
 		},
 		{
 			ID: voiceCategoryID, ServerID: id, Name: model.DefaultVoiceCategoryName,
-			Position: 1, DefaultKind: &voiceKind, CreatedAt: now,
+			NameKey:  NameKey(model.DefaultVoiceCategoryName),
+			Position: 1, CreatedAt: now,
+		},
+		{
+			// El fallback de cualquier canal sin categoria, sea de texto o de
+			// voz -- ver channel_service.unassignedCategoryID.
+			ID: unassignedCategoryID, ServerID: id, Name: model.DefaultUnassignedCategoryName,
+			NameKey:  NameKey(model.DefaultUnassignedCategoryName),
+			Position: 2, IsFallback: true, CreatedAt: now,
 		},
 	}
 
@@ -189,7 +197,7 @@ func (s *Service) UpdateServer(ctx context.Context, p UpdateServerParams) (model
 		if err != nil {
 			return model.Server{}, err
 		}
-		key = nameKey(name)
+		key = NameKey(name)
 	}
 
 	oldIconURL, oldBannerURL := srv.IconURL, srv.BannerURL

@@ -39,7 +39,7 @@ func newInviteRepo(t *testing.T) (*repository.InvitationRepository, *pgxpool.Poo
 	for _, f := range []string{
 		"0001_init.up.sql", "0002_invitations.up.sql",
 		"0003_roles.up.sql", "0004_member_roles.up.sql", "0005_default_role.up.sql",
-		"0011_outbox_events.up.sql", "0012_role_positions.up.sql",
+		"0011_outbox_events.up.sql", "0015_role_positions.up.sql",
 	} {
 		schema, err := os.ReadFile("../../migrations/" + f)
 		if err != nil {
