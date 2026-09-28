@@ -79,3 +79,32 @@ func TestUpdateRolePermissions_RemovingOwnAdmin_Returns403WithReason(t *testing.
 		t.Errorf("details = %v", body.Error.Details)
 	}
 }
+
+// Granting a permission you don't hold is a 403 with its own reason.
+func TestUpdateRolePermissions_PermissionNotHeld_Returns403WithReason(t *testing.T) {
+	r := newRouter(t, &fakeRoleUseCases{updateErr: model.ErrPermissionNotHeld})
+	w := doJSON(t, r, http.MethodPatch, "/v1/roles/"+uuid.New().String(), testUser,
+		map[string]any{"permissions": []string{"ADMINISTRATOR"}})
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
+	}
+	if body := decodeError(t, w); body.Error.Details["reason"] != "permission_not_held" {
+		t.Errorf("details = %v", body.Error.Details)
+	}
+}
+
+// Acting on a role at or above your own highest role is a 403 with its own
+// reason, so the client can explain it.
+func TestRoleAboveOwn_Returns403WithReason(t *testing.T) {
+	r := newRouter(t, &fakeRoleUseCases{updateErr: model.ErrRoleAboveOwn, deleteErr: model.ErrRoleAboveOwn})
+	for _, method := range []string{http.MethodPatch, http.MethodDelete} {
+		w := doJSON(t, r, method, "/v1/roles/"+uuid.New().String(), testUser, map[string]any{"name": "x"})
+		if w.Code != http.StatusForbidden {
+			t.Errorf("%s: code=%d body=%s", method, w.Code, w.Body.String())
+			continue
+		}
+		if body := decodeError(t, w); body.Error.Details["reason"] != "role_above_own" {
+			t.Errorf("%s: details = %v", method, body.Error.Details)
+		}
+	}
+}

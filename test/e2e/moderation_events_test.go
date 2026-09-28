@@ -1,0 +1,160 @@
+package e2e_test
+
+import (
+	"bytes"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	amqp "github.com/rabbitmq/amqp091-go"
+
+	"github.com/discordia-grupo01/events-contract/membership"
+	moderationevents "github.com/discordia-grupo01/events-contract/moderation"
+)
+
+func doJSONAsUser(t *testing.T, r http.Handler, method, path, user, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(method, path, bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-User-Id", user)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	return w
+}
+
+// nextDeliveries collects the next n messages, in whatever order the outbox
+// poller published them.
+func nextDeliveries(t *testing.T, deliveries <-chan amqp.Delivery, n int) map[string]amqp.Delivery {
+	t.Helper()
+	got := make(map[string]amqp.Delivery, n)
+	for len(got) < n {
+		select {
+		case msg := <-deliveries:
+			got[msg.RoutingKey] = msg
+		case <-time.After(5 * time.Second):
+			t.Fatalf("timed out: got %d of %d events", len(got), n)
+		}
+	}
+	return got
+}
+
+// #25 and #26 CA1, end to end over HTTP: the owner bans a member, both
+// servers.member_left and servers.member_banned reach the discordia.events
+// exchange, and the banned user can't rejoin with any invitation until the
+// ban is revoked.
+func TestModerationEvents_BanAndUnbanEndToEnd(t *testing.T) {
+	router, deliveries := setupE2E(t)
+
+	owner := "owner-" + uuid.NewString()
+	target := "target-" + uuid.NewString()
+
+	w := postCreateServer(t, router, owner, "E2E Ban Server")
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create server: code=%d body=%s", w.Code, w.Body.String())
+	}
+	var srv struct {
+		ID string `json:"id"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &srv)
+	waitForEvent(t, deliveries, membership.RoutingKeyMemberJoined) // owner
+
+	w = doAsUser(t, router, http.MethodPost, "/v1/servers/"+srv.ID+"/invites", owner)
+	var inv struct {
+		Code string `json:"code"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &inv)
+	if w = doAsUser(t, router, http.MethodPost, "/v1/invites/"+inv.Code+"/join", target); w.Code != http.StatusCreated {
+		t.Fatalf("join: code=%d body=%s", w.Code, w.Body.String())
+	}
+	waitForEvent(t, deliveries, membership.RoutingKeyMemberJoined) // target
+
+	w = doJSONAsUser(t, router, http.MethodPost, "/v1/servers/"+srv.ID+"/bans", owner,
+		`{"user_id":"`+target+`","reason":"spam"}`)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("ban: code=%d body=%s", w.Code, w.Body.String())
+	}
+
+	got := nextDeliveries(t, deliveries, 2)
+	left, ok := got[membership.RoutingKeyMemberLeft]
+	if !ok {
+		t.Fatalf("no member_left event, got %v", keys(got))
+	}
+	var leftEvt membership.MemberLeft
+	_ = json.Unmarshal(left.Body, &leftEvt)
+	if leftEvt.ServerID != srv.ID || leftEvt.UserID != target {
+		t.Errorf("member_left = %+v", leftEvt)
+	}
+	banned, ok := got[moderationevents.RoutingKeyMemberBanned]
+	if !ok {
+		t.Fatalf("no member_banned event, got %v", keys(got))
+	}
+	var bannedEvt moderationevents.MemberBanned
+	_ = json.Unmarshal(banned.Body, &bannedEvt)
+	if bannedEvt.ServerID != srv.ID || bannedEvt.UserID != target || bannedEvt.BannedBy != owner || bannedEvt.EventID == "" {
+		t.Errorf("member_banned = %+v", bannedEvt)
+	}
+	if bytes.Contains(banned.Body, []byte("spam")) {
+		t.Error("the reason leaked into the member_banned event")
+	}
+
+	// Not a member anymore, and no invitation lets them back in (not even a
+	// fresh one).
+	w = doAsUser(t, router, http.MethodPost, "/v1/servers/"+srv.ID+"/invites", owner)
+	var fresh struct {
+		Code string `json:"code"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &fresh)
+	for _, code := range []string{inv.Code, fresh.Code} {
+		if w = doAsUser(t, router, http.MethodPost, "/v1/invites/"+code+"/join", target); w.Code != http.StatusForbidden {
+			t.Errorf("rejoin with %s: code=%d body=%s, want 403", code, w.Code, w.Body.String())
+		}
+	}
+
+	w = doAsUser(t, router, http.MethodGet, "/v1/servers/"+srv.ID+"/bans", owner)
+	var list struct {
+		Bans []struct {
+			UserID   string `json:"user_id"`
+			BannedBy string `json:"banned_by"`
+		} `json:"bans"`
+		Total int `json:"total"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &list)
+	if w.Code != http.StatusOK || list.Total != 1 || list.Bans[0].UserID != target || list.Bans[0].BannedBy != owner {
+		t.Errorf("list bans: code=%d body=%s", w.Code, w.Body.String())
+	}
+
+	// #26 CA1: revoking the ban publishes servers.member_unbanned, and the
+	// user can rejoin with an invitation (they are not made a member by the
+	// unban itself).
+	if w = doAsUser(t, router, http.MethodDelete, "/v1/servers/"+srv.ID+"/bans/"+target, owner); w.Code != http.StatusNoContent {
+		t.Fatalf("unban: code=%d body=%s", w.Code, w.Body.String())
+	}
+	unbanned := nextDeliveries(t, deliveries, 1)[moderationevents.RoutingKeyMemberUnbanned]
+	var unbannedEvt moderationevents.MemberUnbanned
+	_ = json.Unmarshal(unbanned.Body, &unbannedEvt)
+	if unbannedEvt.ServerID != srv.ID || unbannedEvt.UserID != target || unbannedEvt.UnbannedBy != owner || unbannedEvt.EventID == "" {
+		t.Errorf("member_unbanned = %+v (body %s)", unbannedEvt, unbanned.Body)
+	}
+
+	if w = doAsUser(t, router, http.MethodDelete, "/v1/servers/"+srv.ID+"/bans/"+target, owner); w.Code != http.StatusNotFound {
+		t.Errorf("second unban: code=%d body=%s, want 404", w.Code, w.Body.String())
+	}
+
+	if w = doAsUser(t, router, http.MethodPost, "/v1/invites/"+inv.Code+"/join", target); w.Code != http.StatusCreated {
+		t.Fatalf("rejoin after unban: code=%d body=%s", w.Code, w.Body.String())
+	}
+	if evt := waitForEvent(t, deliveries, membership.RoutingKeyMemberJoined); evt.ServerID != srv.ID || evt.UserID != target {
+		t.Errorf("rejoin event = %+v", evt)
+	}
+}
+
+func keys(m map[string]amqp.Delivery) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}

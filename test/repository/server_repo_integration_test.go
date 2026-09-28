@@ -63,6 +63,7 @@ func newRepo(t *testing.T) (*repository.ServerRepository, *pgxpool.Pool) {
 		"../../migrations/0012_category_name_key.up.sql",
 		"../../migrations/0013_unassigned_category.up.sql",
 		"../../migrations/0014_drop_default_kind.up.sql",
+		"../../migrations/0015_role_positions.up.sql",
 	} {
 		schema, err := os.ReadFile(path)
 		if err != nil {

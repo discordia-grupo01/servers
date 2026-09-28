@@ -142,6 +142,25 @@ func (r *InvitationRepository) RedeemInvitation(ctx context.Context, code, userI
 			return fmt.Errorf("consume invitation use: %w", err)
 		}
 
+		// The service already checked the ban, but a ban can commit between
+		// that check and this insert. The ban locks the server row FOR NO KEY
+		// UPDATE, which conflicts with FOR SHARE: once we hold it, a ban is
+		// either fully committed (and visible to the next statement) or
+		// waits for us to finish.
+		if _, err := tx.Exec(ctx, `SELECT 1 FROM servers WHERE id = $1 FOR SHARE`, serverID); err != nil {
+			return fmt.Errorf("lock server: %w", err)
+		}
+		var banned bool
+		if err := tx.QueryRow(ctx,
+			`SELECT EXISTS (SELECT 1 FROM server_bans WHERE server_id = $1 AND user_id = $2)`,
+			serverID, userID,
+		).Scan(&banned); err != nil {
+			return fmt.Errorf("check ban: %w", err)
+		}
+		if banned {
+			return model.ErrUserBanned
+		}
+
 		ct, err := tx.Exec(ctx, `
 			INSERT INTO server_members (server_id, user_id, is_owner, joined_at)
 			VALUES ($1, $2, FALSE, $3)

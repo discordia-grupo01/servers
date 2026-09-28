@@ -18,7 +18,7 @@ func TestRoleRepo_Delete_ThenGetByID_NotFound(t *testing.T) {
 		t.Fatalf("seed server: %v", err)
 	}
 	rl := roleFixture(srv.ID, "Moderator")
-	if err := roles.Create(ctx, rl); err != nil {
+	if _, err := roles.Create(ctx, rl); err != nil {
 		t.Fatalf("seed role: %v", err)
 	}
 
@@ -48,7 +48,7 @@ func TestRoleRepo_Delete_IsServerDefault_Rejected(t *testing.T) {
 		t.Fatalf("seed server: %v", err)
 	}
 	rl := roleFixture(srv.ID, "Moderator")
-	if err := roles.Create(ctx, rl); err != nil {
+	if _, err := roles.Create(ctx, rl); err != nil {
 		t.Fatalf("seed role: %v", err)
 	}
 	if err := servers.SetDefaultRole(ctx, srv.ID, rl.ID); err != nil {
@@ -80,7 +80,7 @@ func TestDeleteRole_WithAssignments_CascadesMemberRoles(t *testing.T) {
 		t.Fatalf("seed server: %v", err)
 	}
 	rl := roleFixture(srv.ID, "Moderator")
-	if err := roles.Create(ctx, rl); err != nil {
+	if _, err := roles.Create(ctx, rl); err != nil {
 		t.Fatalf("seed role: %v", err)
 	}
 	if _, err := pool.Exec(ctx,

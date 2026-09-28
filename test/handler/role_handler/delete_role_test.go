@@ -50,6 +50,19 @@ func TestDeleteRole_RoleNotFound_Returns404(t *testing.T) {
 	}
 }
 
+// #24 CA2: the server's default role can't be deleted until another role
+// takes its place.
+func TestDeleteRole_DefaultRole_Returns409(t *testing.T) {
+	r := newRouter(t, &fakeRoleUseCases{deleteErr: model.ErrRoleIsServerDefault})
+	w := doJSON(t, r, http.MethodDelete, "/v1/roles/"+uuid.New().String(), testUser, nil)
+	if w.Code != http.StatusConflict {
+		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
+	}
+	if e := decodeError(t, w); e.Error.Message != model.ErrRoleIsServerDefault.Error() {
+		t.Errorf("message = %q", e.Error.Message)
+	}
+}
+
 func TestDeleteRole_MissingIdentity_Returns401(t *testing.T) {
 	r := newRouter(t, &fakeRoleUseCases{})
 	w := doJSON(t, r, http.MethodDelete, "/v1/roles/"+uuid.New().String(), "", nil)

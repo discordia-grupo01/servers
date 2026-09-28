@@ -129,8 +129,8 @@ func TestListMemberRoles_Returns200WithArray(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
 	}
-	if fake.gotListServerID != serverID || fake.gotListUserID != userID {
-		t.Errorf("service got serverID=%s userID=%s", fake.gotListServerID, fake.gotListUserID)
+	if fake.gotList.ServerID != serverID || fake.gotList.TargetUserID != userID || fake.gotList.ActorUserID != testUser {
+		t.Errorf("service got %+v", fake.gotList)
 	}
 }
 
@@ -151,8 +151,8 @@ func TestGetMemberPermissions_Returns200(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
 	}
-	if fake.gotPermServerID != serverID || fake.gotPermUserID != userID {
-		t.Errorf("service got serverID=%s userID=%s", fake.gotPermServerID, fake.gotPermUserID)
+	if fake.gotPerm.ServerID != serverID || fake.gotPerm.TargetUserID != userID || fake.gotPerm.ActorUserID != testUser {
+		t.Errorf("service got %+v", fake.gotPerm)
 	}
 	for _, want := range []string{"BAN_MEMBERS", "KICK_MEMBERS", "VIEW_CHANNELS"} {
 		if !strings.Contains(w.Body.String(), want) {
@@ -174,5 +174,36 @@ func TestGetMemberPermissions_InvalidServerIDParam_BadRequest(t *testing.T) {
 	w := doJSON(t, r, http.MethodGet, "/v1/servers/not-a-uuid/members/member-1/permissions", testUser, nil)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestMemberLookup_AccessErrorsMapToHTTP(t *testing.T) {
+	cases := map[string]struct {
+		err    error
+		status int
+	}{
+		"caller is not a member": {model.ErrForbiddenNotMember, http.StatusForbidden},
+		"target is not a member": {model.ErrMemberNotFound, http.StatusNotFound},
+	}
+	for name, tc := range cases {
+		for _, suffix := range []string{"/roles", "/permissions"} {
+			r := newRouter(t, &fakeMemberRoleUseCases{listErr: tc.err, permissionsErr: tc.err})
+			w := doJSON(t, r, http.MethodGet, "/v1/servers/"+uuid.New().String()+"/members/member-1"+suffix, testUser, nil)
+			if w.Code != tc.status {
+				t.Errorf("%s %s: code=%d body=%s, want %d", name, suffix, w.Code, w.Body.String(), tc.status)
+				continue
+			}
+			decodeError(t, w)
+		}
+	}
+}
+
+func TestMemberLookup_MissingIdentity_Returns401(t *testing.T) {
+	for _, suffix := range []string{"/roles", "/permissions"} {
+		r := newRouter(t, &fakeMemberRoleUseCases{})
+		w := doJSON(t, r, http.MethodGet, "/v1/servers/"+uuid.New().String()+"/members/member-1"+suffix, "", nil)
+		if w.Code != http.StatusUnauthorized {
+			t.Errorf("%s: code=%d", suffix, w.Code)
+		}
 	}
 }

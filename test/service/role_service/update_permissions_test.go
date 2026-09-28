@@ -13,7 +13,7 @@ import (
 )
 
 func existingRole(serverID uuid.UUID) role.Role {
-	return role.Role{ID: uuid.New(), ServerID: serverID, Name: "Moderator", Color: "#FF00AA", Permissions: role.PermSendMessages}
+	return role.Role{ID: uuid.New(), ServerID: serverID, Name: "Moderator", Color: "#FF00AA", Permissions: role.PermSendMessages, Position: 2}
 }
 
 func TestUpdateRolePermissions_UnknownPermission_BadRequest(t *testing.T) {

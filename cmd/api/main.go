@@ -16,6 +16,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/repository/category_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/channel_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/member_repo"
+	"github.com/discordia-grupo01/servers/internal/repository/moderation_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/ownership_transfer_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/role_repo"
 	"github.com/discordia-grupo01/servers/internal/service"
@@ -24,6 +25,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/service/invitation"
 	"github.com/discordia-grupo01/servers/internal/service/member_role_service"
 	"github.com/discordia-grupo01/servers/internal/service/membership_service"
+	"github.com/discordia-grupo01/servers/internal/service/moderation_service"
 	"github.com/discordia-grupo01/servers/internal/service/ownership_transfer_service"
 	"github.com/discordia-grupo01/servers/internal/service/role_service"
 )
@@ -77,6 +79,7 @@ func main() {
 	transferRepo := ownership_transfer_repo.NewRepository(pool)
 	categoryRepo := category_repo.NewCategoryRepository(pool)
 	channelRepo := channel_repo.NewChannelRepository(pool)
+	moderationRepo := moderation_repo.NewRepository(pool)
 
 	svc := service.New(serverRepo, icons, memberRepo)
 	roleSvc := role_service.New(serverRepo, roleRepo, memberRepo)
@@ -88,6 +91,7 @@ func main() {
 	invSvc := invitation.NewService(repository.NewInvitationRepository(pool), serverRepo, memberRepo)
 	categorySvc := category_service.New(serverRepo, categoryRepo, memberRepo)
 	channelSvc := channel_service.New(serverRepo, categoryRepo, channelRepo, memberRepo)
+	moderationSvc := moderation_service.New(serverRepo, memberRepo, moderationRepo)
 
 	router := handler.NewRouter(handler.Deps{
 		Servers:            svc,
@@ -99,6 +103,7 @@ func main() {
 		Invitations:        invSvc,
 		Channels:           channelSvc,
 		Categories:         categorySvc,
+		Moderation:         moderationSvc,
 		Auth:               middleware.AuthConfig{UserIDHeader: cfg.UserIDHeader},
 		DB:                 pool,
 	})

@@ -24,6 +24,15 @@ const (
 	PermCreateInvite
 )
 
+// DefaultPermissions are the permissions a newly created role starts with
+// (#21 CA1): enough to see the server's channels and talk in them. Roles
+// created before this default existed keep whatever they had.
+const DefaultPermissions = PermViewChannels | PermSendMessages
+
+// AllPermissions is every permission in the catalog. PermCreateInvite is the
+// last bit, so all bits up to and including it are set.
+const AllPermissions = PermCreateInvite<<1 - 1
+
 var permissionsByName = map[string]Permission{
 	"VIEW_CHANNELS":   PermViewChannels,
 	"SEND_MESSAGES":   PermSendMessages,

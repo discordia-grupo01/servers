@@ -8,11 +8,13 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
 	"github.com/discordia-grupo01/servers/internal/model"
+	"github.com/discordia-grupo01/servers/internal/model/moderation"
 )
 
 // ErrorResponse is the service's standard error body, exported (rather than
@@ -51,6 +53,22 @@ func ParseUUIDParam(c *gin.Context, name string) (uuid.UUID, bool) {
 		return uuid.UUID{}, false
 	}
 	return id, true
+}
+
+// ParseNonNegativeIntQuery reads an optional non-negative integer query
+// param, falling back to def when absent. It writes a 400 response and
+// returns ok=false when the value is present but not a non-negative integer.
+func ParseNonNegativeIntQuery(c *gin.Context, name string, def int) (int, bool) {
+	raw := c.Query(name)
+	if raw == "" {
+		return def, true
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < 0 {
+		RespondError(c, http.StatusBadRequest, "invalid "+name, FieldErr(name, "must_be_a_non_negative_integer"))
+		return 0, false
+	}
+	return n, true
 }
 
 // WriteDomainError maps a domain error (from internal/model) to its HTTP
@@ -125,6 +143,30 @@ func WriteDomainError(c *gin.Context, err error) {
 		RespondError(c, http.StatusBadRequest, err.Error(), details)
 	case errors.Is(err, model.ErrRoleServerMismatch):
 		RespondError(c, http.StatusBadRequest, err.Error(), nil)
+	case errors.Is(err, model.ErrRoleReorderInvalid):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("role_ids", "reorder_invalid"))
+	case errors.Is(err, model.ErrRoleReorderAboveOwn), errors.Is(err, model.ErrRoleAboveOwn):
+		RespondError(c, http.StatusForbidden, err.Error(), map[string]any{"reason": "role_above_own"})
+	case errors.Is(err, model.ErrPermissionNotHeld):
+		RespondError(c, http.StatusForbidden, err.Error(), map[string]any{"reason": "permission_not_held"})
+	case errors.Is(err, model.ErrForbiddenMissingPermission):
+		RespondError(c, http.StatusForbidden, err.Error(), map[string]any{"reason": "missing_permission"})
+	case errors.Is(err, model.ErrBanTargetRequired):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("user_id", "required"))
+	case errors.Is(err, model.ErrCannotBanSelf):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("user_id", "cannot_ban_self"))
+	case errors.Is(err, model.ErrCannotBanOwner):
+		RespondError(c, http.StatusForbidden, err.Error(), map[string]any{"reason": "cannot_ban_owner"})
+	case errors.Is(err, model.ErrTargetOutranksActor):
+		RespondError(c, http.StatusForbidden, err.Error(), map[string]any{"reason": "target_outranks_actor"})
+	case errors.Is(err, model.ErrAlreadyBanned):
+		RespondError(c, http.StatusConflict, err.Error(), map[string]any{"reason": "already_banned"})
+	case errors.Is(err, model.ErrBanNotFound):
+		RespondError(c, http.StatusNotFound, err.Error(), map[string]any{"reason": "ban_not_found"})
+	case errors.Is(err, moderation.ErrReasonTooLong):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("reason", "reason_too_long"))
+	case errors.Is(err, moderation.ErrReasonInvalidChars):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("reason", "reason_invalid_chars"))
 	case errors.Is(err, model.ErrRoleIsServerDefault):
 		RespondError(c, http.StatusConflict, err.Error(), nil)
 	case errors.Is(err, model.ErrMemberNotFound):

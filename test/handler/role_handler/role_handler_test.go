@@ -74,8 +74,8 @@ func TestListRoles_Returns200WithArray(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
 	}
-	if fake.gotServerID != serverID {
-		t.Errorf("service got serverID=%s, want %s", fake.gotServerID, serverID)
+	if fake.gotServerID != serverID || fake.gotListUser != testUser {
+		t.Errorf("service got serverID=%s user=%q, want %s %q", fake.gotServerID, fake.gotListUser, serverID, testUser)
 	}
 }
 
@@ -95,8 +95,8 @@ func TestGetRole_Returns200(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
 	}
-	if fake.gotGetRole != roleID {
-		t.Errorf("service got roleID=%s, want %s", fake.gotGetRole, roleID)
+	if fake.gotGetRole != roleID || fake.gotGetUser != testUser {
+		t.Errorf("service got roleID=%s user=%q, want %s %q", fake.gotGetRole, fake.gotGetUser, roleID, testUser)
 	}
 	got := decodeRole(t, w)
 	if got.Name != "Moderator" || got.Color != "#FF00AA" {
@@ -121,5 +121,25 @@ func TestGetRole_NotFound_Returns404(t *testing.T) {
 	w := doJSON(t, r, http.MethodGet, "/v1/roles/"+uuid.New().String(), testUser, nil)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
+// Non-members can't read a server's roles.
+func TestRoleReads_NotAMember_Returns403(t *testing.T) {
+	r := newRouter(t, &fakeRoleUseCases{listErr: model.ErrForbiddenNotMember, getErr: model.ErrForbiddenNotMember})
+	for _, path := range []string{"/v1/servers/" + uuid.New().String() + "/roles", "/v1/roles/" + uuid.New().String()} {
+		w := doJSON(t, r, http.MethodGet, path, testUser, nil)
+		if w.Code != http.StatusForbidden {
+			t.Errorf("%s: code=%d body=%s, want 403", path, w.Code, w.Body.String())
+		}
+	}
+}
+
+func TestRoleReads_MissingIdentity_Returns401(t *testing.T) {
+	r := newRouter(t, &fakeRoleUseCases{})
+	for _, path := range []string{"/v1/servers/" + uuid.New().String() + "/roles", "/v1/roles/" + uuid.New().String()} {
+		if w := doJSON(t, r, http.MethodGet, path, "", nil); w.Code != http.StatusUnauthorized {
+			t.Errorf("%s: code=%d, want 401", path, w.Code)
+		}
 	}
 }

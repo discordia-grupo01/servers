@@ -13,7 +13,7 @@ import (
 )
 
 func adminRole(serverID uuid.UUID) role.Role {
-	return role.Role{ID: uuid.New(), ServerID: serverID, Name: "Admin", Color: "#FF0000", Permissions: role.PermAdministrator | role.PermSendMessages}
+	return role.Role{ID: uuid.New(), ServerID: serverID, Name: "Admin", Color: "#FF0000", Permissions: role.PermAdministrator | role.PermSendMessages, Position: 2}
 }
 
 // Bug #22: a non-owner holding ADMINISTRATOR administers roles.

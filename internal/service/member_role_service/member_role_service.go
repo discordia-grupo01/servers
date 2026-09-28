@@ -78,6 +78,12 @@ func (s *MemberRoleService) AssignRole(ctx context.Context, p AssignRoleParams) 
 	if err != nil {
 		return role.Role{}, err
 	}
+	if err := service.RequireRoleBelow(actor, rl); err != nil {
+		return role.Role{}, err
+	}
+	if err := service.RequireCanGrant(actor, rl.Permissions); err != nil {
+		return role.Role{}, err
+	}
 
 	isMember, err := s.members.IsMember(ctx, p.ServerID, p.TargetUserID)
 	if err != nil {
@@ -129,6 +135,9 @@ func (s *MemberRoleService) RemoveRole(ctx context.Context, p RemoveRoleParams) 
 			return model.ErrCannotRemoveOwnAdmin
 		}
 	}
+	if err := service.RequireRoleBelow(actor, rl); err != nil {
+		return err
+	}
 
 	if err := s.members.RemoveRole(ctx, p.ServerID, p.TargetUserID, p.RoleID); err != nil {
 		return err
@@ -137,31 +146,63 @@ func (s *MemberRoleService) RemoveRole(ctx context.Context, p RemoveRoleParams) 
 	return nil
 }
 
-// ListMemberRoles lists the roles assigned to a specific member. It only
-// checks that the server exists, same known gap as RoleService.ListRoles
-// (see IMPLEMENTATION.md).
-func (s *MemberRoleService) ListMemberRoles(ctx context.Context, serverID uuid.UUID, userID string) ([]role.Role, error) {
-	if _, err := s.servers.GetByID(ctx, serverID); err != nil {
-		return nil, err
-	}
-	return s.members.ListRolesForMember(ctx, serverID, userID)
+// MemberLookupParams identifies whose roles or permissions ActorUserID wants
+// to see.
+type MemberLookupParams struct {
+	ServerID     uuid.UUID
+	TargetUserID string
+	ActorUserID  string
 }
 
-// GetMemberPermissions returns the effective (union) permission names across
-// every role assigned to a member, so clients don't have to fetch the
-// member's roles and merge their permission arrays by hand. Same
-// existence-only check as ListMemberRoles.
-func (s *MemberRoleService) GetMemberPermissions(ctx context.Context, serverID uuid.UUID, userID string) ([]string, error) {
-	if _, err := s.servers.GetByID(ctx, serverID); err != nil {
+// requireMemberLookup lets any member of the server look up another member:
+// non-members get ErrForbiddenNotMember (they shouldn't learn who holds which
+// roles), and a target that isn't a member is ErrMemberNotFound (instead of
+// an empty list that looks like "a member with no roles").
+func (s *MemberRoleService) requireMemberLookup(ctx context.Context, p MemberLookupParams) (model.Server, error) {
+	srv, err := s.servers.GetByID(ctx, p.ServerID)
+	if err != nil {
+		return model.Server{}, err
+	}
+	actor, err := service.ResolveStanding(ctx, s.members, srv, p.ActorUserID)
+	if err != nil {
+		return model.Server{}, err
+	}
+	if !actor.IsMember {
+		return model.Server{}, model.ErrForbiddenNotMember
+	}
+	isMember, err := s.members.IsMember(ctx, p.ServerID, p.TargetUserID)
+	if err != nil {
+		return model.Server{}, err
+	}
+	if !isMember {
+		return model.Server{}, model.ErrMemberNotFound
+	}
+	return srv, nil
+}
+
+// ListMemberRoles lists the roles assigned to a member, for any member of the
+// server.
+func (s *MemberRoleService) ListMemberRoles(ctx context.Context, p MemberLookupParams) ([]role.Role, error) {
+	if _, err := s.requireMemberLookup(ctx, p); err != nil {
 		return nil, err
 	}
-	roles, err := s.members.ListRolesForMember(ctx, serverID, userID)
+	return s.members.ListRolesForMember(ctx, p.ServerID, p.TargetUserID)
+}
+
+// GetMemberPermissions returns the names of the permissions a member actually
+// holds, by the same rule the server uses to authorize them (role.Standing):
+// every permission for the owner and for members with ADMINISTRATOR, the
+// union of their roles' permissions otherwise. Clients can then decide what
+// to show with a single "includes" check, without knowing about the owner or
+// ADMINISTRATOR. Same access rule as ListMemberRoles.
+func (s *MemberRoleService) GetMemberPermissions(ctx context.Context, p MemberLookupParams) ([]string, error) {
+	srv, err := s.requireMemberLookup(ctx, p)
 	if err != nil {
 		return nil, err
 	}
-	var mask role.Permission
-	for _, rl := range roles {
-		mask |= rl.Permissions
+	target, err := service.ResolveStanding(ctx, s.members, srv, p.TargetUserID)
+	if err != nil {
+		return nil, err
 	}
-	return role.PermissionNames(mask), nil
+	return role.PermissionNames(target.Effective()), nil
 }
