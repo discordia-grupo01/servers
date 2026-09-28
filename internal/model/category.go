@@ -12,11 +12,11 @@ const (
 )
 
 type Category struct {
-	ID          uuid.UUID
-	ServerID    uuid.UUID
-	Name        string
-	NameKey     string
-	Position    int
-	DefaultKind *ChannelKind
-	CreatedAt   time.Time
+	ID         uuid.UUID
+	ServerID   uuid.UUID
+	Name       string
+	NameKey    string
+	Position   int
+	IsFallback bool
+	CreatedAt  time.Time
 }

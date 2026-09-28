@@ -95,15 +95,15 @@ func TestCreateChannel_NameTakenFromRepo_Propagates(t *testing.T) {
 }
 
 func withNativeCategories(srv model.Server) model.Server {
-	textKind, voiceKind := model.ChannelText, model.ChannelVoice
 	srv.Categories = []model.Category{
-		{ID: uuid.New(), ServerID: srv.ID, Name: model.DefaultTextCategoryName, DefaultKind: &textKind},
-		{ID: uuid.New(), ServerID: srv.ID, Name: model.DefaultVoiceCategoryName, DefaultKind: &voiceKind},
+		{ID: uuid.New(), ServerID: srv.ID, Name: model.DefaultTextCategoryName},
+		{ID: uuid.New(), ServerID: srv.ID, Name: model.DefaultVoiceCategoryName},
+		{ID: uuid.New(), ServerID: srv.ID, Name: model.DefaultUnassignedCategoryName, IsFallback: true},
 	}
 	return srv
 }
 
-func TestCreateChannel_NoCategoryID_TextChannel_DefaultsToNativeTextCategory(t *testing.T) {
+func TestCreateChannel_NoCategoryID_TextChannel_DefaultsToUnassignedCategory(t *testing.T) {
 	srv := withNativeCategories(ownerServer())
 	channels := &fakeChannels{}
 	svc := newService(&fakeServers{server: srv}, &fakeCategories{}, channels)
@@ -114,13 +114,13 @@ func TestCreateChannel_NoCategoryID_TextChannel_DefaultsToNativeTextCategory(t *
 	if err != nil {
 		t.Fatalf("CreateChannel: %v", err)
 	}
-	wantCategory := findNativeCategory(t, srv, model.ChannelText)
+	wantCategory := findFallbackCategory(t, srv)
 	if ch.CategoryID == nil || *ch.CategoryID != wantCategory.ID {
 		t.Errorf("CategoryID = %v, want %s", ch.CategoryID, wantCategory.ID)
 	}
 }
 
-func TestCreateChannel_NoCategoryID_VoiceChannel_DefaultsToNativeVoiceCategory(t *testing.T) {
+func TestCreateChannel_NoCategoryID_VoiceChannel_DefaultsToUnassignedCategory(t *testing.T) {
 	srv := withNativeCategories(ownerServer())
 	channels := &fakeChannels{}
 	svc := newService(&fakeServers{server: srv}, &fakeCategories{}, channels)
@@ -131,17 +131,13 @@ func TestCreateChannel_NoCategoryID_VoiceChannel_DefaultsToNativeVoiceCategory(t
 	if err != nil {
 		t.Fatalf("CreateChannel: %v", err)
 	}
-	wantCategory := findNativeCategory(t, srv, model.ChannelVoice)
+	wantCategory := findFallbackCategory(t, srv)
 	if ch.CategoryID == nil || *ch.CategoryID != wantCategory.ID {
 		t.Errorf("CategoryID = %v, want %s", ch.CategoryID, wantCategory.ID)
 	}
 }
 
-// TestCreateChannel_NoCategoryID_NoNativeCategory_FallsBackToNil covers what
-// happens once the native category for that kind has been deleted (they can
-// be, like any other category, see model.Category.DefaultKind): the channel
-// just lands in "sin categoria" instead of erroring or resurrecting one.
-func TestCreateChannel_NoCategoryID_NoNativeCategory_FallsBackToNil(t *testing.T) {
+func TestCreateChannel_NoCategoryID_NoFallbackCategory_FallsBackToNil(t *testing.T) {
 	srv := ownerServer() // no Categories at all
 	channels := &fakeChannels{}
 	svc := newService(&fakeServers{server: srv}, &fakeCategories{}, channels)
@@ -157,7 +153,7 @@ func TestCreateChannel_NoCategoryID_NoNativeCategory_FallsBackToNil(t *testing.T
 	}
 }
 
-func TestCreateChannel_ExplicitCategoryID_OverridesNativeDefault(t *testing.T) {
+func TestCreateChannel_ExplicitCategoryID_OverridesUnassignedDefault(t *testing.T) {
 	srv := withNativeCategories(ownerServer())
 	explicit := model.Category{ID: uuid.New(), ServerID: srv.ID}
 	channels := &fakeChannels{}
@@ -171,18 +167,18 @@ func TestCreateChannel_ExplicitCategoryID_OverridesNativeDefault(t *testing.T) {
 		t.Fatalf("CreateChannel: %v", err)
 	}
 	if ch.CategoryID == nil || *ch.CategoryID != explicit.ID {
-		t.Errorf("CategoryID = %v, want the explicit category %s, not the native default", ch.CategoryID, explicit.ID)
+		t.Errorf("CategoryID = %v, want the explicit category %s, not the fallback default", ch.CategoryID, explicit.ID)
 	}
 }
 
-func findNativeCategory(t *testing.T, srv model.Server, kind model.ChannelKind) model.Category {
+func findFallbackCategory(t *testing.T, srv model.Server) model.Category {
 	t.Helper()
 	for _, cat := range srv.Categories {
-		if cat.DefaultKind != nil && *cat.DefaultKind == kind {
+		if cat.IsFallback {
 			return cat
 		}
 	}
-	t.Fatalf("no native category for kind %s in %+v", kind, srv.Categories)
+	t.Fatalf("no fallback category in %+v", srv.Categories)
 	return model.Category{}
 }
 
@@ -290,7 +286,7 @@ func TestMoveChannelToCategory_Valid_MovesIt(t *testing.T) {
 	}
 }
 
-func TestMoveChannelToCategory_NoCategoryID_DefaultsToNativeCategoryForKind(t *testing.T) {
+func TestMoveChannelToCategory_NoCategoryID_DefaultsToUnassignedCategory(t *testing.T) {
 	srv := withNativeCategories(ownerServer())
 	ch := model.Channel{ID: uuid.New(), ServerID: srv.ID, Kind: model.ChannelText}
 	channels := &fakeChannels{getByIDChannel: ch}
@@ -302,7 +298,7 @@ func TestMoveChannelToCategory_NoCategoryID_DefaultsToNativeCategoryForKind(t *t
 	if err != nil {
 		t.Fatalf("MoveChannelToCategory: %v", err)
 	}
-	wantCategory := findNativeCategory(t, srv, model.ChannelText)
+	wantCategory := findFallbackCategory(t, srv)
 	if got.CategoryID == nil || *got.CategoryID != wantCategory.ID {
 		t.Errorf("got.CategoryID = %v, want %s", got.CategoryID, wantCategory.ID)
 	}
@@ -311,7 +307,7 @@ func TestMoveChannelToCategory_NoCategoryID_DefaultsToNativeCategoryForKind(t *t
 	}
 }
 
-func TestMoveChannelToCategory_NoCategoryID_NoNativeCategory_FallsBackToNil(t *testing.T) {
+func TestMoveChannelToCategory_NoCategoryID_NoFallbackCategory_FallsBackToNil(t *testing.T) {
 	srv := ownerServer() // no Categories at all
 	ch := model.Channel{ID: uuid.New(), ServerID: srv.ID, Kind: model.ChannelText}
 	channels := &fakeChannels{getByIDChannel: ch}

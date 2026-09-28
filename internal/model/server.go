@@ -29,8 +29,9 @@ const (
 )
 
 const (
-	DefaultTextCategoryName  = "Canales de texto"
-	DefaultVoiceCategoryName = "Canales de voz"
+	DefaultTextCategoryName       = "Canales de texto"
+	DefaultVoiceCategoryName      = "Canales de voz"
+	DefaultUnassignedCategoryName = "Sin asignar"
 )
 
 type Server struct {
