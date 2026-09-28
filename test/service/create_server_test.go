@@ -215,10 +215,10 @@ func TestCreateServer_RepoFails_DoesNotPublish(t *testing.T) {
 	}
 }
 
-func TestCreateServer_CreatesTwoNativeCategories(t *testing.T) {
+func TestCreateServer_CreatesThreeNativeCategories(t *testing.T) {
 	srv, _, _, _ := create(t, validParams("Mi Comunidad"))
-	if len(srv.Categories) != 2 {
-		t.Fatalf("got %d categories, want 2: %+v", len(srv.Categories), srv.Categories)
+	if len(srv.Categories) != 3 {
+		t.Fatalf("got %d categories, want 3: %+v", len(srv.Categories), srv.Categories)
 	}
 }
 
@@ -231,17 +231,17 @@ func TestCreateServer_NativeCategoriesBelongToTheNewServer(t *testing.T) {
 	}
 }
 
-func TestCreateServer_NativeTextCategory_HasExpectedNameAndKind(t *testing.T) {
+func TestCreateServer_NativeTextCategory_HasExpectedName(t *testing.T) {
 	srv, _, _, _ := create(t, validParams("Mi Comunidad"))
-	cat := findCategory(t, srv, model.ChannelText)
+	cat := findCategoryByName(t, srv, model.DefaultTextCategoryName)
 	if cat.Name != model.DefaultTextCategoryName {
 		t.Errorf("text category name = %q, want %q", cat.Name, model.DefaultTextCategoryName)
 	}
 }
 
-func TestCreateServer_NativeVoiceCategory_HasExpectedNameAndKind(t *testing.T) {
+func TestCreateServer_NativeVoiceCategory_HasExpectedName(t *testing.T) {
 	srv, _, _, _ := create(t, validParams("Mi Comunidad"))
-	cat := findCategory(t, srv, model.ChannelVoice)
+	cat := findCategoryByName(t, srv, model.DefaultVoiceCategoryName)
 	if cat.Name != model.DefaultVoiceCategoryName {
 		t.Errorf("voice category name = %q, want %q", cat.Name, model.DefaultVoiceCategoryName)
 	}
@@ -250,7 +250,7 @@ func TestCreateServer_NativeVoiceCategory_HasExpectedNameAndKind(t *testing.T) {
 func TestCreateServer_DefaultTextChannel_BelongsToNativeTextCategory(t *testing.T) {
 	srv, _, _, _ := create(t, validParams("Mi Comunidad"))
 	ch := findChannel(t, srv, model.ChannelText)
-	cat := findCategory(t, srv, model.ChannelText)
+	cat := findCategoryByName(t, srv, model.DefaultTextCategoryName)
 	if ch.CategoryID == nil || *ch.CategoryID != cat.ID {
 		t.Errorf("text channel CategoryID = %v, want %s", ch.CategoryID, cat.ID)
 	}
@@ -259,7 +259,7 @@ func TestCreateServer_DefaultTextChannel_BelongsToNativeTextCategory(t *testing.
 func TestCreateServer_DefaultVoiceChannel_BelongsToNativeVoiceCategory(t *testing.T) {
 	srv, _, _, _ := create(t, validParams("Mi Comunidad"))
 	ch := findChannel(t, srv, model.ChannelVoice)
-	cat := findCategory(t, srv, model.ChannelVoice)
+	cat := findCategoryByName(t, srv, model.DefaultVoiceCategoryName)
 	if ch.CategoryID == nil || *ch.CategoryID != cat.ID {
 		t.Errorf("voice channel CategoryID = %v, want %s", ch.CategoryID, cat.ID)
 	}
@@ -267,19 +267,38 @@ func TestCreateServer_DefaultVoiceChannel_BelongsToNativeVoiceCategory(t *testin
 
 func TestCreateServer_PersistsCategoriesThroughTheRepositoryOnce(t *testing.T) {
 	_, _, repo, _ := create(t, validParams("Mi Comunidad"))
-	if len(repo.gotCats) != 2 {
-		t.Fatalf("repo.CreateServer got %d categories, want 2: %+v", len(repo.gotCats), repo.gotCats)
+	if len(repo.gotCats) != 3 {
+		t.Fatalf("repo.CreateServer got %d categories, want 3: %+v", len(repo.gotCats), repo.gotCats)
 	}
 }
 
-func findCategory(t *testing.T, s model.Server, kind model.ChannelKind) model.Category {
+func TestCreateServer_UnassignedCategory_HasExpectedNameAndIsFallback(t *testing.T) {
+	srv, _, _, _ := create(t, validParams("Mi Comunidad"))
+	cat := findFallbackCategory(t, srv)
+	if cat.Name != model.DefaultUnassignedCategoryName {
+		t.Errorf("unassigned category name = %q, want %q", cat.Name, model.DefaultUnassignedCategoryName)
+	}
+}
+
+func findCategoryByName(t *testing.T, s model.Server, name string) model.Category {
 	t.Helper()
 	for _, cat := range s.Categories {
-		if cat.DefaultKind != nil && *cat.DefaultKind == kind {
+		if cat.Name == name {
 			return cat
 		}
 	}
-	t.Fatalf("no native category for kind %s in %+v", kind, s.Categories)
+	t.Fatalf("no category named %q in %+v", name, s.Categories)
+	return model.Category{}
+}
+
+func findFallbackCategory(t *testing.T, s model.Server) model.Category {
+	t.Helper()
+	for _, cat := range s.Categories {
+		if cat.IsFallback {
+			return cat
+		}
+	}
+	t.Fatalf("no fallback category in %+v", s.Categories)
 	return model.Category{}
 }
 

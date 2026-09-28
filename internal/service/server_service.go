@@ -82,18 +82,24 @@ func (s *Service) CreateServer(ctx context.Context, p CreateServerParams) (model
 		CreatedAt: now,
 	}
 
-	textKind, voiceKind := model.ChannelText, model.ChannelVoice
-	textCategoryID, voiceCategoryID := uuid.New(), uuid.New()
+	textCategoryID, voiceCategoryID, unassignedCategoryID := uuid.New(), uuid.New(), uuid.New()
 	categories := []model.Category{
 		{
 			ID: textCategoryID, ServerID: id, Name: model.DefaultTextCategoryName,
 			NameKey:  NameKey(model.DefaultTextCategoryName),
-			Position: 0, DefaultKind: &textKind, CreatedAt: now,
+			Position: 0, CreatedAt: now,
 		},
 		{
 			ID: voiceCategoryID, ServerID: id, Name: model.DefaultVoiceCategoryName,
 			NameKey:  NameKey(model.DefaultVoiceCategoryName),
-			Position: 1, DefaultKind: &voiceKind, CreatedAt: now,
+			Position: 1, CreatedAt: now,
+		},
+		{
+			// El fallback de cualquier canal sin categoria, sea de texto o de
+			// voz -- ver channel_service.unassignedCategoryID.
+			ID: unassignedCategoryID, ServerID: id, Name: model.DefaultUnassignedCategoryName,
+			NameKey:  NameKey(model.DefaultUnassignedCategoryName),
+			Position: 2, IsFallback: true, CreatedAt: now,
 		},
 	}
 

@@ -52,7 +52,7 @@ type createChannelRequest struct {
 
 // CreateChannel godoc
 // @Summary      Create a channel
-// @Description  Administrators only (the owner, or a member with ADMINISTRATOR). `kind` is "text" or "voice"; `category_id` may be omitted/null, which defaults the channel to the server's native category for that kind ("no category" is not a valid state).
+// @Description  Administrators only (the owner, or a member with ADMINISTRATOR). `kind` is "text" or "voice"; `category_id` may be omitted/null, which defaults the channel to the server's "Sin asignar" fallback category ("no category" is not a valid state).
 // @Tags         channels
 // @Accept       json
 // @Produce      json
@@ -175,7 +175,7 @@ type moveChannelRequest struct {
 
 // MoveToCategory godoc
 // @Summary      Move a channel to a category
-// @Description  Administrators only (the owner, or a member with ADMINISTRATOR). `category_id` omitted/null moves it to the server's native category for its kind ("no category" is not a valid state).
+// @Description  Administrators only (the owner, or a member with ADMINISTRATOR). `category_id` omitted/null moves it to the server's "Sin asignar" fallback category ("no category" is not a valid state).
 // @Tags         channels
 // @Accept       json
 // @Produce      json

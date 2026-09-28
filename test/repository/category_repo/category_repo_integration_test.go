@@ -52,6 +52,8 @@ func newRepo(t *testing.T) (*category_repo.CategoryRepository, *repository.Serve
 		"../../../migrations/0010_native_categories.up.sql",
 		"../../../migrations/0011_outbox_events.up.sql",
 		"../../../migrations/0012_category_name_key.up.sql",
+		"../../../migrations/0013_unassigned_category.up.sql",
+		"../../../migrations/0014_drop_default_kind.up.sql",
 	} {
 		schema, err := os.ReadFile(file)
 		if err != nil {
@@ -178,7 +180,7 @@ func TestCategoryRepo_Update_DuplicateName_ErrCategoryNameTaken(t *testing.T) {
 	}
 }
 
-func TestCategoryRepo_Create_WithDefaultKind_RoundTripsThroughGetByID(t *testing.T) {
+func TestCategoryRepo_Create_WithIsFallback_RoundTripsThroughGetByID(t *testing.T) {
 	categories, servers, _ := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
@@ -186,9 +188,8 @@ func TestCategoryRepo_Create_WithDefaultKind_RoundTripsThroughGetByID(t *testing
 		t.Fatalf("seed server: %v", err)
 	}
 
-	cat := categoryFixture(srv.ID, "Canales de texto", 0)
-	textKind := model.ChannelText
-	cat.DefaultKind = &textKind
+	cat := categoryFixture(srv.ID, "Sin asignar", 0)
+	cat.IsFallback = true
 	if err := categories.Create(ctx, cat); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -197,12 +198,12 @@ func TestCategoryRepo_Create_WithDefaultKind_RoundTripsThroughGetByID(t *testing
 	if err != nil {
 		t.Fatalf("GetByID: %v", err)
 	}
-	if got.DefaultKind == nil || *got.DefaultKind != model.ChannelText {
-		t.Errorf("DefaultKind = %v, want %q", got.DefaultKind, model.ChannelText)
+	if !got.IsFallback {
+		t.Errorf("IsFallback = false, want true")
 	}
 }
 
-func TestCategoryRepo_Create_WithoutDefaultKind_StaysNil(t *testing.T) {
+func TestCategoryRepo_Create_WithoutIsFallback_StaysFalse(t *testing.T) {
 	categories, servers, _ := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
@@ -219,8 +220,8 @@ func TestCategoryRepo_Create_WithoutDefaultKind_StaysNil(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetByID: %v", err)
 	}
-	if got.DefaultKind != nil {
-		t.Errorf("DefaultKind = %v, want nil", *got.DefaultKind)
+	if got.IsFallback {
+		t.Errorf("IsFallback = true, want false")
 	}
 }
 
