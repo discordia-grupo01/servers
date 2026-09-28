@@ -154,7 +154,7 @@ type updateRolePermissionsRequest struct {
 // @Success      200  {object}  roleview.Response
 // @Failure      400  {object}  apierr.ErrorResponse
 // @Failure      401  {object}  apierr.ErrorResponse
-// @Failure      403  {object}  apierr.ErrorResponse  "not a server administrator, or removing ADMINISTRATOR from a role you hold, or the role is not below your highest role"
+// @Failure      403  {object}  apierr.ErrorResponse  "not a server administrator, or removing ADMINISTRATOR from a role you hold, or the role is not below your highest role, or adding a permission you do not hold"
 // @Failure      404  {object}  apierr.ErrorResponse
 // @Router       /v1/roles/{roleId} [patch]
 func (h *Handler) UpdateRolePermissions(c *gin.Context) {

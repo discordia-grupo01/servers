@@ -184,6 +184,11 @@ func (s *RoleService) UpdateRolePermissions(ctx context.Context, p UpdateRolePer
 		if err := s.requireNotRemovingOwnAdmin(ctx, actor, p.UserID, rl, mask); err != nil {
 			return role.Role{}, err
 		}
+		// Only the permissions being added count: permissions the role already
+		// had stay untouched even if the actor lacks them.
+		if err := service.RequireCanGrant(actor, mask&^rl.Permissions); err != nil {
+			return role.Role{}, err
+		}
 		rl.Permissions = mask
 	}
 	if p.Name != nil {

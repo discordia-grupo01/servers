@@ -82,6 +82,16 @@ func RequireRoleBelow(actor role.Standing, rl role.Role) error {
 	return nil
 }
 
+// RequireCanGrant checks that the actor holds every permission in p before
+// granting it -- through editing a role's permissions (only the newly added
+// ones) or assigning a role. Removing permissions is never restricted.
+func RequireCanGrant(actor role.Standing, p role.Permission) error {
+	if !actor.CanGrant(p) {
+		return model.ErrPermissionNotHeld
+	}
+	return nil
+}
+
 // requirePermission is the rule shared by the RequireManageX checks: the
 // actor must be a member holding p (owner and ADMINISTRATOR imply every
 // permission). It reports ErrForbiddenNotAdmin, unlike RequirePermission.

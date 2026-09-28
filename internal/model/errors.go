@@ -45,6 +45,7 @@ var (
 	ErrRoleReorderInvalid  = errors.New("the role list must match exactly the roles currently in this server")
 	ErrRoleReorderAboveOwn = errors.New("you can only reorder roles below your highest role")
 	ErrRoleAboveOwn        = errors.New("you can only manage roles below your highest role")
+	ErrPermissionNotHeld   = errors.New("you cannot grant permissions you do not have")
 
 	ErrForbiddenMissingPermission = errors.New("you do not have permission to perform this action")
 	ErrBanTargetRequired          = errors.New("user_id must be provided")

@@ -185,12 +185,21 @@ Cada rol tiene un conjunto de permisos del catálogo cerrado
 nombres; la máscara de bits es interna.
 
 - **Administradores.** Son el dueño del servidor y los miembros con algún rol
-  que tenga `ADMINISTRATOR`. Tienen todos los permisos de forma implícita y
-  son los únicos que gestionan roles, canales, categorías y la configuración
-  del servidor. Lo que es solo del dueño (transferir la propiedad, no poder
+  que tenga `ADMINISTRATOR`. Tienen todos los permisos de forma implícita. Lo
+  que es solo del dueño (transferir la propiedad, no poder
   abandonar el servidor) sigue siendo solo del dueño. Un administrador no-owner
   no puede sacarse `ADMINISTRATOR` a sí mismo (ni editando, ni borrando, ni
   desasignando el rol que se lo da).
+- **Permisos de gestión.** Gestionar roles (crear, editar, borrar, asignar,
+  quitar, reordenar, rol por defecto) pide `MANAGE_ROLES`; canales y
+  categorías, `MANAGE_CHANNELS`; la configuración del servidor,
+  `MANAGE_SERVER`. Los administradores los tienen implícitos.
+- **No se puede dar lo que no se tiene.** Quien no es administrador no puede
+  agregarle a un rol un permiso que él mismo no tiene, ni asignar un rol que
+  traiga alguno (`403` con `reason: permission_not_held`). Si no, alguien con
+  `MANAGE_ROLES` podría darle `ADMINISTRATOR` a un rol por debajo del suyo y
+  asignárselo. Los permisos que el rol ya tenía se pueden conservar o quitar
+  igual, y quitar un rol nunca está restringido por esto.
 - **Permisos de un rol nuevo.** Todo rol se crea con `VIEW_CHANNELS` y
   `SEND_MESSAGES` (`role.DefaultPermissions`); después se editan con
   `PATCH /v1/roles/{roleId}`. Los roles creados antes de este default no se
@@ -209,10 +218,10 @@ nombres; la máscara de bits es interna.
   **no resuelve conflictos de permisos** (no los hay): define el **rango**, y
   se usa para:
   - **Reordenar roles** (`PATCH /v1/servers/{serverId}/roles/reorder`, con la
-    lista completa de roles, del más alto al más bajo): un administrador
-    no-owner solo puede mover los roles que están por debajo de su rol más alto.
+    lista completa de roles, del más alto al más bajo): quien no es el dueño
+    solo puede mover los roles que están por debajo de su rol más alto.
   - **Banear**: solo se puede banear a alguien de rango estrictamente menor.
-  - **Gestionar roles**: un administrador no-owner solo puede editar, borrar,
+  - **Gestionar roles**: quien no es el dueño solo puede editar, borrar,
     asignar, quitar o poner como rol por defecto los roles que están
     **estrictamente por debajo** de su rol más alto (`403` con
     `reason: role_above_own`). Así no puede darse (ni sacarle a otro) un rol

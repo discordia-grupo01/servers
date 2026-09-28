@@ -39,6 +39,15 @@ func (s Standing) Effective() Permission {
 	return s.Permissions
 }
 
+// CanGrant reports whether the user may hand out every permission in p, by
+// adding it to a role or assigning a role that carries it: only permissions
+// they hold themselves (all of them for administrators and the owner).
+// Without this, a member with MANAGE_ROLES could give a role below theirs
+// ADMINISTRATOR and assign it to themselves.
+func (s Standing) CanGrant(p Permission) bool {
+	return p&^s.Effective() == 0
+}
+
 // RemovesOwnAdmin reports whether an operation would take ADMINISTRATOR away
 // from the actor through a role they hold: editing that role's permissions
 // from before to after, deleting it (after = 0) or unassigning it from

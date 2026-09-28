@@ -80,6 +80,19 @@ func TestUpdateRolePermissions_RemovingOwnAdmin_Returns403WithReason(t *testing.
 	}
 }
 
+// Granting a permission you don't hold is a 403 with its own reason.
+func TestUpdateRolePermissions_PermissionNotHeld_Returns403WithReason(t *testing.T) {
+	r := newRouter(t, &fakeRoleUseCases{updateErr: model.ErrPermissionNotHeld})
+	w := doJSON(t, r, http.MethodPatch, "/v1/roles/"+uuid.New().String(), testUser,
+		map[string]any{"permissions": []string{"ADMINISTRATOR"}})
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
+	}
+	if body := decodeError(t, w); body.Error.Details["reason"] != "permission_not_held" {
+		t.Errorf("details = %v", body.Error.Details)
+	}
+}
+
 // Acting on a role at or above your own highest role is a 403 with its own
 // reason, so the client can explain it.
 func TestRoleAboveOwn_Returns403WithReason(t *testing.T) {

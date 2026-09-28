@@ -425,7 +425,8 @@ paths:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "403":
           description: not a server administrator, or removing ADMINISTRATOR from a role
-            you hold, or the role is not below your highest role
+            you hold, or the role is not below your highest role, or adding a
+            permission you do not hold
           content:
             application/json:
               schema:
@@ -1470,7 +1471,7 @@ paths:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "403":
           description: not a server administrator, or the role is not below your highest
-            role
+            role, or the role carries a permission you do not hold
           content:
             application/json:
               schema:

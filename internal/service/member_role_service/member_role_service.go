@@ -81,6 +81,9 @@ func (s *MemberRoleService) AssignRole(ctx context.Context, p AssignRoleParams) 
 	if err := service.RequireRoleBelow(actor, rl); err != nil {
 		return role.Role{}, err
 	}
+	if err := service.RequireCanGrant(actor, rl.Permissions); err != nil {
+		return role.Role{}, err
+	}
 
 	isMember, err := s.members.IsMember(ctx, p.ServerID, p.TargetUserID)
 	if err != nil {
