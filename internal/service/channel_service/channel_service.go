@@ -62,12 +62,13 @@ func (s *ChannelService) resolveCategory(ctx context.Context, serverID uuid.UUID
 	return nil
 }
 
-// nativeCategoryID returns the id of the server's native category for kind
-// (its DefaultKind matches), or nil if it was deleted or never existed --
-// callers fall back to leaving the channel uncategorized in that case.
-func nativeCategoryID(categories []model.Category, kind model.ChannelKind) *uuid.UUID {
+// unassignedCategoryID returns the id of the server's fallback category
+// ("Sin asignar", IsFallback == true) -- the same one for every channel
+// kind -- or nil if it was deleted or never existed -- callers fall back to
+// leaving the channel uncategorized in that case.
+func unassignedCategoryID(categories []model.Category) *uuid.UUID {
 	for _, cat := range categories {
-		if cat.DefaultKind != nil && *cat.DefaultKind == kind {
+		if cat.IsFallback {
 			id := cat.ID
 			return &id
 		}
@@ -126,7 +127,7 @@ func (s *ChannelService) CreateChannel(ctx context.Context, p CreateChannelParam
 
 	categoryID := p.CategoryID
 	if categoryID == nil {
-		categoryID = nativeCategoryID(srv.Categories, kind)
+		categoryID = unassignedCategoryID(srv.Categories)
 	}
 
 	ch := model.Channel{
@@ -256,7 +257,7 @@ func (s *ChannelService) MoveChannelToCategory(ctx context.Context, p MoveChanne
 
 	categoryID := p.CategoryID
 	if categoryID == nil {
-		categoryID = nativeCategoryID(srv.Categories, ch.Kind)
+		categoryID = unassignedCategoryID(srv.Categories)
 	}
 
 	if err := s.channels.MoveToCategory(ctx, p.ChannelID, categoryID); err != nil {
