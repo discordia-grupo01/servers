@@ -13,13 +13,13 @@ import (
 )
 
 func adminRoleIn(serverID uuid.UUID) role.Role {
-	return role.Role{ID: uuid.New(), ServerID: serverID, Name: "Admin", Permissions: role.PermAdministrator}
+	return role.Role{ID: uuid.New(), ServerID: serverID, Name: "Admin", Permissions: role.PermAdministrator, Position: 2}
 }
 
 // Bug #22: a non-owner holding ADMINISTRATOR can assign and remove roles.
 func TestAdministrator_CanAssignAndRemoveRoles(t *testing.T) {
 	srv := ownerServer()
-	rl := role.Role{ID: uuid.New(), ServerID: srv.ID, Name: "Mods"}
+	rl := role.Role{ID: uuid.New(), ServerID: srv.ID, Name: "Mods", Position: 2}
 	members := &fakeMembers{isMember: true, standing: adminStanding()}
 	svc := newService(&fakeServers{server: srv}, &fakeRoles{role: rl}, members)
 	ctx := context.Background()
@@ -52,7 +52,7 @@ func TestRemoveRole_AdminUnassignsOwnAdminRole_Forbidden(t *testing.T) {
 
 func TestRemoveRole_AdminUnassignsOwnNonAdminRole_Allowed(t *testing.T) {
 	srv := ownerServer()
-	rl := role.Role{ID: uuid.New(), ServerID: srv.ID, Name: "VIP", Permissions: role.PermSendMessages}
+	rl := role.Role{ID: uuid.New(), ServerID: srv.ID, Name: "VIP", Permissions: role.PermSendMessages, Position: 2}
 	members := &fakeMembers{standing: adminStanding(), hasRole: true}
 	svc := newService(&fakeServers{server: srv}, &fakeRoles{role: rl}, members)
 
@@ -125,8 +125,11 @@ func TestRemoveRole_HasRoleError_Propagates(t *testing.T) {
 
 func TestGranularManageRoles_CanAssignAndRemoveRoles(t *testing.T) {
 	srv := ownerServer()
-	rl := role.Role{ID: uuid.New(), ServerID: srv.ID, Name: "Mods"}
-	members := &fakeMembers{isMember: true, standing: role.Standing{IsMember: true, Permissions: role.PermManageRoles}}
+	// The actor's highest role sits above rl: MANAGE_ROLES is still bound by
+	// the hierarchy (RequireRoleBelow).
+	rl := role.Role{ID: uuid.New(), ServerID: srv.ID, Name: "Mods", Position: 2}
+	top := 1
+	members := &fakeMembers{isMember: true, standing: role.Standing{IsMember: true, Permissions: role.PermManageRoles, TopPosition: &top}}
 	svc := newService(&fakeServers{server: srv}, &fakeRoles{role: rl}, members)
 	ctx := context.Background()
 

@@ -49,10 +49,12 @@ type fakeRoleUseCases struct {
 	listResult  []role.Role
 	listErr     error
 	gotServerID uuid.UUID
+	gotListUser string
 
 	getResult  role.Role
 	getErr     error
 	gotGetRole uuid.UUID
+	gotGetUser string
 
 	updateErr error
 	updated   role.Role
@@ -63,6 +65,11 @@ type fakeRoleUseCases struct {
 
 	deleteErr error
 	gotDelete role_service.DeleteRoleParams
+
+	reorderErr    error
+	reorderResult []role.Role
+	gotReorder    role_service.ReorderRolesParams
+	reorderCalled bool
 }
 
 func (f *fakeRoleUseCases) CreateRole(_ context.Context, p role_service.CreateRoleParams) (role.Role, error) {
@@ -76,16 +83,16 @@ func (f *fakeRoleUseCases) CreateRole(_ context.Context, p role_service.CreateRo
 	return f.created, nil
 }
 
-func (f *fakeRoleUseCases) ListRoles(_ context.Context, serverID uuid.UUID) ([]role.Role, error) {
-	f.gotServerID = serverID
+func (f *fakeRoleUseCases) ListRoles(_ context.Context, serverID uuid.UUID, userID string) ([]role.Role, error) {
+	f.gotServerID, f.gotListUser = serverID, userID
 	if f.listErr != nil {
 		return nil, f.listErr
 	}
 	return f.listResult, nil
 }
 
-func (f *fakeRoleUseCases) GetRole(_ context.Context, roleID uuid.UUID) (role.Role, error) {
-	f.gotGetRole = roleID
+func (f *fakeRoleUseCases) GetRole(_ context.Context, roleID uuid.UUID, userID string) (role.Role, error) {
+	f.gotGetRole, f.gotGetUser = roleID, userID
 	if f.getErr != nil {
 		return role.Role{}, f.getErr
 	}
@@ -116,6 +123,14 @@ func (f *fakeRoleUseCases) DeleteRole(_ context.Context, p role_service.DeleteRo
 	return f.deleteErr
 }
 
+func (f *fakeRoleUseCases) ReorderRoles(_ context.Context, p role_service.ReorderRolesParams) ([]role.Role, error) {
+	f.reorderCalled, f.gotReorder = true, p
+	if f.reorderErr != nil {
+		return nil, f.reorderErr
+	}
+	return f.reorderResult, nil
+}
+
 type okPinger struct{}
 
 func (okPinger) Ping(context.Context) error { return nil }
@@ -134,6 +149,7 @@ type roleJSON struct {
 	Name        string   `json:"name"`
 	Color       string   `json:"color"`
 	Permissions []string `json:"permissions"`
+	Position    int      `json:"position"`
 }
 
 func newRouter(t *testing.T, roles *fakeRoleUseCases) *gin.Engine {

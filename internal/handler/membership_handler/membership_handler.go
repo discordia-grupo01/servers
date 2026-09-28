@@ -2,7 +2,6 @@ package membership_handler
 
 import (
 	"net/http"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 
@@ -72,11 +71,11 @@ func (h *Handler) ListMembers(c *gin.Context) {
 		return
 	}
 
-	limit, ok := parseNonNegativeIntQuery(c, "limit", model.MemberListDefaultLimit)
+	limit, ok := apierr.ParseNonNegativeIntQuery(c, "limit", model.MemberListDefaultLimit)
 	if !ok {
 		return
 	}
-	offset, ok := parseNonNegativeIntQuery(c, "offset", 0)
+	offset, ok := apierr.ParseNonNegativeIntQuery(c, "offset", 0)
 	if !ok {
 		return
 	}
@@ -104,20 +103,4 @@ func (h *Handler) ListMembers(c *gin.Context) {
 		}
 	}
 	c.JSON(http.StatusOK, resp)
-}
-
-// parseNonNegativeIntQuery reads an optional non-negative integer query
-// param, falling back to def when absent. It writes a 400 response and
-// returns ok=false when the value is present but not a non-negative integer.
-func parseNonNegativeIntQuery(c *gin.Context, name string, def int) (int, bool) {
-	raw := c.Query(name)
-	if raw == "" {
-		return def, true
-	}
-	n, err := strconv.Atoi(raw)
-	if err != nil || n < 0 {
-		apierr.RespondError(c, http.StatusBadRequest, "invalid "+name, apierr.FieldErr(name, "must_be_a_non_negative_integer"))
-		return 0, false
-	}
-	return n, true
 }

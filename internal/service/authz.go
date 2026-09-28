@@ -51,6 +51,50 @@ func RequireRevokeInvite(actor role.Standing, actorID string, inv model.Invitati
 	return nil
 }
 
+// RequirePermission checks whether the actor holds p in the server, through a
+// role or implicitly as an administrator (#25/#26 use BAN_MEMBERS). Like
+// RequireCreateInvite, it also requires membership: permission bits without
+// membership don't authorize anything.
+func RequirePermission(actor role.Standing, p role.Permission) error {
+	if !actor.IsMember || !actor.Has(p) {
+		return model.ErrForbiddenMissingPermission
+	}
+	return nil
+}
+
+// RequireOutranks checks that the actor is strictly above target in the role
+// hierarchy (#25 CA2: nobody can act on someone with an equal or higher role).
+func RequireOutranks(actor, target role.Standing) error {
+	if !actor.Outranks(target) {
+		return model.ErrTargetOutranksActor
+	}
+	return nil
+}
+
+// RequireRoleBelow checks that the actor may act on rl (edit, delete, assign,
+// unassign or make it the default role): the owner always, anyone else only
+// if rl is strictly below their own highest role. It keeps the hierarchy of
+// #25 CA2 and #56 CA2 from being bypassed through role management.
+func RequireRoleBelow(actor role.Standing, rl role.Role) error {
+	if !actor.CanManageRole(rl) {
+		return model.ErrRoleAboveOwn
+	}
+	return nil
+}
+
+// RequireCanGrant checks that the actor holds every permission in p before
+// granting it -- through editing a role's permissions (only the newly added
+// ones) or assigning a role. Removing permissions is never restricted.
+func RequireCanGrant(actor role.Standing, p role.Permission) error {
+	if !actor.CanGrant(p) {
+		return model.ErrPermissionNotHeld
+	}
+	return nil
+}
+
+// requirePermission is the rule shared by the RequireManageX checks: the
+// actor must be a member holding p (owner and ADMINISTRATOR imply every
+// permission). It reports ErrForbiddenNotAdmin, unlike RequirePermission.
 func requirePermission(actor role.Standing, p role.Permission) error {
 	if !actor.IsMember || !actor.Has(p) {
 		return model.ErrForbiddenNotAdmin

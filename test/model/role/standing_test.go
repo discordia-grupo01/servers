@@ -80,3 +80,39 @@ func TestRemovesOwnAdmin(t *testing.T) {
 		}
 	}
 }
+
+// AllPermissions must cover the whole catalog: a permission added after
+// CREATE_INVITE without updating it would make this fail.
+func TestAllPermissions_IsTheWholeCatalog(t *testing.T) {
+	every := role.PermissionNames(-1) // every name in the catalog
+	mask, _, ok := role.ParsePermissions(every)
+	if !ok || mask != role.AllPermissions {
+		t.Fatalf("catalog mask = %b, AllPermissions = %b", mask, role.AllPermissions)
+	}
+}
+
+// Effective follows the same rule as Has, so GET /permissions tells clients
+// exactly what the server will allow.
+func TestStanding_Effective(t *testing.T) {
+	cases := []struct {
+		name string
+		st   role.Standing
+		want role.Permission
+	}{
+		{"owner without roles", role.Standing{IsMember: true, IsOwner: true}, role.AllPermissions},
+		{"member with ADMINISTRATOR", role.Standing{IsMember: true, Permissions: role.PermAdministrator}, role.AllPermissions},
+		{"member with some perms", role.Standing{IsMember: true, Permissions: role.PermBanMembers | role.PermSendMessages}, role.PermBanMembers | role.PermSendMessages},
+		{"member without roles", role.Standing{IsMember: true}, 0},
+	}
+	for _, tc := range cases {
+		got := tc.st.Effective()
+		if got != tc.want {
+			t.Errorf("%s: Effective() = %v, want %v", tc.name, role.PermissionNames(got), role.PermissionNames(tc.want))
+		}
+		for p := role.Permission(1); p <= role.AllPermissions; p <<= 1 {
+			if (got&p != 0) != tc.st.Has(p) {
+				t.Errorf("%s: Effective() and Has(%v) disagree", tc.name, role.PermissionNames(p))
+			}
+		}
+	}
+}

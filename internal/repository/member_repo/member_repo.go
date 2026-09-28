@@ -13,6 +13,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/model"
 	"github.com/discordia-grupo01/servers/internal/model/role"
 	"github.com/discordia-grupo01/servers/internal/outbox"
+	"github.com/discordia-grupo01/servers/internal/repository"
 )
 
 type MemberRepository struct {
@@ -35,24 +36,12 @@ func (r *MemberRepository) IsMember(ctx context.Context, serverID uuid.UUID, use
 	return exists, nil
 }
 
-// MemberStanding returns whether userID is a member of serverID and the union
-// of the permissions of every role assigned to them, in a single query. It
-// never sets IsOwner: ownership comes from the server row (see
-// service.ResolveStanding).
+// MemberStanding returns whether userID is a member of serverID, the union of
+// the permissions of every role assigned to them and the position of their
+// highest role (nil without roles), in a single query. It never sets IsOwner:
+// ownership comes from the server row (see service.ResolveStanding).
 func (r *MemberRepository) MemberStanding(ctx context.Context, serverID uuid.UUID, userID string) (role.Standing, error) {
-	var st role.Standing
-	err := r.pool.QueryRow(ctx, `
-		SELECT EXISTS (SELECT 1 FROM server_members WHERE server_id = $1 AND user_id = $2),
-		       COALESCE(BIT_OR(r.permissions), 0)
-		  FROM member_roles mr
-		  JOIN roles r ON r.id = mr.role_id
-		 WHERE mr.server_id = $1 AND mr.user_id = $2`,
-		serverID, userID,
-	).Scan(&st.IsMember, &st.Permissions)
-	if err != nil {
-		return role.Standing{}, fmt.Errorf("member standing: %w", err)
-	}
-	return st, nil
+	return repository.MemberStanding(ctx, r.pool, serverID, userID)
 }
 
 // HasRole reports whether userID currently has roleID assigned in serverID.
@@ -69,17 +58,24 @@ func (r *MemberRepository) HasRole(ctx context.Context, serverID uuid.UUID, user
 }
 
 // AssignRole is idempotent: assigning a role the member already has is a no-op.
+// AssignRole gives userID the role, idempotently. It holds the server row
+// FOR SHARE (repository.LockServerShared) so it serializes with the writes
+// that check the hierarchy, like a ban.
 func (r *MemberRepository) AssignRole(ctx context.Context, serverID uuid.UUID, userID string, roleID uuid.UUID) error {
-	_, err := r.pool.Exec(ctx, `
-		INSERT INTO member_roles (server_id, user_id, role_id, assigned_at)
-		VALUES ($1, $2, $3, now())
-		ON CONFLICT (server_id, user_id, role_id) DO NOTHING`,
-		serverID, userID, roleID,
-	)
-	if err != nil {
-		return fmt.Errorf("assign role: %w", err)
-	}
-	return nil
+	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+		if err := repository.LockServerShared(ctx, tx, serverID); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO member_roles (server_id, user_id, role_id, assigned_at)
+			VALUES ($1, $2, $3, now())
+			ON CONFLICT (server_id, user_id, role_id) DO NOTHING`,
+			serverID, userID, roleID,
+		); err != nil {
+			return fmt.Errorf("assign role: %w", err)
+		}
+		return nil
+	})
 }
 
 // ListMembers returns one page of a server's members ordered by join date
@@ -142,27 +138,34 @@ func (r *MemberRepository) RemoveMember(ctx context.Context, serverID uuid.UUID,
 	return removed, nil
 }
 
+// RemoveRole takes the role away from userID (ErrMemberRoleNotFound if they
+// don't hold it). Same server lock as AssignRole.
 func (r *MemberRepository) RemoveRole(ctx context.Context, serverID uuid.UUID, userID string, roleID uuid.UUID) error {
-	tag, err := r.pool.Exec(ctx,
-		`DELETE FROM member_roles WHERE server_id = $1 AND user_id = $2 AND role_id = $3`,
-		serverID, userID, roleID,
-	)
-	if err != nil {
-		return fmt.Errorf("remove role: %w", err)
-	}
-	if tag.RowsAffected() == 0 {
-		return model.ErrMemberRoleNotFound
-	}
-	return nil
+	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+		if err := repository.LockServerShared(ctx, tx, serverID); err != nil {
+			return err
+		}
+		tag, err := tx.Exec(ctx,
+			`DELETE FROM member_roles WHERE server_id = $1 AND user_id = $2 AND role_id = $3`,
+			serverID, userID, roleID,
+		)
+		if err != nil {
+			return fmt.Errorf("remove role: %w", err)
+		}
+		if tag.RowsAffected() == 0 {
+			return model.ErrMemberRoleNotFound
+		}
+		return nil
+	})
 }
 
 func (r *MemberRepository) ListRolesForMember(ctx context.Context, serverID uuid.UUID, userID string) ([]role.Role, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT r.id, r.server_id, r.name, r.color, r.permissions, r.created_at, r.updated_at
+		SELECT r.id, r.server_id, r.name, r.color, r.permissions, r.position, r.created_at, r.updated_at
 		  FROM roles r
 		  JOIN member_roles mr ON mr.role_id = r.id
 		 WHERE mr.server_id = $1 AND mr.user_id = $2
-		 ORDER BY r.created_at`,
+		 ORDER BY r.position, r.id`,
 		serverID, userID,
 	)
 	if err != nil {
@@ -173,7 +176,7 @@ func (r *MemberRepository) ListRolesForMember(ctx context.Context, serverID uuid
 	roles := make([]role.Role, 0)
 	for rows.Next() {
 		var rl role.Role
-		if err := rows.Scan(&rl.ID, &rl.ServerID, &rl.Name, &rl.Color, &rl.Permissions, &rl.CreatedAt, &rl.UpdatedAt); err != nil {
+		if err := rows.Scan(&rl.ID, &rl.ServerID, &rl.Name, &rl.Color, &rl.Permissions, &rl.Position, &rl.CreatedAt, &rl.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan member role: %w", err)
 		}
 		roles = append(roles, rl)

@@ -149,10 +149,21 @@ func TestRemoveRole_NotAdmin_Forbidden(t *testing.T) {
 	}
 }
 
-func TestListMemberRoles_ServerNotFound(t *testing.T) {
-	svc := newService(&fakeServers{getErr: model.ErrServerNotFound}, &fakeRoles{}, &fakeMembers{})
+// lookup is a member (testUser) looking up another member of the server.
+func lookup(serverID uuid.UUID) member_role_service.MemberLookupParams {
+	return member_role_service.MemberLookupParams{ServerID: serverID, TargetUserID: "member-2", ActorUserID: testUser}
+}
 
-	_, err := svc.ListMemberRoles(context.Background(), uuid.New(), testUser)
+// memberLookup returns fakeMembers where the actor and the target are both
+// members of the server.
+func memberLookup(roles ...role.Role) *fakeMembers {
+	return &fakeMembers{standing: role.Standing{IsMember: true}, isMember: true, listRoles: roles}
+}
+
+func TestListMemberRoles_ServerNotFound(t *testing.T) {
+	svc := newService(&fakeServers{getErr: model.ErrServerNotFound}, &fakeRoles{}, memberLookup())
+
+	_, err := svc.ListMemberRoles(context.Background(), lookup(uuid.New()))
 	if !errors.Is(err, model.ErrServerNotFound) {
 		t.Errorf("err = %v, want ErrServerNotFound", err)
 	}
@@ -160,10 +171,10 @@ func TestListMemberRoles_ServerNotFound(t *testing.T) {
 
 func TestListMemberRoles_ReturnsRolesFromRepo(t *testing.T) {
 	srv := ownerServer()
-	members := &fakeMembers{listRoles: []role.Role{{ID: uuid.New()}, {ID: uuid.New()}}}
+	members := memberLookup(role.Role{ID: uuid.New()}, role.Role{ID: uuid.New()})
 	svc := newService(&fakeServers{server: srv}, &fakeRoles{}, members)
 
-	got, err := svc.ListMemberRoles(context.Background(), srv.ID, testUser)
+	got, err := svc.ListMemberRoles(context.Background(), lookup(srv.ID))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -173,23 +184,23 @@ func TestListMemberRoles_ReturnsRolesFromRepo(t *testing.T) {
 }
 
 func TestGetMemberPermissions_ServerNotFound(t *testing.T) {
-	svc := newService(&fakeServers{getErr: model.ErrServerNotFound}, &fakeRoles{}, &fakeMembers{})
+	svc := newService(&fakeServers{getErr: model.ErrServerNotFound}, &fakeRoles{}, memberLookup())
 
-	_, err := svc.GetMemberPermissions(context.Background(), uuid.New(), testUser)
+	_, err := svc.GetMemberPermissions(context.Background(), lookup(uuid.New()))
 	if !errors.Is(err, model.ErrServerNotFound) {
 		t.Errorf("err = %v, want ErrServerNotFound", err)
 	}
 }
 
+// For a regular member, the permissions are the union of their roles' ones
+// (MemberStanding already merges them).
 func TestGetMemberPermissions_ReturnsUnionOfRolePermissions(t *testing.T) {
 	srv := ownerServer()
-	members := &fakeMembers{listRoles: []role.Role{
-		{ID: uuid.New(), Permissions: role.PermBanMembers | role.PermKickMembers | role.PermViewChannels},
-		{ID: uuid.New(), Permissions: role.PermSendMessages | role.PermViewChannels},
-	}}
+	members := memberLookup()
+	members.standing.Permissions = role.PermBanMembers | role.PermKickMembers | role.PermViewChannels | role.PermSendMessages
 	svc := newService(&fakeServers{server: srv}, &fakeRoles{}, members)
 
-	got, err := svc.GetMemberPermissions(context.Background(), srv.ID, testUser)
+	got, err := svc.GetMemberPermissions(context.Background(), lookup(srv.ID))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -207,13 +218,107 @@ func TestGetMemberPermissions_ReturnsUnionOfRolePermissions(t *testing.T) {
 
 func TestGetMemberPermissions_NoRoles_ReturnsEmpty(t *testing.T) {
 	srv := ownerServer()
-	svc := newService(&fakeServers{server: srv}, &fakeRoles{}, &fakeMembers{})
+	svc := newService(&fakeServers{server: srv}, &fakeRoles{}, memberLookup())
 
-	got, err := svc.GetMemberPermissions(context.Background(), srv.ID, testUser)
+	got, err := svc.GetMemberPermissions(context.Background(), lookup(srv.ID))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(got) != 0 {
 		t.Errorf("got %v, want empty", got)
+	}
+}
+
+// Someone who isn't a member of the server can't see who holds which roles.
+func TestMemberLookup_CallerNotAMember_Forbidden(t *testing.T) {
+	srv := ownerServer()
+	members := memberLookup(role.Role{ID: uuid.New()})
+	members.standing = role.Standing{}
+	svc := newService(&fakeServers{server: srv}, &fakeRoles{}, members)
+
+	if _, err := svc.ListMemberRoles(context.Background(), lookup(srv.ID)); !errors.Is(err, model.ErrForbiddenNotMember) {
+		t.Errorf("roles: err = %v, want ErrForbiddenNotMember", err)
+	}
+	if _, err := svc.GetMemberPermissions(context.Background(), lookup(srv.ID)); !errors.Is(err, model.ErrForbiddenNotMember) {
+		t.Errorf("permissions: err = %v, want ErrForbiddenNotMember", err)
+	}
+}
+
+// A target that isn't a member is a 404, not an empty list that looks like
+// "a member with no roles".
+func TestMemberLookup_TargetNotAMember_NotFound(t *testing.T) {
+	srv := ownerServer()
+	members := memberLookup()
+	members.isMember = false
+	svc := newService(&fakeServers{server: srv}, &fakeRoles{}, members)
+
+	if _, err := svc.ListMemberRoles(context.Background(), lookup(srv.ID)); !errors.Is(err, model.ErrMemberNotFound) {
+		t.Errorf("roles: err = %v, want ErrMemberNotFound", err)
+	}
+	if _, err := svc.GetMemberPermissions(context.Background(), lookup(srv.ID)); !errors.Is(err, model.ErrMemberNotFound) {
+		t.Errorf("permissions: err = %v, want ErrMemberNotFound", err)
+	}
+}
+
+// The owner is always a member, even without a server_members standing.
+func TestMemberLookup_OwnerCanLookUp(t *testing.T) {
+	srv := ownerServer()
+	members := memberLookup()
+	members.standing = role.Standing{}
+	svc := newService(&fakeServers{server: srv}, &fakeRoles{}, members)
+
+	p := lookup(srv.ID)
+	p.ActorUserID = testOwner
+	if _, err := svc.ListMemberRoles(context.Background(), p); err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestMemberLookup_RepoErrorsPropagate(t *testing.T) {
+	srv := ownerServer()
+	boom := errors.New("db down")
+
+	members := memberLookup()
+	members.standingErr = boom
+	svc := newService(&fakeServers{server: srv}, &fakeRoles{}, members)
+	if _, err := svc.ListMemberRoles(context.Background(), lookup(srv.ID)); !errors.Is(err, boom) {
+		t.Errorf("standing: err = %v, want %v", err, boom)
+	}
+
+	members = memberLookup()
+	members.isMemberErr = boom
+	svc = newService(&fakeServers{server: srv}, &fakeRoles{}, members)
+	if _, err := svc.GetMemberPermissions(context.Background(), lookup(srv.ID)); !errors.Is(err, boom) {
+		t.Errorf("is member: err = %v, want %v", err, boom)
+	}
+
+	members = memberLookup()
+	members.listErr = boom
+	svc = newService(&fakeServers{server: srv}, &fakeRoles{}, members)
+	if _, err := svc.ListMemberRoles(context.Background(), lookup(srv.ID)); !errors.Is(err, boom) {
+		t.Errorf("list: err = %v, want %v", err, boom)
+	}
+}
+
+// The owner and members with ADMINISTRATOR hold every permission, so the
+// endpoint lists them all: clients don't need to special-case either.
+func TestGetMemberPermissions_OwnerAndAdministratorsGetEveryPermission(t *testing.T) {
+	all := role.PermissionNames(role.AllPermissions)
+
+	srv := ownerServer()
+	svc := newService(&fakeServers{server: srv}, &fakeRoles{}, memberLookup())
+	p := lookup(srv.ID)
+	p.TargetUserID = testOwner
+	got, err := svc.GetMemberPermissions(context.Background(), p)
+	if err != nil || len(got) != len(all) {
+		t.Errorf("owner: got %v, %v; want %v", got, err, all)
+	}
+
+	members := memberLookup()
+	members.standing.Permissions = role.PermAdministrator
+	svc = newService(&fakeServers{server: srv}, &fakeRoles{}, members)
+	got, err = svc.GetMemberPermissions(context.Background(), lookup(srv.ID))
+	if err != nil || len(got) != len(all) {
+		t.Errorf("administrator: got %v, %v; want %v", got, err, all)
 	}
 }

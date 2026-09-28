@@ -39,7 +39,7 @@ func newInviteRepo(t *testing.T) (*repository.InvitationRepository, *pgxpool.Poo
 	for _, f := range []string{
 		"0001_init.up.sql", "0002_invitations.up.sql",
 		"0003_roles.up.sql", "0004_member_roles.up.sql", "0005_default_role.up.sql",
-		"0011_outbox_events.up.sql",
+		"0011_outbox_events.up.sql", "0015_role_positions.up.sql",
 	} {
 		schema, err := os.ReadFile("../../migrations/" + f)
 		if err != nil {
@@ -363,7 +363,7 @@ func TestInviteRepo_RedeemAssignsDefaultRole(t *testing.T) {
 
 	roleID := uuid.New()
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO roles (id, server_id, name, color, permissions) VALUES ($1,$2,'member','#112233',0)`,
+		`INSERT INTO roles (id, server_id, name, color, permissions, position) VALUES ($1,$2,'member','#112233',0,1)`,
 		roleID, serverID,
 	); err != nil {
 		t.Fatalf("seed role: %v", err)
@@ -419,6 +419,84 @@ func TestInviteRepo_RedeemWithoutDefaultRoleAssignsNothing(t *testing.T) {
 	}
 	if count != 0 {
 		t.Errorf("member_roles count = %d, want 0 (no default role configured)", count)
+	}
+}
+
+// The redeem transaction re-checks the ban itself: a banned user is rejected
+// without consuming a use nor becoming a member.
+func TestInviteRepo_RedeemBannedUser_IsRejected(t *testing.T) {
+	repo, pool := newInviteRepo(t)
+	ctx := context.Background()
+	owner := "owner-" + uuid.NewString()
+	serverID := seedServer(t, pool, owner)
+	inv := newInvitation(serverID, owner)
+	if err := repo.CreateInvitation(ctx, inv); err != nil {
+		t.Fatalf("CreateInvitation: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO server_bans (server_id, user_id) VALUES ($1, 'banned')`, serverID); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := repo.RedeemInvitation(ctx, inv.Code, "banned", time.Now().UTC(), testBuildEvent); !errors.Is(err, model.ErrUserBanned) {
+		t.Fatalf("err = %v, want ErrUserBanned", err)
+	}
+	if ok, _ := repo.IsMember(ctx, serverID, "banned"); ok {
+		t.Error("the banned user became a member")
+	}
+	if after, _ := repo.InvitationByCode(ctx, inv.Code); after.Uses != 0 {
+		t.Errorf("uses = %d, want 0 (the rejected join must not consume a use)", after.Uses)
+	}
+}
+
+// #25 CA1 under concurrency: a join racing a ban can't slip in. While the ban
+// holds the server lock (as moderation_repo.BanMember does), the join waits,
+// and once the ban commits the join sees it and is rejected.
+func TestInviteRepo_RedeemWaitsForAConcurrentBan(t *testing.T) {
+	repo, pool := newInviteRepo(t)
+	ctx := context.Background()
+	owner := "owner-" + uuid.NewString()
+	serverID := seedServer(t, pool, owner)
+	inv := newInvitation(serverID, owner)
+	if err := repo.CreateInvitation(ctx, inv); err != nil {
+		t.Fatalf("CreateInvitation: %v", err)
+	}
+
+	ban, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = ban.Rollback(ctx) }()
+	if _, err := ban.Exec(ctx, `SELECT 1 FROM servers WHERE id = $1 FOR NO KEY UPDATE`, serverID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ban.Exec(ctx, `INSERT INTO server_bans (server_id, user_id) VALUES ($1, 'racer')`, serverID); err != nil {
+		t.Fatal(err)
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := repo.RedeemInvitation(ctx, inv.Code, "racer", time.Now().UTC(), testBuildEvent)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		t.Fatalf("the join finished while the ban held the server lock: err = %v", err)
+	case <-time.After(300 * time.Millisecond):
+	}
+
+	if err := ban.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if !errors.Is(err, model.ErrUserBanned) {
+			t.Fatalf("err = %v, want ErrUserBanned", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the join never finished")
+	}
+	if ok, _ := repo.IsMember(ctx, serverID, "racer"); ok {
+		t.Error("the banned user became a member")
 	}
 }
 
