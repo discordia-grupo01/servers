@@ -1224,7 +1224,10 @@ paths:
         - invitations
   "/v1/servers/{serverId}/members":
     get:
-      description: Caller must already be a member. Paginated.
+      description: Caller must already be a member. Paginated. Each member carries
+        their public profile (name, avatar, description, status), replicated
+        from identify; profile is null until it has been replicated, and may lag
+        a few seconds behind a profile edit.
       parameters:
         - description: Server ID
           in: path
@@ -2145,12 +2148,33 @@ components:
         total:
           type: integer
       type: object
+    model.MemberProfileResponse:
+      properties:
+        avatar_url:
+          type: string
+        description:
+          type: string
+        name:
+          type: string
+        status_emoji:
+          type: string
+        status_text:
+          type: string
+      type: object
     model.MemberResponse:
       properties:
         is_owner:
           type: boolean
         joined_at:
           type: string
+        profile:
+          allOf:
+            - $ref: "#/components/schemas/model.MemberProfileResponse"
+          description: >-
+            Profile is null while the member's profile hasn't been replicated
+            from
+
+            identify yet; clients can fall back to GET /v1/users/{id} then.
         user_id:
           type: string
       type: object

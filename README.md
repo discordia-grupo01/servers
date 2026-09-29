@@ -56,7 +56,7 @@ Con `docker compose up` se levanta también el servicio (`api`) contra la base.
 | SUPABASE_STORAGE_URL | - (vacio) | URL del proyecto de Supabase (`https://xxxx.supabase.co`). Si esta + `SUPABASE_STORAGE_BUCKET` + `SUPABASE_SERVICE_KEY`, los iconos van a ese bucket en vez de a `ICON_DIR` (ver seccion "Supabase Storage" mas abajo). |
 | SUPABASE_STORAGE_BUCKET | - (vacio) | Nombre del bucket de Storage. |
 | SUPABASE_SERVICE_KEY | - (vacio) | `service_role` key del proyecto (Project Settings > API) -- nunca la `anon` key, esta se salta las políticas RLS del bucket. |
-| RABBITMQ_URL | - (vacio) | Conexion al broker para publicar eventos de dominio (exchange `discordia.events`, ver ADR-07). Vacia = publisher en no-op, el servicio funciona igual sin RabbitMQ. |
+| RABBITMQ_URL | - (vacio) | Conexion al broker para publicar eventos de dominio y consumir `users.profile_updated` (exchange `discordia.events`, ver ADR-07). Vacia = publisher en no-op y sin réplica de perfiles (`profile: null` en `GET /members`); el servicio funciona igual sin RabbitMQ. |
 
 Publicar un evento nunca pasa directo por RabbitMQ desde el request: el
 handler escribe una fila en `outbox_events` en la misma transacción que el
@@ -67,6 +67,32 @@ entre el commit y el publish nunca pierde el evento silenciosamente, solo
 lo retrasa. El mensaje además se publica con `DeliveryMode: amqp.Persistent`
 (`internal/events/publisher.go`), para que RabbitMQ tampoco lo pierda si el
 broker se reinicia con el mensaje todavía sin consumir.
+
+### Réplica de perfiles de usuario
+
+`GET /v1/servers/{serverId}/members` devuelve el perfil público de cada
+miembro (`name`, `avatar_url`, `description`, `status_text`, `status_emoji`)
+sin llamar a identify:
+
+- identify publica `users.profile_updated` (foto completa del perfil + `version`
+  creciente) al registrarse un usuario y en cada cambio de perfil o estado.
+- `internal/events/profile_consumer` consume la cola durable
+  `servers.user_profiles` (ack manual, reconexión con backoff de 1 s a 30 s,
+  conexión `discordia-servers-user-profiles`) y guarda la foto en la tabla
+  `user_profiles`.
+- El upsert solo aplica una `version` mayor a la guardada: eventos repetidos o
+  que llegan en desorden no pisan un perfil más nuevo. Un mensaje inválido
+  (JSON roto, `user_id` que no es UUID, `version` < 1) se descarta con log; un
+  error de base se reintenta.
+- `GET /members` hace `LEFT JOIN user_profiles`: `profile` es `null` si todavía
+  no llegó el evento de ese usuario (el front puede caer a `GET /v1/users/{id}`).
+- Es consistencia eventual: un cambio de perfil tarda unos segundos en verse
+  (el tick del poller de identify más la entrega).
+- servers declara la cola al arrancar, así que tiene que estar desplegado antes
+  de que identify empiece a publicar; si no, esos eventos se pierden y hay que
+  relanzar el backfill de identify.
+- Suma una conexión a RabbitMQ (ojo con el límite de 20 del free tier de
+  CloudAMQP).
 
 Las `DATABASE_*` no tienen default: si falta alguna, el servicio no arranca (no se usa una credencial adivinada). Los valores reales van en el `.env`; `.env.example` trae los del Postgres local.
 
@@ -82,7 +108,7 @@ servers/
 │   ├── repository/            acceso a datos (Postgres, etc.)
 │   ├── model/                 structs de dominio / DTOs
 │   ├── middleware/            middlewares de Gin (auth, logging, etc.)
-│   ├── events/                 publisher de eventos hacia RabbitMQ (exchange discordia.events)
+│   ├── events/                 publisher de eventos hacia RabbitMQ (exchange discordia.events) y profile_consumer (réplica de perfiles)
 │   └── outbox/                 outbox transaccional: Insert (misma tx que el write de negocio) + Poller
 ├── migrations/                migraciones de BDD (ej. golang-migrate)
 ├── .github/
@@ -275,7 +301,7 @@ admins lo tienen implícito); ver "Roles, permisos y jerarquía".
 | PATCH | `/v1/servers/{serverId}` | si (admin) | Editar nombre, ícono y/o banner (multipart: `name?`, `icon?`, `banner?`, `remove_banner?`). Todos los campos son opcionales; sin permisos da 403, datos invalidos dan 400 sin persistir nada. |
 | GET | `/v1/servers/{serverId}/icon` | no (público) | Sirve el archivo del ícono (subido o el default generado). En produccion (Supabase) `icon_url` apunta directo al bucket público; esta ruta queda como fallback para setups sin Supabase. |
 | GET | `/v1/servers/{serverId}/banner` | no (público) | Sirve el archivo del banner. 404 si el server no tiene uno. Mismo esquema de URL que el icono. |
-| GET | `/v1/servers/{serverId}/members` | si (miembro) | Listar los miembros del server (paginado). |
+| GET | `/v1/servers/{serverId}/members` | si (miembro) | Listar los miembros del server (paginado), cada uno con su `profile` (`null` si todavía no se replicó). |
 | POST | `/v1/servers/{serverId}/invites` | si (`CREATE_INVITE`) | Generar invitación (JSON opcional: `max_uses?`; expira a los 7 días). |
 | GET | `/v1/servers/{serverId}/invites` | si (`CREATE_INVITE`) | Listar todas las invitaciones del server (activas, revocadas o vencidas), más nueva primero. Sin filtro por estado del lado del back. |
 | DELETE | `/v1/invites/{code}` | si (admin o quien la creó) | Revocar una invitación (idempotente). |
