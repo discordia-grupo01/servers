@@ -10,31 +10,12 @@ import (
 	"time"
 
 	"github.com/discordia-grupo01/events-contract/broker"
-	"github.com/discordia-grupo01/events-contract/envelope"
+	"github.com/discordia-grupo01/events-contract/users"
 	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
 
 	"github.com/discordia-grupo01/servers/internal/model/userprofile"
 )
-
-// RoutingKeyProfileUpdated and ProfileUpdated mirror users.profile_updated
-// as documented in discordia-docs (asyncapi). TODO(events-contract): replace
-// both with the users package once events-contract v0.3.0 is tagged.
-const RoutingKeyProfileUpdated = "users.profile_updated"
-
-// ProfileUpdated is a full snapshot of a user's public profile, published by
-// identify on sign-up and on every profile or status change. Version is
-// identify's profile_version and orders the snapshots of one user.
-type ProfileUpdated struct {
-	envelope.Meta
-	UserID      string `json:"user_id"`
-	Version     int64  `json:"version"`
-	Name        string `json:"name"`
-	AvatarURL   string `json:"avatar_url"`
-	Description string `json:"description"`
-	StatusText  string `json:"status_text"`
-	StatusEmoji string `json:"status_emoji"`
-}
 
 // QueueName is owned by this consumer: no other service binds it. Another
 // service that needs profiles declares its own queue on the same routing key.
@@ -105,7 +86,7 @@ func (c *Consumer) consumeOnce(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := ch.QueueBind(queue.Name, RoutingKeyProfileUpdated, broker.ExchangeName, false, nil); err != nil {
+	if err := ch.QueueBind(queue.Name, users.RoutingKeyProfileUpdated, broker.ExchangeName, false, nil); err != nil {
 		return err
 	}
 
@@ -140,11 +121,11 @@ func (c *Consumer) consumeOnce(ctx context.Context) error {
 // dropped with a log instead of being retried forever; only a failure to
 // write the replica is retried. A stale or duplicate version is a no-op.
 func ShouldRequeue(ctx context.Context, store Store, routingKey string, body []byte) bool {
-	if routingKey != RoutingKeyProfileUpdated {
+	if routingKey != users.RoutingKeyProfileUpdated {
 		log.Printf("profile_consumer: unknown routing key %q, dropping message", routingKey)
 		return false
 	}
-	var evt ProfileUpdated
+	var evt users.ProfileUpdated
 	if err := json.Unmarshal(body, &evt); err != nil {
 		log.Printf("profile_consumer: malformed payload, dropping message: %v", err)
 		return false

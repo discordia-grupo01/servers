@@ -14,6 +14,7 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 
 	"github.com/discordia-grupo01/events-contract/envelope"
+	"github.com/discordia-grupo01/events-contract/users"
 	"github.com/discordia-grupo01/servers/internal/events/profile_consumer"
 	"github.com/discordia-grupo01/servers/internal/model"
 	"github.com/discordia-grupo01/servers/internal/repository"
@@ -56,7 +57,7 @@ func setupProfileReplica(t *testing.T) (*amqp.Channel, *pgxpool.Pool) {
 	if _, err := ch.QueueDeclare(profile_consumer.QueueName, true, false, false, false, nil); err != nil {
 		t.Fatalf("QueueDeclare: %v", err)
 	}
-	if err := ch.QueueBind(profile_consumer.QueueName, profile_consumer.RoutingKeyProfileUpdated, "discordia.events", false, nil); err != nil {
+	if err := ch.QueueBind(profile_consumer.QueueName, users.RoutingKeyProfileUpdated, "discordia.events", false, nil); err != nil {
 		t.Fatalf("QueueBind: %v", err)
 	}
 	if _, err := ch.QueuePurge(profile_consumer.QueueName, false); err != nil {
@@ -74,7 +75,7 @@ func setupProfileReplica(t *testing.T) (*amqp.Channel, *pgxpool.Pool) {
 
 func publishProfile(t *testing.T, ch *amqp.Channel, userID string, version int64, name string) {
 	t.Helper()
-	body, err := json.Marshal(profile_consumer.ProfileUpdated{
+	body, err := json.Marshal(users.ProfileUpdated{
 		Meta:   envelope.Meta{EventID: uuid.NewString(), OccurredAt: time.Now().UTC()},
 		UserID: userID, Version: version, Name: name,
 		AvatarURL: "https://cdn/" + name + ".png", Description: "about " + name,
@@ -83,7 +84,7 @@ func publishProfile(t *testing.T, ch *amqp.Channel, userID string, version int64
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	if err := ch.PublishWithContext(context.Background(), "discordia.events", profile_consumer.RoutingKeyProfileUpdated, false, false,
+	if err := ch.PublishWithContext(context.Background(), "discordia.events", users.RoutingKeyProfileUpdated, false, false,
 		amqp.Publishing{ContentType: "application/json", DeliveryMode: amqp.Persistent, Body: body},
 	); err != nil {
 		t.Fatalf("publish: %v", err)

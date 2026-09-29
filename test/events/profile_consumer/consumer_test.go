@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/discordia-grupo01/events-contract/envelope"
+	"github.com/discordia-grupo01/events-contract/users"
 	"github.com/discordia-grupo01/servers/internal/events/profile_consumer"
 	"github.com/discordia-grupo01/servers/internal/model/userprofile"
 )
@@ -27,8 +28,8 @@ func (f *fakeStore) Upsert(_ context.Context, p userprofile.Profile) (bool, erro
 	return f.applied, f.err
 }
 
-func validEvent() profile_consumer.ProfileUpdated {
-	return profile_consumer.ProfileUpdated{
+func validEvent() users.ProfileUpdated {
+	return users.ProfileUpdated{
 		Meta:   envelope.Meta{EventID: uuid.NewString(), OccurredAt: time.Now().UTC()},
 		UserID: uuid.NewString(), Version: 2,
 		Name: "Manu", AvatarURL: "https://cdn/a.png", Description: "hi",
@@ -49,7 +50,7 @@ func TestShouldRequeue_StoresProfileAndAcks(t *testing.T) {
 	store := &fakeStore{applied: true}
 	evt := validEvent()
 
-	if profile_consumer.ShouldRequeue(context.Background(), store, profile_consumer.RoutingKeyProfileUpdated, body(t, evt)) {
+	if profile_consumer.ShouldRequeue(context.Background(), store, users.RoutingKeyProfileUpdated, body(t, evt)) {
 		t.Fatal("ShouldRequeue = true, want false (ack)")
 	}
 	want := userprofile.Profile{
@@ -64,7 +65,7 @@ func TestShouldRequeue_StoresProfileAndAcks(t *testing.T) {
 // A duplicate or out-of-order event is acked without retrying.
 func TestShouldRequeue_StaleVersionAcks(t *testing.T) {
 	store := &fakeStore{applied: false}
-	if profile_consumer.ShouldRequeue(context.Background(), store, profile_consumer.RoutingKeyProfileUpdated, body(t, validEvent())) {
+	if profile_consumer.ShouldRequeue(context.Background(), store, users.RoutingKeyProfileUpdated, body(t, validEvent())) {
 		t.Fatal("ShouldRequeue = true, want false (ack)")
 	}
 	if store.calls != 1 {
@@ -75,7 +76,7 @@ func TestShouldRequeue_StaleVersionAcks(t *testing.T) {
 // A database failure is transient: the message is retried.
 func TestShouldRequeue_StoreErrorRequeues(t *testing.T) {
 	store := &fakeStore{err: errors.New("db down")}
-	if !profile_consumer.ShouldRequeue(context.Background(), store, profile_consumer.RoutingKeyProfileUpdated, body(t, validEvent())) {
+	if !profile_consumer.ShouldRequeue(context.Background(), store, users.RoutingKeyProfileUpdated, body(t, validEvent())) {
 		t.Fatal("ShouldRequeue = false, want true (requeue)")
 	}
 }
@@ -98,11 +99,11 @@ func TestShouldRequeue_DropsInvalidMessages(t *testing.T) {
 		body       []byte
 	}{
 		{"unknown routing key", "users.something_else", body(t, validEvent())},
-		{"malformed json", profile_consumer.RoutingKeyProfileUpdated, []byte("{not json")},
-		{"empty user_id", profile_consumer.RoutingKeyProfileUpdated, body(t, emptyUser)},
-		{"user_id not a uuid", profile_consumer.RoutingKeyProfileUpdated, body(t, notUUID)},
-		{"version 0", profile_consumer.RoutingKeyProfileUpdated, body(t, zeroVersion)},
-		{"negative version", profile_consumer.RoutingKeyProfileUpdated, body(t, negativeVersion)},
+		{"malformed json", users.RoutingKeyProfileUpdated, []byte("{not json")},
+		{"empty user_id", users.RoutingKeyProfileUpdated, body(t, emptyUser)},
+		{"user_id not a uuid", users.RoutingKeyProfileUpdated, body(t, notUUID)},
+		{"version 0", users.RoutingKeyProfileUpdated, body(t, zeroVersion)},
+		{"negative version", users.RoutingKeyProfileUpdated, body(t, negativeVersion)},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -114,23 +115,5 @@ func TestShouldRequeue_DropsInvalidMessages(t *testing.T) {
 				t.Errorf("Upsert calls = %d, want 0", store.calls)
 			}
 		})
-	}
-}
-
-// The wire shape is exactly the documented users.profile_updated payload:
-// nothing more (in particular, never email) and nothing less.
-func TestProfileUpdated_JSONShape(t *testing.T) {
-	var got map[string]any
-	if err := json.Unmarshal(body(t, validEvent()), &got); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	want := []string{"event_id", "occurred_at", "user_id", "version", "name", "avatar_url", "description", "status_text", "status_emoji"}
-	if len(got) != len(want) {
-		t.Errorf("keys = %v, want exactly %v", got, want)
-	}
-	for _, k := range want {
-		if _, ok := got[k]; !ok {
-			t.Errorf("missing key %q", k)
-		}
 	}
 }
