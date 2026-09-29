@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/discordia-grupo01/servers/internal/model"
+	"github.com/discordia-grupo01/servers/internal/model/userprofile"
 )
 
 func decodeMemberList(t *testing.T, w *httptest.ResponseRecorder) model.MemberListResponse {
@@ -235,5 +236,52 @@ func TestListMembers_ServerNotFound_404(t *testing.T) {
 	w := doGet(t, r, membersPath(uuid.New().String(), ""), testUser)
 	if w.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want 404", w.Code)
+	}
+}
+
+// A replicated profile is returned with its five public fields; a member
+// without one gets "profile": null (not an omitted key).
+func TestListMembers_IncludesProfileOrNull(t *testing.T) {
+	uc := &fakeMembershipUseCases{
+		listMembers: []model.Member{
+			{UserID: testUser, IsOwner: true, Profile: &userprofile.Profile{
+				UserID: testUser, Name: "Manu", AvatarURL: "https://cdn/a.png", Description: "hola",
+				StatusText: "jugando", StatusEmoji: "🎮", Version: 3,
+			}},
+			{UserID: "user-2"},
+		},
+		listTotal: 2,
+	}
+	r := newRouter(t, uc)
+
+	w := doGet(t, r, membersPath(uuid.New().String(), ""), testUser)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+
+	var raw struct {
+		Members []map[string]json.RawMessage `json:"members"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &raw); err != nil {
+		t.Fatalf("bad body %q: %v", w.Body.String(), err)
+	}
+	if len(raw.Members) != 2 {
+		t.Fatalf("members = %d, want 2", len(raw.Members))
+	}
+	var profile map[string]any
+	if err := json.Unmarshal(raw.Members[0]["profile"], &profile); err != nil {
+		t.Fatalf("bad profile %s: %v", raw.Members[0]["profile"], err)
+	}
+	want := map[string]any{"name": "Manu", "avatar_url": "https://cdn/a.png", "description": "hola", "status_text": "jugando", "status_emoji": "🎮"}
+	if len(profile) != len(want) {
+		t.Errorf("profile = %v, want exactly %v", profile, want)
+	}
+	for k, v := range want {
+		if profile[k] != v {
+			t.Errorf("profile[%q] = %v, want %v", k, profile[k], v)
+		}
+	}
+	if p, ok := raw.Members[1]["profile"]; !ok || string(p) != "null" {
+		t.Errorf("second member profile = %s (present=%v), want null", p, ok)
 	}
 }
