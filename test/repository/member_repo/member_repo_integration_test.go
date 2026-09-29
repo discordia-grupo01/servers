@@ -12,6 +12,7 @@ import (
 
 	"github.com/discordia-grupo01/servers/internal/model"
 	"github.com/discordia-grupo01/servers/internal/model/role"
+	"github.com/discordia-grupo01/servers/internal/model/userprofile"
 	"github.com/discordia-grupo01/servers/internal/outbox"
 	"github.com/discordia-grupo01/servers/internal/repository"
 	"github.com/discordia-grupo01/servers/internal/repository/member_repo"
@@ -55,6 +56,7 @@ func newRepo(t *testing.T) (*member_repo.MemberRepository, *repository.ServerRep
 		"../../../migrations/0005_default_role.up.sql",
 		"../../../migrations/0011_outbox_events.up.sql",
 		"../../../migrations/0015_role_positions.up.sql",
+		"../../../migrations/0017_user_profiles.up.sql",
 	} {
 		schema, err := os.ReadFile(file)
 		if err != nil {
@@ -340,7 +342,7 @@ func TestMemberRepo_ListMembers_ReportsOwnerFlag(t *testing.T) {
 // packages might have created, so a test run leaves the database exactly as
 // clean as it found it -- both before it starts and after it finishes.
 func dropAllTestTables(ctx context.Context, pool *pgxpool.Pool) {
-	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS outbox_events, member_roles, roles, server_bans, invitations, server_members, channels, servers CASCADE`)
+	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS user_profiles, outbox_events, member_roles, roles, server_bans, invitations, server_members, channels, servers CASCADE`)
 }
 
 func env(k, def string) string {
@@ -348,4 +350,43 @@ func env(k, def string) string {
 		return v
 	}
 	return def
+}
+
+// Members whose profile has been replicated carry it; the rest get a nil
+// Profile instead of being dropped from the page.
+func TestMemberRepo_ListMembers_JoinsReplicatedProfiles(t *testing.T) {
+	members, servers, _, pool := newRepo(t)
+	ctx := context.Background()
+	srv, member := seedServerWithMember(ctx, t, servers, pool)
+
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO user_profiles (user_id, name, avatar_url, description, status_text, status_emoji, version)
+		VALUES ($1, 'Manu', 'https://cdn/a.png', 'hola', 'jugando', '🎮', 4)`, member,
+	); err != nil {
+		t.Fatalf("seed profile: %v", err)
+	}
+
+	all, total, err := members.ListMembers(ctx, srv.ID, 10, 0)
+	if err != nil {
+		t.Fatalf("ListMembers error = %v", err)
+	}
+	if total != 2 || len(all) != 2 {
+		t.Fatalf("total = %d, len = %d; want 2, 2", total, len(all))
+	}
+	for _, m := range all {
+		switch m.UserID {
+		case member:
+			if m.Profile == nil {
+				t.Fatalf("member %q Profile = nil, want replicated profile", member)
+			}
+			want := userprofile.Profile{UserID: member, Name: "Manu", AvatarURL: "https://cdn/a.png", Description: "hola", StatusText: "jugando", StatusEmoji: "🎮", Version: 4}
+			if *m.Profile != want {
+				t.Errorf("Profile = %+v, want %+v", *m.Profile, want)
+			}
+		case srv.OwnerID:
+			if m.Profile != nil {
+				t.Errorf("owner Profile = %+v, want nil (not replicated)", *m.Profile)
+			}
+		}
+	}
 }

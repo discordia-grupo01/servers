@@ -12,6 +12,7 @@ import (
 
 	"github.com/discordia-grupo01/servers/internal/model"
 	"github.com/discordia-grupo01/servers/internal/model/role"
+	"github.com/discordia-grupo01/servers/internal/model/userprofile"
 	"github.com/discordia-grupo01/servers/internal/outbox"
 	"github.com/discordia-grupo01/servers/internal/repository"
 )
@@ -80,7 +81,8 @@ func (r *MemberRepository) AssignRole(ctx context.Context, serverID uuid.UUID, u
 
 // ListMembers returns one page of a server's members ordered by join date
 // (oldest first, user_id as a tie-breaker), along with the total member
-// count so the caller can render pagination.
+// count so the caller can render pagination. Each member carries their
+// replicated public profile, or a nil Profile if it hasn't arrived yet.
 func (r *MemberRepository) ListMembers(ctx context.Context, serverID uuid.UUID, limit, offset int) ([]model.Member, int, error) {
 	var total int
 	if err := r.pool.QueryRow(ctx,
@@ -90,10 +92,12 @@ func (r *MemberRepository) ListMembers(ctx context.Context, serverID uuid.UUID, 
 	}
 
 	rows, err := r.pool.Query(ctx, `
-		SELECT user_id, is_owner, joined_at
-		  FROM server_members
-		 WHERE server_id = $1
-		 ORDER BY joined_at ASC, user_id ASC
+		SELECT sm.user_id, sm.is_owner, sm.joined_at,
+		       p.user_id, p.name, p.avatar_url, p.description, p.status_text, p.status_emoji, p.version
+		  FROM server_members sm
+		  LEFT JOIN user_profiles p ON p.user_id = sm.user_id
+		 WHERE sm.server_id = $1
+		 ORDER BY sm.joined_at ASC, sm.user_id ASC
 		 LIMIT $2 OFFSET $3`,
 		serverID, limit, offset,
 	)
@@ -105,8 +109,21 @@ func (r *MemberRepository) ListMembers(ctx context.Context, serverID uuid.UUID, 
 	members := make([]model.Member, 0)
 	for rows.Next() {
 		var m model.Member
-		if err := rows.Scan(&m.UserID, &m.IsOwner, &m.JoinedAt); err != nil {
+		var (
+			profileUserID                                         *string
+			name, avatarURL, description, statusText, statusEmoji *string
+			version                                               *int64
+		)
+		if err := rows.Scan(&m.UserID, &m.IsOwner, &m.JoinedAt,
+			&profileUserID, &name, &avatarURL, &description, &statusText, &statusEmoji, &version,
+		); err != nil {
 			return nil, 0, fmt.Errorf("scan member: %w", err)
+		}
+		if profileUserID != nil {
+			m.Profile = &userprofile.Profile{
+				UserID: *profileUserID, Name: *name, AvatarURL: *avatarURL, Description: *description,
+				StatusText: *statusText, StatusEmoji: *statusEmoji, Version: *version,
+			}
 		}
 		members = append(members, m)
 	}
