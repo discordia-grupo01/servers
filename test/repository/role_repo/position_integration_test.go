@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/discordia-grupo01/servers/internal/model/role"
+	"github.com/discordia-grupo01/servers/internal/outbox"
 	"github.com/discordia-grupo01/servers/internal/repository/role_repo"
 )
 
@@ -18,7 +19,7 @@ func seedServer(ctx context.Context, t *testing.T) (*role_repo.RoleRepository, u
 	t.Helper()
 	roles, servers, _ := newRepo(t)
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans, []outbox.Event{testOutboxEvent()}); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 	return roles, srv.ID
@@ -51,10 +52,10 @@ func TestRoleRepo_Create_PositionsAreIndependentPerServer(t *testing.T) {
 	roles, servers, _ := newRepo(t)
 	srvA, chA := serverFixture("owner-" + uuid.NewString())
 	srvB, chB := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srvA, nil, chA, testOutboxEvent()); err != nil {
+	if err := servers.CreateServer(ctx, srvA, nil, chA, []outbox.Event{testOutboxEvent()}); err != nil {
 		t.Fatal(err)
 	}
-	if err := servers.CreateServer(ctx, srvB, nil, chB, testOutboxEvent()); err != nil {
+	if err := servers.CreateServer(ctx, srvB, nil, chB, []outbox.Event{testOutboxEvent()}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := roles.Create(ctx, roleFixture(srvA.ID, "A1")); err != nil {
@@ -97,7 +98,7 @@ func TestRoleRepo_ListByServer_OrdersByPosition(t *testing.T) {
 	ctx := context.Background()
 	roles, servers, pool := newRepo(t)
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans, []outbox.Event{testOutboxEvent()}); err != nil {
 		t.Fatal(err)
 	}
 	a, _ := roles.Create(ctx, roleFixture(srv.ID, "A"))

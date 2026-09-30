@@ -15,12 +15,12 @@ import (
 const testOwner = "user-123"
 
 type fakeRepoHelper struct {
-	err            error
-	calls          int
-	gotServer      model.Server
-	gotCats        []model.Category
-	gotChans       []model.Channel
-	gotOutboxEvent outbox.Event
+	err             error
+	calls           int
+	gotServer       model.Server
+	gotCats         []model.Category
+	gotChans        []model.Channel
+	gotOutboxEvents []outbox.Event
 
 	listResult  []model.Server
 	listErr     error
@@ -49,12 +49,12 @@ func (f *fakeRepoHelper) MemberStanding(_ context.Context, _ uuid.UUID, _ string
 	return f.standing, nil
 }
 
-func (f *fakeRepoHelper) CreateServer(_ context.Context, s model.Server, cats []model.Category, ch []model.Channel, evt outbox.Event) error {
+func (f *fakeRepoHelper) CreateServer(_ context.Context, s model.Server, cats []model.Category, ch []model.Channel, events []outbox.Event) error {
 	f.calls++
 	if f.err != nil {
 		return f.err
 	}
-	f.gotServer, f.gotCats, f.gotChans, f.gotOutboxEvent = s, cats, ch, evt
+	f.gotServer, f.gotCats, f.gotChans, f.gotOutboxEvents = s, cats, ch, events
 	f.getResult = s
 	return nil
 }
@@ -152,4 +152,15 @@ func validParams(name string) service.CreateServerParams {
 
 func iconParams(name string) service.CreateServerParams {
 	return service.CreateServerParams{Name: name, OwnerID: testOwner, Icon: []byte("some-bytes")}
+}
+
+func findOutboxEvent(t *testing.T, events []outbox.Event, routingKey string) outbox.Event {
+	t.Helper()
+	for _, e := range events {
+		if e.RoutingKey == routingKey {
+			return e
+		}
+	}
+	t.Fatalf("no outbox event with routing key %q among %v", routingKey, events)
+	return outbox.Event{}
 }

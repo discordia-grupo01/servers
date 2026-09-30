@@ -71,7 +71,7 @@ func seedServerWithMember(ctx context.Context, t *testing.T, servers *repository
 	t.Helper()
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	srv := model.Server{ID: uuid.New(), Name: "Test Server", NameKey: "test server", OwnerID: "owner-" + uuid.NewString(), CreatedAt: now}
-	if err := servers.CreateServer(ctx, srv, nil, nil, testOutboxEvent()); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, nil, []outbox.Event{testOutboxEvent()}); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 

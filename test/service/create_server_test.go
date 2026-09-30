@@ -6,6 +6,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/discordia-grupo01/events-contract/channels"
 	"github.com/discordia-grupo01/events-contract/membership"
 	"github.com/discordia-grupo01/servers/internal/model"
 	"github.com/discordia-grupo01/servers/internal/service"
@@ -181,11 +182,9 @@ func TestCreateServer_Success_PublishesMemberJoinedForTheOwner(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if repo.gotOutboxEvent.RoutingKey != membership.RoutingKeyMemberJoined {
-		t.Errorf("routing key = %q, want %q", repo.gotOutboxEvent.RoutingKey, membership.RoutingKeyMemberJoined)
-	}
+	memberJoined := findOutboxEvent(t, repo.gotOutboxEvents, membership.RoutingKeyMemberJoined)
 	var evt membership.MemberJoined
-	if err := json.Unmarshal(repo.gotOutboxEvent.Payload, &evt); err != nil {
+	if err := json.Unmarshal(memberJoined.Payload, &evt); err != nil {
 		t.Fatalf("unmarshal outbox payload: %v", err)
 	}
 	if evt.EventID == "" {
@@ -202,6 +201,40 @@ func TestCreateServer_Success_PublishesMemberJoinedForTheOwner(t *testing.T) {
 	}
 }
 
+func TestCreateServer_Success_PublishesChannelCreatedForEachDefaultChannel(t *testing.T) {
+	srv, err, repo, _ := create(t, validParams("Mi Comunidad"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	gotChannelIDs := map[string]bool{}
+	for _, e := range repo.gotOutboxEvents {
+		if e.RoutingKey != channels.RoutingKeyChannelCreated {
+			continue
+		}
+		var evt channels.ChannelCreated
+		if err := json.Unmarshal(e.Payload, &evt); err != nil {
+			t.Fatalf("unmarshal outbox payload: %v", err)
+		}
+		if evt.EventID == "" {
+			t.Error("event_id must not be empty")
+		}
+		if evt.ServerID != srv.ID.String() {
+			t.Errorf("server_id = %q, want %q", evt.ServerID, srv.ID.String())
+		}
+		gotChannelIDs[evt.ChannelID] = true
+	}
+
+	if len(srv.Channels) != 2 {
+		t.Fatalf("expected the fixture to create 2 default channels, got %d", len(srv.Channels))
+	}
+	for _, ch := range srv.Channels {
+		if !gotChannelIDs[ch.ID.String()] {
+			t.Errorf("no channels.channel_created event published for default channel %s (%s)", ch.Name, ch.ID)
+		}
+	}
+}
+
 // CB: the DB write fails (e.g. name taken) -> the whole transaction (server,
 // membership row and outbox event) rolls back, so nothing should have been
 // recorded as persisted.
@@ -210,8 +243,8 @@ func TestCreateServer_RepoFails_DoesNotPublish(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected an error from the repository")
 	}
-	if repo.gotOutboxEvent.RoutingKey != "" {
-		t.Errorf("gotOutboxEvent.RoutingKey = %q, want empty (nothing recorded) when the DB write fails", repo.gotOutboxEvent.RoutingKey)
+	if len(repo.gotOutboxEvents) != 0 {
+		t.Errorf("gotOutboxEvents = %v, want empty (nothing recorded) when the DB write fails", repo.gotOutboxEvents)
 	}
 }
 

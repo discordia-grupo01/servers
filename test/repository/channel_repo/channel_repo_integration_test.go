@@ -84,12 +84,12 @@ func TestChannelRepo_Create_ThenGetByID_ReturnsIt(t *testing.T) {
 	channels, _, servers := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans, []outbox.Event{testOutboxEvent()}); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 
 	ch := channelFixture(srv.ID, "general", nil)
-	if err := channels.Create(ctx, ch); err != nil {
+	if err := channels.Create(ctx, ch, testOutboxEvent()); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 
@@ -114,14 +114,14 @@ func TestChannelRepo_Create_DuplicateNameNoCategory_ErrChannelNameTaken(t *testi
 	channels, _, servers := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans, []outbox.Event{testOutboxEvent()}); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 
-	if err := channels.Create(ctx, channelFixture(srv.ID, "general", nil)); err != nil {
+	if err := channels.Create(ctx, channelFixture(srv.ID, "general", nil), testOutboxEvent()); err != nil {
 		t.Fatalf("first Create: %v", err)
 	}
-	err := channels.Create(ctx, channelFixture(srv.ID, "general", nil))
+	err := channels.Create(ctx, channelFixture(srv.ID, "general", nil), testOutboxEvent())
 	if !errors.Is(err, model.ErrChannelNameTaken) {
 		t.Errorf("err = %v, want ErrChannelNameTaken", err)
 	}
@@ -131,7 +131,7 @@ func TestChannelRepo_Create_DuplicateNameSameCategory_ErrChannelNameTaken(t *tes
 	channels, categories, servers := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans, []outbox.Event{testOutboxEvent()}); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 	cat := model.Category{ID: uuid.New(), ServerID: srv.ID, Name: "Texto", NameKey: service.NameKey("Texto"), CreatedAt: time.Now().UTC().Truncate(time.Millisecond)}
@@ -139,10 +139,10 @@ func TestChannelRepo_Create_DuplicateNameSameCategory_ErrChannelNameTaken(t *tes
 		t.Fatalf("seed category: %v", err)
 	}
 
-	if err := channels.Create(ctx, channelFixture(srv.ID, "anuncios", &cat.ID)); err != nil {
+	if err := channels.Create(ctx, channelFixture(srv.ID, "anuncios", &cat.ID), testOutboxEvent()); err != nil {
 		t.Fatalf("first Create: %v", err)
 	}
-	err := channels.Create(ctx, channelFixture(srv.ID, "anuncios", &cat.ID))
+	err := channels.Create(ctx, channelFixture(srv.ID, "anuncios", &cat.ID), testOutboxEvent())
 	if !errors.Is(err, model.ErrChannelNameTaken) {
 		t.Errorf("err = %v, want ErrChannelNameTaken", err)
 	}
@@ -152,7 +152,7 @@ func TestChannelRepo_Create_SameNameDifferentCategory_Allowed(t *testing.T) {
 	channels, categories, servers := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans, []outbox.Event{testOutboxEvent()}); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 	catA := model.Category{ID: uuid.New(), ServerID: srv.ID, Name: "A", NameKey: service.NameKey("A"), CreatedAt: time.Now().UTC().Truncate(time.Millisecond)}
@@ -164,10 +164,10 @@ func TestChannelRepo_Create_SameNameDifferentCategory_Allowed(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := channels.Create(ctx, channelFixture(srv.ID, "general", &catA.ID)); err != nil {
+	if err := channels.Create(ctx, channelFixture(srv.ID, "general", &catA.ID), testOutboxEvent()); err != nil {
 		t.Fatalf("Create in catA: %v", err)
 	}
-	if err := channels.Create(ctx, channelFixture(srv.ID, "general", &catB.ID)); err != nil {
+	if err := channels.Create(ctx, channelFixture(srv.ID, "general", &catB.ID), testOutboxEvent()); err != nil {
 		t.Errorf("Create in catB should be allowed, got: %v", err)
 	}
 }
@@ -176,11 +176,11 @@ func TestChannelRepo_Update_ChangesNameAndTopic(t *testing.T) {
 	channels, _, servers := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans, []outbox.Event{testOutboxEvent()}); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 	ch := channelFixture(srv.ID, "general", nil)
-	if err := channels.Create(ctx, ch); err != nil {
+	if err := channels.Create(ctx, ch, testOutboxEvent()); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 
@@ -210,15 +210,15 @@ func TestChannelRepo_Delete_RemovesIt(t *testing.T) {
 	channels, _, servers := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans, []outbox.Event{testOutboxEvent()}); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 	ch := channelFixture(srv.ID, "general", nil)
-	if err := channels.Create(ctx, ch); err != nil {
+	if err := channels.Create(ctx, ch, testOutboxEvent()); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 
-	if err := channels.Delete(ctx, ch.ID); err != nil {
+	if err := channels.Delete(ctx, ch.ID, testOutboxEvent()); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
 	if _, err := channels.GetByID(ctx, ch.ID); !errors.Is(err, model.ErrChannelNotFound) {
@@ -228,7 +228,7 @@ func TestChannelRepo_Delete_RemovesIt(t *testing.T) {
 
 func TestChannelRepo_Delete_NotFound_ErrChannelNotFound(t *testing.T) {
 	channels, _, _ := newRepo(t)
-	err := channels.Delete(context.Background(), uuid.New())
+	err := channels.Delete(context.Background(), uuid.New(), testOutboxEvent())
 	if !errors.Is(err, model.ErrChannelNotFound) {
 		t.Errorf("err = %v, want ErrChannelNotFound", err)
 	}
@@ -238,7 +238,7 @@ func TestChannelRepo_MoveToCategory_UpdatesCategoryID(t *testing.T) {
 	channels, categories, servers := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans, []outbox.Event{testOutboxEvent()}); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 	cat := model.Category{ID: uuid.New(), ServerID: srv.ID, Name: "Texto", NameKey: service.NameKey("Texto"), CreatedAt: time.Now().UTC().Truncate(time.Millisecond)}
@@ -246,7 +246,7 @@ func TestChannelRepo_MoveToCategory_UpdatesCategoryID(t *testing.T) {
 		t.Fatalf("seed category: %v", err)
 	}
 	ch := channelFixture(srv.ID, "general", nil)
-	if err := channels.Create(ctx, ch); err != nil {
+	if err := channels.Create(ctx, ch, testOutboxEvent()); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 
@@ -277,7 +277,7 @@ func TestChannelRepo_ListByServerAndCategory_ScopesCorrectly(t *testing.T) {
 	channels, categories, servers := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans, []outbox.Event{testOutboxEvent()}); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 	cat := model.Category{ID: uuid.New(), ServerID: srv.ID, Name: "Texto", NameKey: service.NameKey("Texto"), CreatedAt: time.Now().UTC().Truncate(time.Millisecond)}
@@ -287,10 +287,10 @@ func TestChannelRepo_ListByServerAndCategory_ScopesCorrectly(t *testing.T) {
 
 	inCat := channelFixture(srv.ID, "in-cat", &cat.ID)
 	noCat := channelFixture(srv.ID, "no-cat", nil)
-	if err := channels.Create(ctx, inCat); err != nil {
+	if err := channels.Create(ctx, inCat, testOutboxEvent()); err != nil {
 		t.Fatal(err)
 	}
-	if err := channels.Create(ctx, noCat); err != nil {
+	if err := channels.Create(ctx, noCat, testOutboxEvent()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -315,15 +315,15 @@ func TestChannelRepo_ReorderPositions_UpdatesInOrder(t *testing.T) {
 	channels, _, servers := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans, []outbox.Event{testOutboxEvent()}); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 	a := channelFixture(srv.ID, "a", nil)
 	b := channelFixture(srv.ID, "b", nil)
-	if err := channels.Create(ctx, a); err != nil {
+	if err := channels.Create(ctx, a, testOutboxEvent()); err != nil {
 		t.Fatal(err)
 	}
-	if err := channels.Create(ctx, b); err != nil {
+	if err := channels.Create(ctx, b, testOutboxEvent()); err != nil {
 		t.Fatal(err)
 	}
 
