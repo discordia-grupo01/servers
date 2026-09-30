@@ -8,6 +8,7 @@ import (
 
 	"github.com/discordia-grupo01/servers/internal/config"
 	"github.com/discordia-grupo01/servers/internal/events"
+	"github.com/discordia-grupo01/servers/internal/events/profile_consumer"
 	"github.com/discordia-grupo01/servers/internal/handler"
 	"github.com/discordia-grupo01/servers/internal/iconstore"
 	"github.com/discordia-grupo01/servers/internal/middleware"
@@ -19,6 +20,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/repository/moderation_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/ownership_transfer_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/role_repo"
+	"github.com/discordia-grupo01/servers/internal/repository/user_profile_repo"
 	"github.com/discordia-grupo01/servers/internal/service"
 	"github.com/discordia-grupo01/servers/internal/service/category_service"
 	"github.com/discordia-grupo01/servers/internal/service/channel_service"
@@ -88,6 +90,11 @@ func main() {
 	transferSvc := ownership_transfer_service.New(serverRepo, memberRepo, transferRepo)
 	go ownership_transfer_service.NewExpirer(transferRepo).Start(ctx)
 	go outbox.NewPoller(pool, publisher).Start(ctx)
+	if cfg.RabbitMQURL != "" {
+		go profile_consumer.New(cfg.RabbitMQURL, user_profile_repo.NewUserProfileRepository(pool)).Start(ctx)
+	} else {
+		log.Printf("profile_consumer: RABBITMQ_URL not set, member profiles won't be replicated")
+	}
 	invSvc := invitation.NewService(repository.NewInvitationRepository(pool), serverRepo, memberRepo)
 	categorySvc := category_service.New(serverRepo, categoryRepo, memberRepo)
 	channelSvc := channel_service.New(serverRepo, categoryRepo, channelRepo, memberRepo)
