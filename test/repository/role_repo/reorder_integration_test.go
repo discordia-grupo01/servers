@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/discordia-grupo01/servers/internal/model/role"
+	"github.com/discordia-grupo01/servers/internal/outbox"
 	"github.com/discordia-grupo01/servers/internal/repository/role_repo"
 )
 
@@ -83,7 +84,7 @@ func TestRoleRepo_Reorder_FillsGapsLeftByDeletions(t *testing.T) {
 	ctx := context.Background()
 	roles, servers, _ := newRepo(t)
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans, []outbox.Event{testOutboxEvent()}); err != nil {
 		t.Fatal(err)
 	}
 	a, _ := roles.Create(ctx, roleFixture(srv.ID, "A"))
@@ -153,7 +154,7 @@ func TestRoleRepo_Reorder_CheckGetsTheActorStanding(t *testing.T) {
 	roles, servers, pool := newRepo(t)
 	ownerID := "owner-" + uuid.NewString()
 	srv, chans := serverFixture(ownerID)
-	if err := servers.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans, []outbox.Event{testOutboxEvent()}); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 	top, err := roles.Create(ctx, roleFixture(srv.ID, "Top"))

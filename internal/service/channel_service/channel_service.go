@@ -11,7 +11,10 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/discordia-grupo01/events-contract/channels"
+	"github.com/discordia-grupo01/events-contract/envelope"
 	"github.com/discordia-grupo01/servers/internal/model"
+	"github.com/discordia-grupo01/servers/internal/outbox"
 	"github.com/discordia-grupo01/servers/internal/service"
 )
 
@@ -27,10 +30,10 @@ type Categories interface {
 
 // Repo is the slice of ChannelRepository this service needs.
 type Repo interface {
-	Create(ctx context.Context, ch model.Channel) error
+	Create(ctx context.Context, ch model.Channel, channelCreatedEvent outbox.Event) error
 	GetByID(ctx context.Context, id uuid.UUID) (model.Channel, error)
 	Update(ctx context.Context, id uuid.UUID, name string, topic *string) error
-	Delete(ctx context.Context, id uuid.UUID) error
+	Delete(ctx context.Context, id uuid.UUID, channelDeletedEvent outbox.Event) error
 	MoveToCategory(ctx context.Context, id uuid.UUID, categoryID *uuid.UUID) error
 	ListByServerAndCategory(ctx context.Context, serverID uuid.UUID, categoryID *uuid.UUID) ([]model.Channel, error)
 	ReorderPositions(ctx context.Context, orderedIDs []uuid.UUID) error
@@ -138,10 +141,20 @@ func (s *ChannelService) CreateChannel(ctx context.Context, p CreateChannelParam
 		CategoryID: categoryID,
 		CreatedAt:  time.Now().UTC(),
 	}
-	if err := s.channels.Create(ctx, ch); err != nil {
+
+	evt, err := outbox.New(channels.RoutingKeyChannelCreated, channels.ChannelCreated{
+		Meta:      envelope.Meta{EventID: uuid.NewString(), OccurredAt: ch.CreatedAt},
+		ServerID:  ch.ServerID.String(),
+		ChannelID: ch.ID.String(),
+		Name:      ch.Name,
+		Kind:      string(ch.Kind),
+	})
+	if err != nil {
 		return model.Channel{}, err
 	}
-	// TODO(events): publicar "channels.channel_created" en discordia.events cuando exista un consumidor real.
+	if err := s.channels.Create(ctx, ch, evt); err != nil {
+		return model.Channel{}, err
+	}
 	return ch, nil
 }
 
@@ -198,10 +211,6 @@ type DeleteChannelParams struct {
 	UserID    string
 }
 
-// DeleteChannel removes the channel's own row. It does not (and today
-// cannot) purge its message history: that lives in the messaging service,
-// which has no consumer yet -- see the TODO(events) below, same pattern
-// already used by role_service/member_role_service for other mutations.
 func (s *ChannelService) DeleteChannel(ctx context.Context, p DeleteChannelParams) error {
 	ch, err := s.channels.GetByID(ctx, p.ChannelID)
 	if err != nil {
@@ -220,10 +229,17 @@ func (s *ChannelService) DeleteChannel(ctx context.Context, p DeleteChannelParam
 		return err
 	}
 
-	if err := s.channels.Delete(ctx, p.ChannelID); err != nil {
+	evt, err := outbox.New(channels.RoutingKeyChannelDeleted, channels.ChannelDeleted{
+		Meta:      envelope.Meta{EventID: uuid.NewString(), OccurredAt: time.Now().UTC()},
+		ServerID:  ch.ServerID.String(),
+		ChannelID: ch.ID.String(),
+	})
+	if err != nil {
 		return err
 	}
-	// TODO(events): publicar "channels.channel_deleted" en discordia.events cuando exista un consumidor real.
+	if err := s.channels.Delete(ctx, p.ChannelID, evt); err != nil {
+		return err
+	}
 	return nil
 }
 
