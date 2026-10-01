@@ -43,7 +43,7 @@ type fakeRepo struct {
 	updateCalls int
 }
 
-func (f *fakeRepo) CreateServer(_ context.Context, s model.Server, _ []model.Category, _ []model.Channel, _ outbox.Event) error {
+func (f *fakeRepo) CreateServer(_ context.Context, s model.Server, _ []model.Category, _ []model.Channel, _ []outbox.Event) error {
 	f.calls++
 	if f.err != nil {
 		return f.err

@@ -7,6 +7,7 @@ import (
 
 	"github.com/discordia-grupo01/servers/internal/model"
 	"github.com/discordia-grupo01/servers/internal/model/role"
+	"github.com/discordia-grupo01/servers/internal/outbox"
 	"github.com/discordia-grupo01/servers/internal/service/channel_service"
 )
 
@@ -37,9 +38,10 @@ func (f *fakeCategories) GetByID(_ context.Context, _ uuid.UUID) (model.Category
 }
 
 type fakeChannels struct {
-	createErr   error
-	created     model.Channel
-	createCalls int
+	createErr      error
+	created        model.Channel
+	createCalls    int
+	gotCreateEvent outbox.Event
 
 	getByIDChannel model.Channel
 	getByIDErr     error
@@ -49,9 +51,10 @@ type fakeChannels struct {
 	updateName  string
 	updateTopic *string
 
-	deleteErr    error
-	deletedID    uuid.UUID
-	deleteCalled bool
+	deleteErr      error
+	deletedID      uuid.UUID
+	deleteCalled   bool
+	gotDeleteEvent outbox.Event
 
 	moveErr       error
 	movedID       uuid.UUID
@@ -65,12 +68,13 @@ type fakeChannels struct {
 	reorderedIDs []uuid.UUID
 }
 
-func (f *fakeChannels) Create(_ context.Context, ch model.Channel) error {
+func (f *fakeChannels) Create(_ context.Context, ch model.Channel, evt outbox.Event) error {
 	f.createCalls++
 	if f.createErr != nil {
 		return f.createErr
 	}
 	f.created = ch
+	f.gotCreateEvent = evt
 	return nil
 }
 
@@ -88,10 +92,14 @@ func (f *fakeChannels) Update(_ context.Context, id uuid.UUID, name string, topi
 	return f.updateErr
 }
 
-func (f *fakeChannels) Delete(_ context.Context, id uuid.UUID) error {
+func (f *fakeChannels) Delete(_ context.Context, id uuid.UUID, evt outbox.Event) error {
 	f.deleteCalled = true
 	f.deletedID = id
-	return f.deleteErr
+	if f.deleteErr != nil {
+		return f.deleteErr
+	}
+	f.gotDeleteEvent = evt
+	return nil
 }
 
 func (f *fakeChannels) MoveToCategory(_ context.Context, id uuid.UUID, categoryID *uuid.UUID) error {

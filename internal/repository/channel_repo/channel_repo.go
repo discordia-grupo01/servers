@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/discordia-grupo01/servers/internal/model"
+	"github.com/discordia-grupo01/servers/internal/outbox"
 )
 
 const pgUniqueViolation = "23505"
@@ -37,19 +38,21 @@ func NewChannelRepository(pool *pgxpool.Pool) *ChannelRepository {
 	return &ChannelRepository{pool: pool}
 }
 
-func (r *ChannelRepository) Create(ctx context.Context, ch model.Channel) error {
-	_, err := r.pool.Exec(ctx, `
-		INSERT INTO channels (id, server_id, name, kind, position, category_id, topic, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-		ch.ID, ch.ServerID, ch.Name, string(ch.Kind), ch.Position, ch.CategoryID, ch.Topic, ch.CreatedAt,
-	)
-	if err != nil {
-		if taken := nameTakenErr(err); taken != nil {
-			return taken
+func (r *ChannelRepository) Create(ctx context.Context, ch model.Channel, channelCreatedEvent outbox.Event) error {
+	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `
+			INSERT INTO channels (id, server_id, name, kind, position, category_id, topic, created_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+			ch.ID, ch.ServerID, ch.Name, string(ch.Kind), ch.Position, ch.CategoryID, ch.Topic, ch.CreatedAt,
+		)
+		if err != nil {
+			if taken := nameTakenErr(err); taken != nil {
+				return taken
+			}
+			return fmt.Errorf("insert channel: %w", err)
 		}
-		return fmt.Errorf("insert channel: %w", err)
-	}
-	return nil
+		return outbox.Insert(ctx, tx, channelCreatedEvent)
+	})
 }
 
 func (r *ChannelRepository) GetByID(ctx context.Context, id uuid.UUID) (model.Channel, error) {
@@ -89,15 +92,17 @@ func (r *ChannelRepository) Update(ctx context.Context, id uuid.UUID, name strin
 	return nil
 }
 
-func (r *ChannelRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	tag, err := r.pool.Exec(ctx, `DELETE FROM channels WHERE id = $1`, id)
-	if err != nil {
-		return fmt.Errorf("delete channel: %w", err)
-	}
-	if tag.RowsAffected() == 0 {
-		return model.ErrChannelNotFound
-	}
-	return nil
+func (r *ChannelRepository) Delete(ctx context.Context, id uuid.UUID, channelDeletedEvent outbox.Event) error {
+	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx, `DELETE FROM channels WHERE id = $1`, id)
+		if err != nil {
+			return fmt.Errorf("delete channel: %w", err)
+		}
+		if tag.RowsAffected() == 0 {
+			return model.ErrChannelNotFound
+		}
+		return outbox.Insert(ctx, tx, channelDeletedEvent)
+	})
 }
 
 func (r *ChannelRepository) MoveToCategory(ctx context.Context, id uuid.UUID, categoryID *uuid.UUID) error {

@@ -2,11 +2,13 @@ package channel_service_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
 	"github.com/google/uuid"
 
+	"github.com/discordia-grupo01/events-contract/channels"
 	"github.com/discordia-grupo01/servers/internal/model"
 	"github.com/discordia-grupo01/servers/internal/service/channel_service"
 )
@@ -399,5 +401,100 @@ func TestReorderChannels_NotAdmin_ErrForbidden(t *testing.T) {
 	})
 	if !errors.Is(err, model.ErrForbiddenNotAdmin) {
 		t.Errorf("err = %v, want ErrForbiddenNotAdmin", err)
+	}
+}
+
+func TestCreateChannel_PublishesChannelCreated(t *testing.T) {
+	srv := ownerServer()
+	fake := &fakeChannels{}
+	svc := newService(&fakeServers{server: srv}, &fakeCategories{}, fake)
+
+	ch, err := svc.CreateChannel(context.Background(), channel_service.CreateChannelParams{
+		ServerID: srv.ID, Name: "general", Kind: "text", UserID: testOwner,
+	})
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+
+	if fake.gotCreateEvent.RoutingKey != channels.RoutingKeyChannelCreated {
+		t.Errorf("routing key = %q, want %q", fake.gotCreateEvent.RoutingKey, channels.RoutingKeyChannelCreated)
+	}
+	var evt channels.ChannelCreated
+	if err := json.Unmarshal(fake.gotCreateEvent.Payload, &evt); err != nil {
+		t.Fatalf("unmarshal outbox payload: %v", err)
+	}
+	if evt.EventID == "" {
+		t.Error("event_id must not be empty")
+	}
+	if evt.ServerID != srv.ID.String() {
+		t.Errorf("server_id = %q, want %q", evt.ServerID, srv.ID.String())
+	}
+	if evt.ChannelID != ch.ID.String() {
+		t.Errorf("channel_id = %q, want %q", evt.ChannelID, ch.ID.String())
+	}
+	if evt.Name != "general" {
+		t.Errorf("name = %q, want %q", evt.Name, "general")
+	}
+	if evt.Kind != "text" {
+		t.Errorf("kind = %q, want %q", evt.Kind, "text")
+	}
+	if evt.OccurredAt.IsZero() {
+		t.Error("occurred_at must not be zero")
+	}
+}
+
+func TestCreateChannel_InvalidName_DoesNotPublish(t *testing.T) {
+	fake := &fakeChannels{}
+	svc := newService(&fakeServers{server: ownerServer()}, &fakeCategories{}, fake)
+
+	_, err := svc.CreateChannel(context.Background(), channel_service.CreateChannelParams{
+		ServerID: uuid.New(), Name: "   ", Kind: "text", UserID: testOwner,
+	})
+	if !errors.Is(err, model.ErrChannelNameRequired) {
+		t.Fatalf("err = %v, want ErrChannelNameRequired", err)
+	}
+	if fake.createCalls != 0 {
+		t.Errorf("createCalls = %d, want 0 -- nothing should reach the repo", fake.createCalls)
+	}
+}
+
+func TestDeleteChannel_PublishesChannelDeleted(t *testing.T) {
+	srv := ownerServer()
+	ch := model.Channel{ID: uuid.New(), ServerID: srv.ID}
+	fake := &fakeChannels{getByIDChannel: ch}
+	svc := newService(&fakeServers{server: srv}, &fakeCategories{}, fake)
+
+	if err := svc.DeleteChannel(context.Background(), channel_service.DeleteChannelParams{
+		ChannelID: ch.ID, UserID: testOwner,
+	}); err != nil {
+		t.Fatalf("DeleteChannel: %v", err)
+	}
+
+	if fake.gotDeleteEvent.RoutingKey != channels.RoutingKeyChannelDeleted {
+		t.Errorf("routing key = %q, want %q", fake.gotDeleteEvent.RoutingKey, channels.RoutingKeyChannelDeleted)
+	}
+	var evt channels.ChannelDeleted
+	if err := json.Unmarshal(fake.gotDeleteEvent.Payload, &evt); err != nil {
+		t.Fatalf("unmarshal outbox payload: %v", err)
+	}
+	if evt.ChannelID != ch.ID.String() || evt.ServerID != srv.ID.String() {
+		t.Errorf("evt = %+v, want channel_id=%q server_id=%q", evt, ch.ID, srv.ID)
+	}
+}
+
+func TestDeleteChannel_NotAdmin_DoesNotPublish(t *testing.T) {
+	srv := ownerServer()
+	ch := model.Channel{ID: uuid.New(), ServerID: srv.ID}
+	fake := &fakeChannels{getByIDChannel: ch}
+	svc := newService(&fakeServers{server: srv}, &fakeCategories{}, fake)
+
+	err := svc.DeleteChannel(context.Background(), channel_service.DeleteChannelParams{
+		ChannelID: ch.ID, UserID: "someone-else",
+	})
+	if !errors.Is(err, model.ErrForbiddenNotAdmin) {
+		t.Fatalf("err = %v, want ErrForbiddenNotAdmin", err)
+	}
+	if fake.deleteCalled {
+		t.Error("repo.Delete must not be called when the actor lacks permission")
 	}
 }
