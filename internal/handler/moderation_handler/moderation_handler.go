@@ -101,7 +101,7 @@ func (h *Handler) Unban(c *gin.Context) {
 
 // ListBans godoc
 // @Summary      List the server's bans
-// @Description  Requires BAN_MEMBERS (the owner and administrators hold it implicitly). Newest first, paginated.
+// @Description  Requires BAN_MEMBERS (the owner and administrators hold it implicitly). Newest first, paginated. Each ban carries the banned user's public profile (name, avatar, description, status), replicated from identify; profile is null until it has been replicated, and may lag a few seconds behind a profile edit. A banned user is no longer a member, so this is the only place to get it.
 // @Tags         moderation
 // @Produce      json
 // @Security     BearerAuth
