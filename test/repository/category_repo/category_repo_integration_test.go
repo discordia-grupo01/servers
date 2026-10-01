@@ -84,7 +84,7 @@ func TestCategoryRepo_Create_ThenGetByID_ReturnsIt(t *testing.T) {
 	categories, servers, _ := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans, []outbox.Event{testOutboxEvent()}); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 
@@ -106,7 +106,7 @@ func TestCategoryRepo_Create_DuplicateNameSameServer_ErrCategoryNameTaken(t *tes
 	categories, servers, _ := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans, []outbox.Event{testOutboxEvent()}); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 
@@ -124,7 +124,7 @@ func TestCategoryRepo_Create_DuplicateNameKeyDifferentCaseAndAccents_ErrCategory
 	categories, servers, _ := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans, []outbox.Event{testOutboxEvent()}); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 
@@ -143,10 +143,10 @@ func TestCategoryRepo_Create_SameNameDifferentServer_Succeeds(t *testing.T) {
 	ctx := context.Background()
 	srvA, chansA := serverFixture("owner-" + uuid.NewString())
 	srvB, chansB := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srvA, nil, chansA, testOutboxEvent()); err != nil {
+	if err := servers.CreateServer(ctx, srvA, nil, chansA, []outbox.Event{testOutboxEvent()}); err != nil {
 		t.Fatalf("seed server A: %v", err)
 	}
-	if err := servers.CreateServer(ctx, srvB, nil, chansB, testOutboxEvent()); err != nil {
+	if err := servers.CreateServer(ctx, srvB, nil, chansB, []outbox.Event{testOutboxEvent()}); err != nil {
 		t.Fatalf("seed server B: %v", err)
 	}
 
@@ -162,7 +162,7 @@ func TestCategoryRepo_Update_DuplicateName_ErrCategoryNameTaken(t *testing.T) {
 	categories, servers, _ := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans, []outbox.Event{testOutboxEvent()}); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 
@@ -184,7 +184,7 @@ func TestCategoryRepo_Create_WithIsFallback_RoundTripsThroughGetByID(t *testing.
 	categories, servers, _ := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans, []outbox.Event{testOutboxEvent()}); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 
@@ -207,7 +207,7 @@ func TestCategoryRepo_Create_WithoutIsFallback_StaysFalse(t *testing.T) {
 	categories, servers, _ := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans, []outbox.Event{testOutboxEvent()}); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 
@@ -238,10 +238,10 @@ func TestCategoryRepo_ListByServer_ReturnsOnlyThatServersCategories_OrderedByPos
 	ctx := context.Background()
 	srvA, chA := serverFixture("owner-" + uuid.NewString())
 	srvB, chB := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srvA, nil, chA, testOutboxEvent()); err != nil {
+	if err := servers.CreateServer(ctx, srvA, nil, chA, []outbox.Event{testOutboxEvent()}); err != nil {
 		t.Fatalf("seed server A: %v", err)
 	}
-	if err := servers.CreateServer(ctx, srvB, nil, chB, testOutboxEvent()); err != nil {
+	if err := servers.CreateServer(ctx, srvB, nil, chB, []outbox.Event{testOutboxEvent()}); err != nil {
 		t.Fatalf("seed server B: %v", err)
 	}
 
@@ -273,7 +273,7 @@ func TestCategoryRepo_Update_ChangesName(t *testing.T) {
 	categories, servers, _ := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans, []outbox.Event{testOutboxEvent()}); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 	cat := categoryFixture(srv.ID, "old-name", 0)
@@ -306,7 +306,7 @@ func TestCategoryRepo_ReorderPositions_UpdatesInOrder(t *testing.T) {
 	categories, servers, _ := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans, []outbox.Event{testOutboxEvent()}); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 

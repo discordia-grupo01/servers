@@ -8,13 +8,14 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/discordia-grupo01/servers/internal/model"
+	"github.com/discordia-grupo01/servers/internal/outbox"
 )
 
 func TestRoleRepo_Delete_ThenGetByID_NotFound(t *testing.T) {
 	roles, servers, _ := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans, []outbox.Event{testOutboxEvent()}); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 	rl := roleFixture(srv.ID, "Moderator")
@@ -44,7 +45,7 @@ func TestRoleRepo_Delete_IsServerDefault_Rejected(t *testing.T) {
 	roles, servers, pool := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans, []outbox.Event{testOutboxEvent()}); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 	rl := roleFixture(srv.ID, "Moderator")
@@ -76,7 +77,7 @@ func TestDeleteRole_WithAssignments_CascadesMemberRoles(t *testing.T) {
 	roles, servers, pool := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("owner-" + uuid.NewString())
-	if err := servers.CreateServer(ctx, srv, nil, chans, testOutboxEvent()); err != nil {
+	if err := servers.CreateServer(ctx, srv, nil, chans, []outbox.Event{testOutboxEvent()}); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 	rl := roleFixture(srv.ID, "Moderator")

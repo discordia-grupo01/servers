@@ -17,6 +17,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/middleware"
 	"github.com/discordia-grupo01/servers/internal/model"
 	"github.com/discordia-grupo01/servers/internal/model/moderation"
+	"github.com/discordia-grupo01/servers/internal/model/userprofile"
 	"github.com/discordia-grupo01/servers/internal/service/moderation_service"
 )
 
@@ -205,6 +206,32 @@ func TestListBans_Returns200WithThePage(t *testing.T) {
 	}
 	if len(got.Bans) != 2 || got.Bans[0].UserID != "a" || got.Total != 5 || got.Limit != 2 || got.Offset != 2 {
 		t.Errorf("body = %+v", got)
+	}
+}
+
+func TestListBans_IncludesTheBannedUsersProfile(t *testing.T) {
+	serverID := uuid.New()
+	f := &fakeModeration{listResult: moderation.BanPage{
+		Bans: []moderation.Ban{
+			{ServerID: serverID, UserID: "a", Profile: &userprofile.Profile{UserID: "a", Name: "Manu", AvatarURL: "https://cdn/a.png", Description: "hola", StatusText: "jugando", StatusEmoji: "🎮"}},
+			{ServerID: serverID, UserID: "b"},
+		},
+		Total: 2, Limit: 20,
+	}}
+	w := do(t, newRouter(f), http.MethodGet, bansPath(serverID), testUser, "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
+	}
+	var got moderation.BanListResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	want := model.MemberProfileResponse{Name: "Manu", AvatarURL: "https://cdn/a.png", Description: "hola", StatusText: "jugando", StatusEmoji: "🎮"}
+	if got.Bans[0].Profile == nil || *got.Bans[0].Profile != want {
+		t.Errorf("first profile = %+v, want %+v", got.Bans[0].Profile, want)
+	}
+	if got.Bans[1].Profile != nil {
+		t.Errorf("second profile = %+v, want null while not replicated", got.Bans[1].Profile)
 	}
 }
 

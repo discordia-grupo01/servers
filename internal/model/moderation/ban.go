@@ -10,6 +10,9 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+
+	"github.com/discordia-grupo01/servers/internal/model"
+	"github.com/discordia-grupo01/servers/internal/model/userprofile"
 )
 
 const (
@@ -32,6 +35,7 @@ type Ban struct {
 	// BannedBy is nil for bans created before who banned was recorded.
 	BannedBy *string
 	BannedAt time.Time
+	Profile  *userprofile.Profile
 }
 
 // NormalizeReason trims raw and validates it. A missing or blank reason is
@@ -66,11 +70,12 @@ type BanPage struct {
 }
 
 type BanResponse struct {
-	ServerID string    `json:"server_id"`
-	UserID   string    `json:"user_id"`
-	Reason   *string   `json:"reason"`
-	BannedBy *string   `json:"banned_by"`
-	BannedAt time.Time `json:"banned_at"`
+	ServerID string                       `json:"server_id"`
+	UserID   string                       `json:"user_id"`
+	Reason   *string                      `json:"reason"`
+	BannedBy *string                      `json:"banned_by"`
+	BannedAt time.Time                    `json:"banned_at"`
+	Profile  *model.MemberProfileResponse `json:"profile"`
 }
 
 func ToResponse(b Ban) BanResponse {
@@ -80,6 +85,7 @@ func ToResponse(b Ban) BanResponse {
 		Reason:   b.Reason,
 		BannedBy: b.BannedBy,
 		BannedAt: b.BannedAt,
+		Profile:  model.NewMemberProfileResponse(b.Profile),
 	}
 }
 

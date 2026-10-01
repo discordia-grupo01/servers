@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
+	channelevents "github.com/discordia-grupo01/events-contract/channels"
 	"github.com/discordia-grupo01/events-contract/envelope"
 	"github.com/discordia-grupo01/events-contract/membership"
 	"github.com/discordia-grupo01/servers/internal/iconstore"
@@ -18,7 +19,7 @@ import (
 )
 
 type Repo interface {
-	CreateServer(ctx context.Context, srv model.Server, categories []model.Category, channels []model.Channel, memberJoinedEvent outbox.Event) error
+	CreateServer(ctx context.Context, srv model.Server, categories []model.Category, channels []model.Channel, outboxEvents []outbox.Event) error
 	ListForUser(ctx context.Context, userID string) ([]model.Server, error)
 	GetByID(ctx context.Context, id uuid.UUID) (model.Server, error)
 	UpdateServer(ctx context.Context, id uuid.UUID, name, nameKey string, iconURL, bannerURL *string) error
@@ -138,7 +139,22 @@ func (s *Service) CreateServer(ctx context.Context, p CreateServerParams) (model
 		return model.Server{}, err
 	}
 
-	if err := s.repo.CreateServer(ctx, srv, categories, channels, memberJoinedEvent); err != nil {
+	outboxEvents := []outbox.Event{memberJoinedEvent}
+	for _, ch := range channels {
+		channelCreatedEvent, err := outbox.New(channelevents.RoutingKeyChannelCreated, channelevents.ChannelCreated{
+			Meta:      envelope.Meta{EventID: uuid.NewString(), OccurredAt: now},
+			ServerID:  ch.ServerID.String(),
+			ChannelID: ch.ID.String(),
+			Name:      ch.Name,
+			Kind:      string(ch.Kind),
+		})
+		if err != nil {
+			return model.Server{}, err
+		}
+		outboxEvents = append(outboxEvents, channelCreatedEvent)
+	}
+
+	if err := s.repo.CreateServer(ctx, srv, categories, channels, outboxEvents); err != nil {
 		if hash, ok := iconstore.HashFromURL(url); ok {
 			_ = s.icons.Delete(iconstore.StorageKey(id.String(), hash))
 		}

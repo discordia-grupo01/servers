@@ -31,7 +31,7 @@ func NewServerRepository(pool *pgxpool.Pool) *ServerRepository {
 // membership, all in one transaction -- so the MemberJoined event is
 // durable the instant the server exists, never dependent on a subsequent
 // RabbitMQ publish succeeding.
-func (r *ServerRepository) CreateServer(ctx context.Context, srv model.Server, categories []model.Category, channels []model.Channel, memberJoinedEvent outbox.Event) error {
+func (r *ServerRepository) CreateServer(ctx context.Context, srv model.Server, categories []model.Category, channels []model.Channel, outboxEvents []outbox.Event) error {
 	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO servers (id, name, name_key, icon_url, owner_id, created_at)
@@ -74,7 +74,12 @@ func (r *ServerRepository) CreateServer(ctx context.Context, srv model.Server, c
 			return fmt.Errorf("insert owner membership: %w", err)
 		}
 
-		return outbox.Insert(ctx, tx, memberJoinedEvent)
+		for _, evt := range outboxEvents {
+			if err := outbox.Insert(ctx, tx, evt); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 }
 

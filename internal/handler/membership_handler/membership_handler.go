@@ -100,12 +100,7 @@ func (h *Handler) ListMembers(c *gin.Context) {
 	for i, m := range members {
 		resp.Members[i] = model.MemberResponse{
 			UserID: m.UserID, IsOwner: m.IsOwner, JoinedAt: m.JoinedAt,
-		}
-		if m.Profile != nil {
-			resp.Members[i].Profile = &model.MemberProfileResponse{
-				Name: m.Profile.Name, AvatarURL: m.Profile.AvatarURL, Description: m.Profile.Description,
-				StatusText: m.Profile.StatusText, StatusEmoji: m.Profile.StatusEmoji,
-			}
+			Profile: model.NewMemberProfileResponse(m.Profile),
 		}
 	}
 	c.JSON(http.StatusOK, resp)
