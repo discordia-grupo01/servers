@@ -52,6 +52,7 @@ func newRepo(t *testing.T) (*moderation_repo.Repository, *pgxpool.Pool) {
 		"../../../migrations/0011_outbox_events.up.sql",
 		"../../../migrations/0015_role_positions.up.sql",
 		"../../../migrations/0016_server_bans_banned_by.up.sql",
+		"../../../migrations/0017_user_profiles.up.sql",
 	} {
 		schema, err := os.ReadFile(file)
 		if err != nil {
@@ -65,7 +66,7 @@ func newRepo(t *testing.T) (*moderation_repo.Repository, *pgxpool.Pool) {
 }
 
 func dropAllTestTables(ctx context.Context, pool *pgxpool.Pool) {
-	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS outbox_events, ownership_transfers, member_roles, roles, server_bans, invitations, server_members, channels, servers CASCADE`)
+	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS user_profiles, outbox_events, ownership_transfers, member_roles, roles, server_bans, invitations, server_members, channels, servers CASCADE`)
 }
 
 func env(k, def string) string {
