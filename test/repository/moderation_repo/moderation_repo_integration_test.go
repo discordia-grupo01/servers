@@ -14,6 +14,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/model"
 	"github.com/discordia-grupo01/servers/internal/model/moderation"
 	"github.com/discordia-grupo01/servers/internal/model/role"
+	"github.com/discordia-grupo01/servers/internal/model/userprofile"
 	"github.com/discordia-grupo01/servers/internal/outbox"
 	"github.com/discordia-grupo01/servers/internal/repository"
 	"github.com/discordia-grupo01/servers/internal/repository/moderation_repo"
@@ -384,6 +385,36 @@ func TestListBans_NewestFirstPaginatedAndScopedToTheServer(t *testing.T) {
 	}
 	if len(bans) != 2 || bans[0].UserID != "oldest" || bans[1].UserID != "legacy" || bans[1].BannedBy != nil {
 		t.Errorf("page 2 = %v", userIDs(bans))
+	}
+}
+
+// A banned user is no longer a member, so ListBans is the only place their
+// replicated profile can come from. A user whose profile hasn't arrived yet
+// still shows up, with a nil Profile, instead of being dropped from the page.
+func TestListBans_JoinsReplicatedProfiles(t *testing.T) {
+	repo, pool := newRepo(t)
+	ctx := context.Background()
+	serverID := seedServer(ctx, t, pool)
+	base := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+	exec(ctx, t, pool, `INSERT INTO server_bans (server_id, user_id, banned_at) VALUES ($1, 'with-profile', $2), ($1, 'no-profile', $3)`,
+		serverID, base.Add(time.Hour), base)
+	exec(ctx, t, pool, `
+		INSERT INTO user_profiles (user_id, name, avatar_url, description, status_text, status_emoji, version)
+		VALUES ('with-profile', 'Manu', 'https://cdn/a.png', 'hola', 'jugando', '🎮', 4)`)
+
+	bans, total, err := repo.ListBans(ctx, serverID, 10, 0)
+	if err != nil {
+		t.Fatalf("ListBans: %v", err)
+	}
+	if total != 2 || len(bans) != 2 {
+		t.Fatalf("total = %d, len = %d; want 2, 2", total, len(bans))
+	}
+	want := userprofile.Profile{UserID: "with-profile", Name: "Manu", AvatarURL: "https://cdn/a.png", Description: "hola", StatusText: "jugando", StatusEmoji: "🎮", Version: 4}
+	if bans[0].UserID != "with-profile" || bans[0].Profile == nil || *bans[0].Profile != want {
+		t.Errorf("first ban = %+v, want profile %+v", bans[0], want)
+	}
+	if bans[1].UserID != "no-profile" || bans[1].Profile != nil {
+		t.Errorf("second ban = %+v, want nil profile", bans[1])
 	}
 }
 

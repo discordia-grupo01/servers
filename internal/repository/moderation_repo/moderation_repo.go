@@ -15,6 +15,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/model"
 	"github.com/discordia-grupo01/servers/internal/model/moderation"
 	"github.com/discordia-grupo01/servers/internal/model/role"
+	"github.com/discordia-grupo01/servers/internal/model/userprofile"
 	"github.com/discordia-grupo01/servers/internal/outbox"
 	"github.com/discordia-grupo01/servers/internal/repository"
 )
@@ -150,7 +151,8 @@ func (r *Repository) UnbanMember(ctx context.Context, serverID uuid.UUID, userID
 }
 
 // ListBans returns a page of serverID's bans, newest first, and the total
-// number of bans.
+// number of bans. Each ban carries the banned user's replicated public
+// profile, or a nil Profile if it hasn't arrived yet.
 func (r *Repository) ListBans(ctx context.Context, serverID uuid.UUID, limit, offset int) ([]moderation.Ban, int, error) {
 	var total int
 	if err := r.pool.QueryRow(ctx,
@@ -160,10 +162,12 @@ func (r *Repository) ListBans(ctx context.Context, serverID uuid.UUID, limit, of
 	}
 
 	rows, err := r.pool.Query(ctx, `
-		SELECT server_id, user_id, reason, banned_by, banned_at
-		  FROM server_bans
-		 WHERE server_id = $1
-		 ORDER BY banned_at DESC, user_id
+		SELECT b.server_id, b.user_id, b.reason, b.banned_by, b.banned_at,
+		       p.user_id, p.name, p.avatar_url, p.description, p.status_text, p.status_emoji, p.version
+		  FROM server_bans b
+		  LEFT JOIN user_profiles p ON p.user_id = b.user_id
+		 WHERE b.server_id = $1
+		 ORDER BY b.banned_at DESC, b.user_id
 		 LIMIT $2 OFFSET $3`,
 		serverID, limit, offset,
 	)
@@ -175,8 +179,21 @@ func (r *Repository) ListBans(ctx context.Context, serverID uuid.UUID, limit, of
 	bans := make([]moderation.Ban, 0)
 	for rows.Next() {
 		var b moderation.Ban
-		if err := rows.Scan(&b.ServerID, &b.UserID, &b.Reason, &b.BannedBy, &b.BannedAt); err != nil {
+		var (
+			profileUserID                                         *string
+			name, avatarURL, description, statusText, statusEmoji *string
+			version                                               *int64
+		)
+		if err := rows.Scan(&b.ServerID, &b.UserID, &b.Reason, &b.BannedBy, &b.BannedAt,
+			&profileUserID, &name, &avatarURL, &description, &statusText, &statusEmoji, &version,
+		); err != nil {
 			return nil, 0, fmt.Errorf("scan ban: %w", err)
+		}
+		if profileUserID != nil {
+			b.Profile = &userprofile.Profile{
+				UserID: *profileUserID, Name: *name, AvatarURL: *avatarURL, Description: *description,
+				StatusText: *statusText, StatusEmoji: *statusEmoji, Version: *version,
+			}
 		}
 		bans = append(bans, b)
 	}

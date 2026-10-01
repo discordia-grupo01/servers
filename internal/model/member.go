@@ -39,6 +39,18 @@ type MemberProfileResponse struct {
 	StatusEmoji string `json:"status_emoji"`
 }
 
+// NewMemberProfileResponse maps a replicated profile to its response, or nil
+// when the profile hasn't arrived yet.
+func NewMemberProfileResponse(p *userprofile.Profile) *MemberProfileResponse {
+	if p == nil {
+		return nil
+	}
+	return &MemberProfileResponse{
+		Name: p.Name, AvatarURL: p.AvatarURL, Description: p.Description,
+		StatusText: p.StatusText, StatusEmoji: p.StatusEmoji,
+	}
+}
+
 type MemberListResponse struct {
 	Members []MemberResponse `json:"members"`
 	Total   int              `json:"total"`
