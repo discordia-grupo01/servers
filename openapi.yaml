@@ -225,6 +225,46 @@ paths:
       summary: Move a channel to a category
       tags:
         - channels
+  "/v1/channels/{channelId}/voice-access":
+    get:
+      description: Confirms that the authenticated user can connect to a voice channel.
+      parameters:
+        - description: Voice channel ID
+          in: path
+          name: channelId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/voice_access_handler.response"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+      security:
+        - BearerAuth: []
+      summary: Check voice channel access
+      tags:
+        - voice
   "/v1/invites/{code}":
     delete:
       description: "Administrators revoke any invitation of the server; any member can
@@ -2283,5 +2323,14 @@ components:
         server_id:
           type: string
         updated_at:
+          type: string
+      type: object
+    voice_access_handler.response:
+      properties:
+        allowed:
+          type: boolean
+        channel_id:
+          type: string
+        server_id:
           type: string
       type: object
