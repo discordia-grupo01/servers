@@ -53,6 +53,7 @@ func newRepo(t *testing.T) (*role_repo.RoleRepository, *repository.ServerReposit
 		"../../../migrations/0005_default_role.up.sql",
 		"../../../migrations/0011_outbox_events.up.sql",
 		"../../../migrations/0015_role_positions.up.sql",
+		"../../../migrations/0019_everyone_role.up.sql",
 	} {
 		schema, err := os.ReadFile(file)
 		if err != nil {
@@ -74,6 +75,16 @@ func serverFixture(owner string) (model.Server, []model.Channel) {
 func roleFixture(serverID uuid.UUID, name string) role.Role {
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	return role.Role{ID: uuid.New(), ServerID: serverID, Name: name, Color: "#FF00AA", Permissions: 0, CreatedAt: now, UpdatedAt: now}
+}
+
+func withoutEveryone(roles []role.Role) []role.Role {
+	out := make([]role.Role, 0, len(roles))
+	for _, rl := range roles {
+		if !rl.IsEveryone {
+			out = append(out, rl)
+		}
+	}
+	return out
 }
 
 func TestRoleRepo_Create_ThenGetByID_ReturnsIt(t *testing.T) {
@@ -132,7 +143,9 @@ func TestRoleRepo_ListByServer_ReturnsOnlyThatServersRoles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListByServer: %v", err)
 	}
-	if len(got) != 2 {
+	// +1 for @everyone, which CreateServer now adds to every server
+	// automatically -- not one of the two roles this test created by hand.
+	if got = withoutEveryone(got); len(got) != 2 {
 		t.Fatalf("got %d roles, want 2", len(got))
 	}
 }

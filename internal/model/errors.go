@@ -20,6 +20,8 @@ var (
 	ErrForbiddenNotMember = errors.New("you must be a member of this server to view this")
 	ErrForbiddenNotAdmin  = errors.New("you must be a server administrator to perform this action")
 
+	ErrDeleteConfirmationMismatch = errors.New("the confirmation does not match the server name")
+
 	ErrCannotRemoveOwnAdmin = errors.New("you cannot remove the administrator permission from yourself")
 
 	ErrLeaveForbidden   = errors.New("you can only remove your own membership")
@@ -46,6 +48,8 @@ var (
 	ErrRoleReorderAboveOwn = errors.New("you can only reorder roles below your highest role")
 	ErrRoleAboveOwn        = errors.New("you can only manage roles below your highest role")
 	ErrPermissionNotHeld   = errors.New("you cannot grant permissions you do not have")
+
+	ErrEveryoneRoleIsAutomatic = errors.New("@everyone is managed automatically: it can't be deleted, renamed, recolored, or assigned/unassigned by hand")
 
 	ErrForbiddenMissingPermission = errors.New("you do not have permission to perform this action")
 	ErrBanTargetRequired          = errors.New("user_id must be provided")

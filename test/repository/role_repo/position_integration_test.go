@@ -118,7 +118,7 @@ func TestRoleRepo_ListByServer_OrdersByPosition(t *testing.T) {
 		t.Fatalf("ListByServer: %v", err)
 	}
 	var names string
-	for _, rl := range got {
+	for _, rl := range withoutEveryone(got) {
 		names += fmt.Sprintf("%s%d ", rl.Name, rl.Position)
 	}
 	if names != "C1 B2 A3 " {
@@ -154,6 +154,7 @@ func TestRoleRepo_Create_ConcurrentCreationsGetDistinctPositions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListByServer: %v", err)
 	}
+	got = withoutEveryone(got)
 	if len(got) != n {
 		t.Fatalf("got %d roles, want %d", len(got), n)
 	}

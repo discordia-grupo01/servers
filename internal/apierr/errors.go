@@ -93,6 +93,8 @@ func WriteDomainError(c *gin.Context, err error) {
 	case errors.Is(err, model.ErrUnauthorized):
 		RespondError(c, http.StatusUnauthorized, err.Error(), nil)
 
+	case errors.Is(err, model.ErrDeleteConfirmationMismatch):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("confirm_name", "confirmation_mismatch"))
 	case errors.Is(err, model.ErrForbiddenNotOwner):
 		RespondError(c, http.StatusForbidden, err.Error(), nil)
 	case errors.Is(err, model.ErrForbiddenNotMember):
@@ -169,6 +171,8 @@ func WriteDomainError(c *gin.Context, err error) {
 		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("reason", "reason_invalid_chars"))
 	case errors.Is(err, model.ErrRoleIsServerDefault):
 		RespondError(c, http.StatusConflict, err.Error(), nil)
+	case errors.Is(err, model.ErrEveryoneRoleIsAutomatic):
+		RespondError(c, http.StatusConflict, err.Error(), map[string]any{"reason": "everyone_role_is_automatic"})
 	case errors.Is(err, model.ErrMemberNotFound):
 		RespondError(c, http.StatusNotFound, err.Error(), nil)
 	case errors.Is(err, model.ErrMemberRoleNotFound):

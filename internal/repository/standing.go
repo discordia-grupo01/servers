@@ -22,10 +22,13 @@ type RowQuerier interface {
 // from the server row.
 func MemberStanding(ctx context.Context, q RowQuerier, serverID uuid.UUID, userID string) (role.Standing, error) {
 	var st role.Standing
+	// @everyone's reserved position = 0 is excluded from MIN on purpose:
+	// it's held by every member, so without the filter everyone would rank
+	// at the top of the hierarchy, outranking every real role
 	err := q.QueryRow(ctx, `
 		SELECT EXISTS (SELECT 1 FROM server_members WHERE server_id = $1 AND user_id = $2),
 		       COALESCE(BIT_OR(r.permissions), 0),
-		       MIN(r.position)
+		       MIN(r.position) FILTER (WHERE NOT r.is_everyone)
 		  FROM member_roles mr
 		  JOIN roles r ON r.id = mr.role_id
 		 WHERE mr.server_id = $1 AND mr.user_id = $2`,

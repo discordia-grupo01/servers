@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/discordia-grupo01/servers/internal/model"
+	"github.com/discordia-grupo01/servers/internal/model/role"
 	"github.com/discordia-grupo01/servers/internal/outbox"
 )
 
@@ -72,6 +73,24 @@ func (r *ServerRepository) CreateServer(ctx context.Context, srv model.Server, c
 			srv.ID, srv.OwnerID, srv.CreatedAt,
 		); err != nil {
 			return fmt.Errorf("insert owner membership: %w", err)
+		}
+
+		// @everyone: created with every new server
+		everyoneRoleID := uuid.New()
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO roles (id, server_id, name, color, permissions, position, is_everyone, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, 0, TRUE, $6, $6)`,
+			everyoneRoleID, srv.ID, role.EveryoneRoleName, role.EveryoneRoleColor,
+			role.DefaultPermissions|role.PermCreateInvite, srv.CreatedAt,
+		); err != nil {
+			return fmt.Errorf("insert everyone role: %w", err)
+		}
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO member_roles (server_id, user_id, role_id, assigned_at)
+			VALUES ($1, $2, $3, $4)`,
+			srv.ID, srv.OwnerID, everyoneRoleID, srv.CreatedAt,
+		); err != nil {
+			return fmt.Errorf("assign everyone role to owner: %w", err)
 		}
 
 		for _, evt := range outboxEvents {
@@ -272,4 +291,50 @@ func (r *ServerRepository) SetDefaultRole(ctx context.Context, serverID, roleID 
 		return model.ErrServerNotFound
 	}
 	return nil
+}
+
+func (r *ServerRepository) DeleteServer(ctx context.Context, id uuid.UUID, buildEvents func(memberIDs []string, channelIDs []uuid.UUID) ([]outbox.Event, error)) error {
+	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+		var locked uuid.UUID
+		if err := tx.QueryRow(ctx, `SELECT id FROM servers WHERE id = $1 FOR UPDATE`, id).Scan(&locked); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return model.ErrServerNotFound
+			}
+			return fmt.Errorf("lock server: %w", err)
+		}
+
+		memberRows, err := tx.Query(ctx, `SELECT user_id FROM server_members WHERE server_id = $1`, id)
+		if err != nil {
+			return fmt.Errorf("list members: %w", err)
+		}
+		memberIDs, err := pgx.CollectRows(memberRows, pgx.RowTo[string])
+		if err != nil {
+			return fmt.Errorf("scan members: %w", err)
+		}
+
+		channelRows, err := tx.Query(ctx, `SELECT id FROM channels WHERE server_id = $1`, id)
+		if err != nil {
+			return fmt.Errorf("list channels: %w", err)
+		}
+		channelIDs, err := pgx.CollectRows(channelRows, pgx.RowTo[uuid.UUID])
+		if err != nil {
+			return fmt.Errorf("scan channels: %w", err)
+		}
+
+		events, err := buildEvents(memberIDs, channelIDs)
+		if err != nil {
+			return err
+		}
+
+		if _, err := tx.Exec(ctx, `DELETE FROM servers WHERE id = $1`, id); err != nil {
+			return fmt.Errorf("delete server: %w", err)
+		}
+
+		for _, evt := range events {
+			if err := outbox.Insert(ctx, tx, evt); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }

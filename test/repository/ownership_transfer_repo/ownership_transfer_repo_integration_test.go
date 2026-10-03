@@ -47,9 +47,14 @@ func newRepo(t *testing.T) (*ownership_transfer_repo.Repository, *repository.Ser
 	dropAllTestTables(ctx, pool)
 	for _, file := range []string{
 		"../../../migrations/0001_init.up.sql",
+		"../../../migrations/0003_roles.up.sql",
+		"../../../migrations/0004_member_roles.up.sql",
+		"../../../migrations/0005_default_role.up.sql",
 		"../../../migrations/0006_ownership_transfers.up.sql",
 		"../../../migrations/0008_ownership_transfer_cancelled_status.up.sql",
 		"../../../migrations/0011_outbox_events.up.sql",
+		"../../../migrations/0015_role_positions.up.sql",
+		"../../../migrations/0019_everyone_role.up.sql",
 	} {
 		schema, err := os.ReadFile(file)
 		if err != nil {
