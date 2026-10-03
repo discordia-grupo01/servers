@@ -91,7 +91,7 @@ func setupE2E(t *testing.T) (*gin.Engine, <-chan amqp.Delivery) {
 		"0013_unassigned_category.up.sql",
 		"0014_drop_default_kind.up.sql",
 		"0015_role_positions.up.sql", "0016_server_bans_banned_by.up.sql",
-		"0017_user_profiles.up.sql",
+		"0017_user_profiles.up.sql", "0019_everyone_role.up.sql",
 	} {
 		schema, err := os.ReadFile("../../migrations/" + f)
 		if err != nil {

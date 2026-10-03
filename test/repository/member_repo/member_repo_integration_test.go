@@ -57,6 +57,7 @@ func newRepo(t *testing.T) (*member_repo.MemberRepository, *repository.ServerRep
 		"../../../migrations/0011_outbox_events.up.sql",
 		"../../../migrations/0015_role_positions.up.sql",
 		"../../../migrations/0017_user_profiles.up.sql",
+		"../../../migrations/0019_everyone_role.up.sql",
 	} {
 		schema, err := os.ReadFile(file)
 		if err != nil {

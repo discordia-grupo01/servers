@@ -16,6 +16,7 @@ type Response struct {
 	Color       string    `json:"color"`
 	Permissions []string  `json:"permissions"`
 	Position    int       `json:"position"`
+	IsEveryone  bool      `json:"is_everyone"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }
@@ -28,6 +29,7 @@ func ToResponse(r role.Role) Response {
 		Color:       r.Color,
 		Permissions: role.PermissionNames(r.Permissions),
 		Position:    r.Position,
+		IsEveryone:  r.IsEveryone,
 		CreatedAt:   r.CreatedAt,
 		UpdatedAt:   r.UpdatedAt,
 	}

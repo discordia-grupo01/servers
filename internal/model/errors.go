@@ -49,6 +49,8 @@ var (
 	ErrRoleAboveOwn        = errors.New("you can only manage roles below your highest role")
 	ErrPermissionNotHeld   = errors.New("you cannot grant permissions you do not have")
 
+	ErrEveryoneRoleIsAutomatic = errors.New("@everyone is managed automatically: it can't be deleted, renamed, recolored, or assigned/unassigned by hand")
+
 	ErrForbiddenMissingPermission = errors.New("you do not have permission to perform this action")
 	ErrBanTargetRequired          = errors.New("user_id must be provided")
 	ErrCannotBanSelf              = errors.New("you cannot ban yourself")

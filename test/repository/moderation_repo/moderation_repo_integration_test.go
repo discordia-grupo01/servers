@@ -53,6 +53,7 @@ func newRepo(t *testing.T) (*moderation_repo.Repository, *pgxpool.Pool) {
 		"../../../migrations/0015_role_positions.up.sql",
 		"../../../migrations/0016_server_bans_banned_by.up.sql",
 		"../../../migrations/0017_user_profiles.up.sql",
+		"../../../migrations/0019_everyone_role.up.sql",
 	} {
 		schema, err := os.ReadFile(file)
 		if err != nil {

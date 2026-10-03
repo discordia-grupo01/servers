@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/discordia-grupo01/servers/internal/model"
+	"github.com/discordia-grupo01/servers/internal/model/role"
 	"github.com/discordia-grupo01/servers/internal/outbox"
 )
 
@@ -72,6 +73,24 @@ func (r *ServerRepository) CreateServer(ctx context.Context, srv model.Server, c
 			srv.ID, srv.OwnerID, srv.CreatedAt,
 		); err != nil {
 			return fmt.Errorf("insert owner membership: %w", err)
+		}
+
+		// @everyone: created with every new server
+		everyoneRoleID := uuid.New()
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO roles (id, server_id, name, color, permissions, position, is_everyone, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, 0, TRUE, $6, $6)`,
+			everyoneRoleID, srv.ID, role.EveryoneRoleName, role.EveryoneRoleColor,
+			role.DefaultPermissions|role.PermCreateInvite, srv.CreatedAt,
+		); err != nil {
+			return fmt.Errorf("insert everyone role: %w", err)
+		}
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO member_roles (server_id, user_id, role_id, assigned_at)
+			VALUES ($1, $2, $3, $4)`,
+			srv.ID, srv.OwnerID, everyoneRoleID, srv.CreatedAt,
+		); err != nil {
+			return fmt.Errorf("assign everyone role to owner: %w", err)
 		}
 
 		for _, evt := range outboxEvents {

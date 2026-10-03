@@ -190,6 +190,15 @@ func (r *InvitationRepository) RedeemInvitation(ctx context.Context, code, userI
 			}
 		}
 
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO member_roles (server_id, user_id, role_id, assigned_at)
+			SELECT $1, $2, r.id, $3 FROM roles r WHERE r.server_id = $1 AND r.is_everyone
+			ON CONFLICT (server_id, user_id, role_id) DO NOTHING`,
+			serverID, userID, now,
+		); err != nil {
+			return fmt.Errorf("assign everyone role: %w", err)
+		}
+
 		evt, err := buildEvent(serverID)
 		if err != nil {
 			return fmt.Errorf("build member joined event: %w", err)

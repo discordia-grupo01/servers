@@ -78,6 +78,9 @@ func (s *MemberRoleService) AssignRole(ctx context.Context, p AssignRoleParams) 
 	if err != nil {
 		return role.Role{}, err
 	}
+	if rl.IsEveryone {
+		return role.Role{}, model.ErrEveryoneRoleIsAutomatic
+	}
 	if err := service.RequireRoleBelow(actor, rl); err != nil {
 		return role.Role{}, err
 	}
@@ -123,6 +126,10 @@ func (s *MemberRoleService) RemoveRole(ctx context.Context, p RemoveRoleParams) 
 	rl, err := s.resolveRole(ctx, p.ServerID, p.RoleID)
 	if err != nil {
 		return err
+	}
+
+	if rl.IsEveryone {
+		return model.ErrEveryoneRoleIsAutomatic
 	}
 	if p.TargetUserID == p.ActorUserID && role.RemovesOwnAdmin(actor, true, rl.Permissions, 0) {
 		has, err := s.members.HasRole(ctx, p.ServerID, p.ActorUserID, p.RoleID)
