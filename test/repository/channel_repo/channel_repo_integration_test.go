@@ -49,12 +49,17 @@ func newRepo(t *testing.T) (*channel_repo.ChannelRepository, *category_repo.Cate
 	dropAllTestTables(ctx, pool)
 	for _, file := range []string{
 		"../../../migrations/0001_init.up.sql",
+		"../../../migrations/0003_roles.up.sql",
+		"../../../migrations/0004_member_roles.up.sql",
+		"../../../migrations/0005_default_role.up.sql",
 		"../../../migrations/0007_categories.up.sql",
 		"../../../migrations/0010_native_categories.up.sql",
 		"../../../migrations/0011_outbox_events.up.sql",
 		"../../../migrations/0012_category_name_key.up.sql",
 		"../../../migrations/0013_unassigned_category.up.sql",
 		"../../../migrations/0014_drop_default_kind.up.sql",
+		"../../../migrations/0015_role_positions.up.sql",
+		"../../../migrations/0019_everyone_role.up.sql",
 	} {
 		schema, err := os.ReadFile(file)
 		if err != nil {

@@ -48,7 +48,7 @@ func TestRoleRepo_Reorder_RewritesPositionsOneToN(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Reorder: %v", err)
 	}
-	if n := roleNames(seen); len(n) != 3 || n[0] != "A" || n[2] != "C" {
+	if n := roleNames(withoutEveryone(seen)); len(n) != 3 || n[0] != "A" || n[2] != "C" {
 		t.Errorf("check saw %v, want the current order A B C", n)
 	}
 	for i, want := range []string{"C", "A", "B"} {
@@ -122,7 +122,8 @@ func TestRoleRepo_Reorder_ConcurrentWithCreate_NoDuplicatePositions(t *testing.T
 			// The list may be stale if a creation committed first; then the
 			// check rejects it -- exactly what the service does.
 			_, _ = roles.Reorder(ctx, serverID, "", []uuid.UUID{ids[2], ids[1], ids[0]}, func(_ role.Standing, current []role.Role) error {
-				if len(current) != 3 {
+				// 3 seeded roles + the @everyone CreateServer adds automatically.
+				if len(current) != 4 {
 					return errors.New("stale list")
 				}
 				return nil
@@ -142,8 +143,8 @@ func TestRoleRepo_Reorder_ConcurrentWithCreate_NoDuplicatePositions(t *testing.T
 		}
 		seen[rl.Position] = true
 	}
-	if len(listed) != 13 {
-		t.Errorf("got %d roles, want 13", len(listed))
+	if len(listed) != 14 {
+		t.Errorf("got %d roles, want 14", len(listed))
 	}
 }
 
