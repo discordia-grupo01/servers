@@ -2272,6 +2272,8 @@ components:
           type: string
         id:
           type: string
+        is_everyone:
+          type: boolean
         name:
           type: string
         permissions:
