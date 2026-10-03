@@ -176,6 +176,10 @@ func (s *RoleService) UpdateRolePermissions(ctx context.Context, p UpdateRolePer
 		return role.Role{}, err
 	}
 
+	if rl.IsEveryone && (p.Name != nil || p.Color != nil) {
+		return role.Role{}, model.ErrEveryoneRoleIsAutomatic
+	}
+
 	if p.Permissions != nil {
 		mask, invalid, ok := role.ParsePermissions(p.Permissions)
 		if !ok {
@@ -290,10 +294,11 @@ func (s *RoleService) ReorderRoles(ctx context.Context, p ReorderRolesParams) ([
 		if err := service.RequireManageRoles(actor); err != nil {
 			return err
 		}
-		if !sameRoleSet(current, p.RoleIDs) {
+		manageable := excludeEveryone(current)
+		if !sameRoleSet(manageable, p.RoleIDs) {
 			return model.ErrRoleReorderInvalid
 		}
-		if !role.CanReorder(actor, current, p.RoleIDs) {
+		if !role.CanReorder(actor, manageable, p.RoleIDs) {
 			return model.ErrRoleReorderAboveOwn
 		}
 		return nil
@@ -303,6 +308,16 @@ func (s *RoleService) ReorderRoles(ctx context.Context, p ReorderRolesParams) ([
 	}
 	// TODO(events): publicar "roles.roles_reordered" en discordia.events cuando exista un consumidor real (ver Canales).
 	return roles, nil
+}
+
+func excludeEveryone(roles []role.Role) []role.Role {
+	out := make([]role.Role, 0, len(roles))
+	for _, rl := range roles {
+		if !rl.IsEveryone {
+			out = append(out, rl)
+		}
+	}
+	return out
 }
 
 // sameRoleSet reports whether ids is a permutation of current's ids.
@@ -344,6 +359,10 @@ func (s *RoleService) DeleteRole(ctx context.Context, p DeleteRoleParams) error 
 	}
 	if err := service.RequireManageRoles(actor); err != nil {
 		return err
+	}
+	// @everyone can't be deleted
+	if rl.IsEveryone {
+		return model.ErrEveryoneRoleIsAutomatic
 	}
 	if srv.DefaultRoleID != nil && *srv.DefaultRoleID == p.RoleID {
 		return model.ErrRoleIsServerDefault
