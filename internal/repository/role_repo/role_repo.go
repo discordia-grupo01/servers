@@ -44,7 +44,8 @@ func (r *RoleRepository) Create(ctx context.Context, rl role.Role) (role.Role, e
 	err = tx.QueryRow(ctx, `
 		INSERT INTO roles (id, server_id, name, color, permissions, position, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5,
-		        (SELECT COALESCE(MAX(position), 0) + 1 FROM roles WHERE server_id = $2),
+		        (SELECT COALESCE(MAX(position) FILTER (WHERE NOT is_everyone), 0) + 1
+		           FROM roles WHERE server_id = $2),
 		        $6, $7)
 		RETURNING position`,
 		rl.ID, rl.ServerID, rl.Name, rl.Color, rl.Permissions, rl.CreatedAt, rl.UpdatedAt,
@@ -61,11 +62,11 @@ func (r *RoleRepository) Create(ctx context.Context, rl role.Role) (role.Role, e
 
 func (r *RoleRepository) GetByID(ctx context.Context, id uuid.UUID) (role.Role, error) {
 	row := r.pool.QueryRow(ctx, `
-		SELECT id, server_id, name, color, permissions, position, created_at, updated_at
+		SELECT id, server_id, name, color, permissions, position, is_everyone, created_at, updated_at
 		  FROM roles WHERE id = $1`, id)
 
 	var rl role.Role
-	if err := row.Scan(&rl.ID, &rl.ServerID, &rl.Name, &rl.Color, &rl.Permissions, &rl.Position, &rl.CreatedAt, &rl.UpdatedAt); err != nil {
+	if err := row.Scan(&rl.ID, &rl.ServerID, &rl.Name, &rl.Color, &rl.Permissions, &rl.Position, &rl.IsEveryone, &rl.CreatedAt, &rl.UpdatedAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return role.Role{}, model.ErrRoleNotFound
 		}
@@ -133,9 +134,12 @@ type querier interface {
 }
 
 func listByServer(ctx context.Context, q querier, serverID uuid.UUID) ([]role.Role, error) {
+	// is_everyone first in ORDER BY (false < true in Postgres) puts
+	// @everyone last regardless of its reserved position = 0, without
+	// touching any common role's position number.
 	rows, err := q.Query(ctx, `
-		SELECT id, server_id, name, color, permissions, position, created_at, updated_at
-		  FROM roles WHERE server_id = $1 ORDER BY position, id`, serverID)
+		SELECT id, server_id, name, color, permissions, position, is_everyone, created_at, updated_at
+		  FROM roles WHERE server_id = $1 ORDER BY is_everyone, position, id`, serverID)
 	if err != nil {
 		return nil, fmt.Errorf("list roles: %w", err)
 	}
@@ -144,7 +148,7 @@ func listByServer(ctx context.Context, q querier, serverID uuid.UUID) ([]role.Ro
 	roles := make([]role.Role, 0)
 	for rows.Next() {
 		var rl role.Role
-		if err := rows.Scan(&rl.ID, &rl.ServerID, &rl.Name, &rl.Color, &rl.Permissions, &rl.Position, &rl.CreatedAt, &rl.UpdatedAt); err != nil {
+		if err := rows.Scan(&rl.ID, &rl.ServerID, &rl.Name, &rl.Color, &rl.Permissions, &rl.Position, &rl.IsEveryone, &rl.CreatedAt, &rl.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan role: %w", err)
 		}
 		roles = append(roles, rl)
@@ -192,12 +196,17 @@ func (r *RoleRepository) Delete(ctx context.Context, id uuid.UUID) error {
 
 func deleteRole(ctx context.Context, tx pgx.Tx, id uuid.UUID) error {
 	var serverID uuid.UUID
-	err := tx.QueryRow(ctx, `SELECT server_id FROM roles WHERE id = $1`, id).Scan(&serverID)
+	var isEveryone bool
+	err := tx.QueryRow(ctx, `SELECT server_id, is_everyone FROM roles WHERE id = $1`, id).Scan(&serverID, &isEveryone)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return model.ErrRoleNotFound
 	}
 	if err != nil {
 		return fmt.Errorf("find role: %w", err)
+	}
+
+	if isEveryone {
+		return model.ErrEveryoneRoleIsAutomatic
 	}
 	if err := repository.LockServerShared(ctx, tx, serverID); err != nil {
 		return err
