@@ -93,6 +93,8 @@ func WriteDomainError(c *gin.Context, err error) {
 	case errors.Is(err, model.ErrUnauthorized):
 		RespondError(c, http.StatusUnauthorized, err.Error(), nil)
 
+	case errors.Is(err, model.ErrDeleteConfirmationMismatch):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("confirm_name", "confirmation_mismatch"))
 	case errors.Is(err, model.ErrForbiddenNotOwner):
 		RespondError(c, http.StatusForbidden, err.Error(), nil)
 	case errors.Is(err, model.ErrForbiddenNotMember):

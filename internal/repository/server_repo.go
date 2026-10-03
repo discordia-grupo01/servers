@@ -273,3 +273,49 @@ func (r *ServerRepository) SetDefaultRole(ctx context.Context, serverID, roleID 
 	}
 	return nil
 }
+
+func (r *ServerRepository) DeleteServer(ctx context.Context, id uuid.UUID, buildEvents func(memberIDs []string, channelIDs []uuid.UUID) ([]outbox.Event, error)) error {
+	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+		var locked uuid.UUID
+		if err := tx.QueryRow(ctx, `SELECT id FROM servers WHERE id = $1 FOR UPDATE`, id).Scan(&locked); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return model.ErrServerNotFound
+			}
+			return fmt.Errorf("lock server: %w", err)
+		}
+
+		memberRows, err := tx.Query(ctx, `SELECT user_id FROM server_members WHERE server_id = $1`, id)
+		if err != nil {
+			return fmt.Errorf("list members: %w", err)
+		}
+		memberIDs, err := pgx.CollectRows(memberRows, pgx.RowTo[string])
+		if err != nil {
+			return fmt.Errorf("scan members: %w", err)
+		}
+
+		channelRows, err := tx.Query(ctx, `SELECT id FROM channels WHERE server_id = $1`, id)
+		if err != nil {
+			return fmt.Errorf("list channels: %w", err)
+		}
+		channelIDs, err := pgx.CollectRows(channelRows, pgx.RowTo[uuid.UUID])
+		if err != nil {
+			return fmt.Errorf("scan channels: %w", err)
+		}
+
+		events, err := buildEvents(memberIDs, channelIDs)
+		if err != nil {
+			return err
+		}
+
+		if _, err := tx.Exec(ctx, `DELETE FROM servers WHERE id = $1`, id); err != nil {
+			return fmt.Errorf("delete server: %w", err)
+		}
+
+		for _, evt := range events {
+			if err := outbox.Insert(ctx, tx, evt); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}

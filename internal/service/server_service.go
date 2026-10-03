@@ -13,6 +13,7 @@ import (
 	channelevents "github.com/discordia-grupo01/events-contract/channels"
 	"github.com/discordia-grupo01/events-contract/envelope"
 	"github.com/discordia-grupo01/events-contract/membership"
+	serverevents "github.com/discordia-grupo01/events-contract/servers"
 	"github.com/discordia-grupo01/servers/internal/iconstore"
 	"github.com/discordia-grupo01/servers/internal/model"
 	"github.com/discordia-grupo01/servers/internal/outbox"
@@ -24,6 +25,7 @@ type Repo interface {
 	GetByID(ctx context.Context, id uuid.UUID) (model.Server, error)
 	UpdateServer(ctx context.Context, id uuid.UUID, name, nameKey string, iconURL, bannerURL *string) error
 	IconURLs(ctx context.Context, id uuid.UUID) (iconURL, bannerURL *string, err error)
+	DeleteServer(ctx context.Context, id uuid.UUID, buildEvents func(memberIDs []string, channelIDs []uuid.UUID) ([]outbox.Event, error)) error
 }
 
 type IconStore interface {
@@ -258,4 +260,77 @@ func (s *Service) UpdateServer(ctx context.Context, p UpdateServerParams) (model
 
 	srv.Name, srv.NameKey, srv.IconURL, srv.BannerURL = name, key, iconURL, bannerURL
 	return srv, nil
+}
+
+type DeleteServerParams struct {
+	ServerID    uuid.UUID
+	ActorUserID string
+	ConfirmName string
+}
+
+func (s *Service) DeleteServer(ctx context.Context, p DeleteServerParams) error {
+	if p.ActorUserID == "" {
+		return model.ErrUnauthorized
+	}
+
+	srv, err := s.repo.GetByID(ctx, p.ServerID)
+	if err != nil {
+		return err
+	}
+	if srv.OwnerID != p.ActorUserID {
+		return model.ErrForbiddenNotOwner
+	}
+	if strings.TrimSpace(p.ConfirmName) != srv.Name {
+		return model.ErrDeleteConfirmationMismatch
+	}
+
+	buildEvents := func(memberIDs []string, channelIDs []uuid.UUID) ([]outbox.Event, error) {
+		now := time.Now().UTC()
+		events := make([]outbox.Event, 0, len(memberIDs)+1)
+		for _, userID := range memberIDs {
+			evt, err := outbox.New(membership.RoutingKeyMemberLeft, membership.MemberLeft{
+				Meta:     envelope.Meta{EventID: uuid.NewString(), OccurredAt: now},
+				ServerID: p.ServerID.String(),
+				UserID:   userID,
+			})
+			if err != nil {
+				return nil, err
+			}
+			events = append(events, evt)
+		}
+
+		ids := make([]string, 0, len(channelIDs))
+		for _, id := range channelIDs {
+			ids = append(ids, id.String())
+		}
+		deleted, err := outbox.New(serverevents.RoutingKeyServerDeleted, serverevents.ServerDeleted{
+			Meta:       envelope.Meta{EventID: uuid.NewString(), OccurredAt: now},
+			ServerID:   p.ServerID.String(),
+			ChannelIDs: ids,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return append(events, deleted), nil
+	}
+
+	if err := s.repo.DeleteServer(ctx, p.ServerID, buildEvents); err != nil {
+		return err
+	}
+
+	s.removeImages(srv)
+	return nil
+}
+
+func (s *Service) removeImages(srv model.Server) {
+	if srv.IconURL != nil {
+		if hash, ok := iconstore.HashFromURL(*srv.IconURL); ok {
+			_ = s.icons.Delete(iconstore.StorageKey(srv.ID.String(), hash))
+		}
+	}
+	if srv.BannerURL != nil {
+		if hash, ok := iconstore.HashFromURL(*srv.BannerURL); ok {
+			_ = s.icons.Delete(iconstore.StorageKey(BannerObjectID(srv.ID), hash))
+		}
+	}
 }
