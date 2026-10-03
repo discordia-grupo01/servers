@@ -176,3 +176,7 @@ func decodeChannel(t *testing.T, w *httptest.ResponseRecorder) channelJSON {
 	}
 	return c
 }
+
+func (fakeServerUseCases) DeleteServer(context.Context, service.DeleteServerParams) error {
+	return nil
+}

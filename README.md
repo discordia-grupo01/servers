@@ -254,6 +254,28 @@ nombres; la máscara de bits es interna.
     que lo supere para después banear o reordenar por encima de su rango.
     Tampoco puede editar su propio rol más alto. El dueño puede todo.
 
+## Eliminar un servidor
+`DELETE /v1/servers/{serverId}` con cuerpo `{"confirm_name": "<nombre exacto del servidor>"}`
+(la UI lo resuelve pidiendo que se reingrese el nombre):
+- **Solo el owner.** Cualquier otro (miembro, administrador o con `MANAGE_SERVER`)
+  recibe `403`, y eso se decide **antes** de mirar la confirmación, así que no
+  sirve para averiguar el nombre.
+- **Confirmación obligatoria.** Sin cuerpo, vacío, con otro nombre o con otra
+  capitalización: `400` (`confirm_name` / `confirmation_mismatch`) y no se borra
+  nada. Se ignoran los espacios de los extremos. JSON roto: `400 invalid_json`.
+- **Todo o nada.** En una sola transacción se borra el servidor (las cascadas de la
+  base se llevan canales, categorías, roles y sus asignaciones, miembros,
+  invitaciones, bans y transferencias de propiedad) y se encolan en el outbox un
+  `servers.member_left` por cada miembro y un `servers.server_deleted` con los ids
+  de todos los canales. Si algo falla, no se borra nada. La fila del servidor se
+  bloquea mientras tanto, así que dos borrados simultáneos tienen un único ganador
+  y el otro recibe `404`.
+- **Fuera de la base.** El ícono y el banner se borran del almacenamiento después
+  del commit, sin que un fallo ahí deshaga el borrado. `messaging` borra los
+  mensajes al consumir `servers.server_deleted`, y `identify-service` actualiza
+  sus "servidores en común" con los `member_left` de siempre.
+- Respuesta `204` sin cuerpo; el mismo pedido otra vez da `404`. No es reversible.
+
 ## Moderación
 - **Banear** (`POST /v1/servers/{serverId}/bans`, `user_id` y `reason`
   opcional de hasta 512 caracteres): requiere `BAN_MEMBERS` (los
@@ -273,8 +295,9 @@ nombres; la máscara de bits es interna.
 
 Eventos que publica el servicio (exchange `discordia.events`, contratos en
 `github.com/discordia-grupo01/events-contract` y AsyncAPI en `discordia-docs`):
-`servers.member_joined`, `servers.member_left`, `servers.member_banned` y
-`servers.member_unbanned`.
+`servers.member_joined`, `servers.member_left`, `servers.member_banned`,
+`servers.member_unbanned`, `servers.channel_created`, `servers.channel_deleted` y
+`servers.server_deleted`.
 
 ## Endpoints
 Ver [`openapi.yaml`](openapi.yaml) -- **generado automáticamente y actualizado
@@ -299,6 +322,7 @@ admins lo tienen implícito); ver "Roles, permisos y jerarquía".
 | GET | `/v1/servers` | si | Mis servidores (de los que soy owner o miembro), con sus canales y categorias. |
 | GET | `/v1/servers/{serverId}` | si | Un servidor puntual (nombre, canales, categorias, icon_url, banner_url). Ej.: después de un `join`, para obtener los datos con solo el `server_id`. Cada canal trae su `category_id` (`null` si esta "sin categoria"). |
 | PATCH | `/v1/servers/{serverId}` | si (admin) | Editar nombre, ícono y/o banner (multipart: `name?`, `icon?`, `banner?`, `remove_banner?`). Todos los campos son opcionales; sin permisos da 403, datos invalidos dan 400 sin persistir nada. |
+| DELETE | `/v1/servers/{serverId}` | si (owner) | Eliminar el servidor y todo lo suyo (cuerpo JSON `confirm_name` con el nombre exacto). 204; 400 si falta o no coincide la confirmación; 403 si no es el owner; 404 si no existe. Irreversible. |
 | GET | `/v1/servers/{serverId}/icon` | no (público) | Sirve el archivo del ícono (subido o el default generado). En produccion (Supabase) `icon_url` apunta directo al bucket público; esta ruta queda como fallback para setups sin Supabase. |
 | GET | `/v1/servers/{serverId}/banner` | no (público) | Sirve el archivo del banner. 404 si el server no tiene uno. Mismo esquema de URL que el icono. |
 | GET | `/v1/servers/{serverId}/members` | si (miembro) | Listar los miembros del server (paginado), cada uno con su `profile` (`null` si todavía no se replicó). |

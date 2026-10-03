@@ -167,3 +167,7 @@ func decodeError(t *testing.T, w *httptest.ResponseRecorder) errJSON {
 	}
 	return e
 }
+
+func (fakeServerUseCases) DeleteServer(context.Context, service.DeleteServerParams) error {
+	return nil
+}

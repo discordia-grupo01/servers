@@ -20,6 +20,8 @@ var (
 	ErrForbiddenNotMember = errors.New("you must be a member of this server to view this")
 	ErrForbiddenNotAdmin  = errors.New("you must be a server administrator to perform this action")
 
+	ErrDeleteConfirmationMismatch = errors.New("the confirmation does not match the server name")
+
 	ErrCannotRemoveOwnAdmin = errors.New("you cannot remove the administrator permission from yourself")
 
 	ErrLeaveForbidden   = errors.New("you can only remove your own membership")

@@ -201,3 +201,7 @@ func decodeRole(t *testing.T, w *httptest.ResponseRecorder) roleJSON {
 	}
 	return r
 }
+
+func (fakeServerUseCases) DeleteServer(context.Context, service.DeleteServerParams) error {
+	return nil
+}
