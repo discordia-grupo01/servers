@@ -515,6 +515,58 @@ paths:
       tags:
         - servers
   "/v1/servers/{serverId}":
+    delete:
+      description: Permanently deletes the server with its channels, categories,
+        roles, members, invitations, bans and messages. Only the owner can do
+        it, and only after confirming by sending the server's exact name in
+        confirm_name. Not reversible.
+      parameters:
+        - description: Server id (UUID)
+          in: path
+          name: serverId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/handler.deleteServerRequest"
+        description: Confirmation
+        required: true
+      responses:
+        "204":
+          description: deleted
+        "400":
+          description: invalid body, or confirm_name missing or different from the server
+            name
+          content:
+            "*/*":
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            "*/*":
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "403":
+          description: not the server owner
+          content:
+            "*/*":
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "404":
+          description: Not Found
+          content:
+            "*/*":
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+      security:
+        - BearerAuth: []
+      summary: Delete a server
+      tags:
+        - servers
     get:
       description: Full detail of one server, including its channels and categories.
       parameters:
@@ -2060,6 +2112,12 @@ components:
         server_id:
           type: string
         topic:
+          type: string
+      type: object
+    handler.deleteServerRequest:
+      properties:
+        confirm_name:
+          example: Mi Comunidad
           type: string
       type: object
     handler.serverResponse:

@@ -36,6 +36,12 @@ type fakeRepoHelper struct {
 	updateErr   error
 	updateCalls int
 
+	deleteErr       error
+	deleteCalls     int
+	deleteMemberIDs []string
+	deleteChannels  []uuid.UUID
+	deleteEvents    []outbox.Event
+
 	// standing is what MemberStanding returns for any non-owner caller; the
 	// zero value makes them a non-member (not an administrator).
 	standing    role.Standing
@@ -93,11 +99,25 @@ func (f *fakeRepoHelper) UpdateServer(_ context.Context, _ uuid.UUID, name, name
 	return nil
 }
 
+func (f *fakeRepoHelper) DeleteServer(_ context.Context, _ uuid.UUID, buildEvents func([]string, []uuid.UUID) ([]outbox.Event, error)) error {
+	f.deleteCalls++
+	if f.deleteErr != nil {
+		return f.deleteErr
+	}
+	events, err := buildEvents(f.deleteMemberIDs, f.deleteChannels)
+	if err != nil {
+		return err
+	}
+	f.deleteEvents = events
+	return nil
+}
+
 type fakeIconsHelper struct {
 	err          error
 	savedID      string
 	savedData    []byte
 	deleteCalled bool
+	deletedKeys  []string
 
 	generateCalls int
 	generateData  []byte
@@ -112,7 +132,11 @@ func (f *fakeIconsHelper) Save(id string, data []byte) (string, error) {
 	return "/v1/servers/" + id + "/icon?v=fakehash", nil
 }
 
-func (f *fakeIconsHelper) Delete(string) error { f.deleteCalled = true; return nil }
+func (f *fakeIconsHelper) Delete(key string) error {
+	f.deleteCalled = true
+	f.deletedKeys = append(f.deletedKeys, key)
+	return nil
+}
 
 func (f *fakeIconsHelper) GenerateDefault() ([]byte, error) {
 	f.generateCalls++

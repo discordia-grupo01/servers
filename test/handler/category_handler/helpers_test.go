@@ -150,3 +150,7 @@ func decodeCategory(t *testing.T, w *httptest.ResponseRecorder) categoryJSON {
 	}
 	return c
 }
+
+func (fakeServerUseCases) DeleteServer(context.Context, service.DeleteServerParams) error {
+	return nil
+}

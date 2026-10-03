@@ -41,6 +41,10 @@ type fakeRepo struct {
 
 	updateErr   error
 	updateCalls int
+
+	deleteErr    error
+	deleteCalls  int
+	deleteEvents []outbox.Event
 }
 
 func (f *fakeRepo) CreateServer(_ context.Context, s model.Server, _ []model.Category, _ []model.Channel, _ []outbox.Event) error {
@@ -84,6 +88,19 @@ func (f *fakeRepo) UpdateServer(_ context.Context, _ uuid.UUID, name, nameKey st
 		return f.updateErr
 	}
 	f.getResult.Name, f.getResult.NameKey, f.getResult.IconURL, f.getResult.BannerURL = name, nameKey, iconURL, bannerURL
+	return nil
+}
+
+func (f *fakeRepo) DeleteServer(_ context.Context, _ uuid.UUID, buildEvents func([]string, []uuid.UUID) ([]outbox.Event, error)) error {
+	f.deleteCalls++
+	if f.deleteErr != nil {
+		return f.deleteErr
+	}
+	events, err := buildEvents([]string{testUser}, []uuid.UUID{uuid.New()})
+	if err != nil {
+		return err
+	}
+	f.deleteEvents = events
 	return nil
 }
 

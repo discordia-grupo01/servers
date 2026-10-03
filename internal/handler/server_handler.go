@@ -32,6 +32,7 @@ type ServerUseCases interface {
 	GetServer(ctx context.Context, id uuid.UUID) (model.Server, error)
 	UpdateServer(ctx context.Context, p service.UpdateServerParams) (model.Server, error)
 	GetServerImageURLs(ctx context.Context, id uuid.UUID) (iconURL, bannerURL *string, err error)
+	DeleteServer(ctx context.Context, p service.DeleteServerParams) error
 }
 type IconStore interface {
 	Get(key string) (data []byte, contentType string, err error)
@@ -184,6 +185,48 @@ func (h *serverHandler) updateServer(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, toServerResponse(srv))
+}
+
+type deleteServerRequest struct {
+	ConfirmName string `json:"confirm_name" example:"Mi Comunidad"`
+}
+
+// deleteServer godoc
+// @Summary      Delete a server
+// @Description  Permanently deletes the server with its channels, categories, roles, members, invitations, bans and messages. Only the owner can do it, and only after confirming by sending the server's exact name in confirm_name. Not reversible.
+// @Tags         servers
+// @Accept       json
+// @Security     BearerAuth
+// @Param        serverId  path  string               true  "Server id (UUID)"
+// @Param        body      body  deleteServerRequest  true  "Confirmation"
+// @Success      204  "deleted"
+// @Failure      400  {object}  apierr.ErrorResponse  "invalid body, or confirm_name missing or different from the server name"
+// @Failure      401  {object}  apierr.ErrorResponse
+// @Failure      403  {object}  apierr.ErrorResponse  "not the server owner"
+// @Failure      404  {object}  apierr.ErrorResponse
+// @Router       /v1/servers/{serverId} [delete]
+func (h *serverHandler) deleteServer(c *gin.Context) {
+	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
+	if !ok {
+		return
+	}
+
+	var body deleteServerRequest
+	if err := c.ShouldBindJSON(&body); err != nil && !errors.Is(err, io.EOF) {
+		apierr.RespondError(c, http.StatusBadRequest, "invalid request body", map[string]any{"reason": "invalid_json"})
+		return
+	}
+
+	err := h.uc.DeleteServer(c.Request.Context(), service.DeleteServerParams{
+		ServerID:    serverID,
+		ActorUserID: middleware.UserID(c),
+		ConfirmName: body.ConfirmName,
+	})
+	if err != nil {
+		apierr.WriteDomainError(c, err)
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
 // listMyServers godoc
