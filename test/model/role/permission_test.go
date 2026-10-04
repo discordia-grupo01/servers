@@ -94,3 +94,14 @@ func TestStanding_ManageMessages_ImplicitForOwnerAndAdministratorsOnly(t *testin
 		}
 	}
 }
+
+// #57: the permissions that can be overridden per channel. The number is
+// repeated in the overrides_channel_scoped CHECK of migration 0020, so this
+// test fails if one changes without the other.
+func TestChannelScopedPermissions_MatchesTheMigrationCheck(t *testing.T) {
+	want := role.PermViewChannels | role.PermSendMessages | role.PermManageMessages
+	if role.ChannelScopedPermissions != want || role.ChannelScopedPermissions != 515 {
+		t.Errorf("ChannelScopedPermissions = %d (%v), want 515 (VIEW_CHANNELS, SEND_MESSAGES, MANAGE_MESSAGES)",
+			role.ChannelScopedPermissions, role.PermissionNames(role.ChannelScopedPermissions))
+	}
+}

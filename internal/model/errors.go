@@ -52,6 +52,9 @@ var (
 	ErrRoleAboveOwn        = errors.New("you can only manage roles below your highest role")
 	ErrPermissionNotHeld   = errors.New("you cannot grant permissions you do not have")
 
+	ErrPermissionNotOverridable = errors.New("permission cannot be overridden per channel")
+	ErrPermissionConflict       = errors.New("a permission cannot be both allowed and denied")
+
 	ErrEveryoneRoleIsAutomatic = errors.New("@everyone is managed automatically: it can't be deleted, renamed, recolored, or assigned/unassigned by hand")
 
 	ErrForbiddenMissingPermission = errors.New("you do not have permission to perform this action")
@@ -125,4 +128,32 @@ func (e *PermissionNotHeldError) Error() string {
 
 func (e *PermissionNotHeldError) Is(target error) bool {
 	return target == ErrPermissionNotHeld
+}
+
+// PermissionNotOverridableError wraps ErrPermissionNotOverridable with the
+// names of the permissions that only exist at the server level
+type PermissionNotOverridableError struct {
+	Permissions []string
+}
+
+func (e *PermissionNotOverridableError) Error() string {
+	return "permissions cannot be overridden per channel: " + strings.Join(e.Permissions, ", ")
+}
+
+func (e *PermissionNotOverridableError) Is(target error) bool {
+	return target == ErrPermissionNotOverridable
+}
+
+// PermissionConflictError wraps ErrPermissionConflict with the names of the
+// permissions that were both allowed and denied
+type PermissionConflictError struct {
+	Permissions []string
+}
+
+func (e *PermissionConflictError) Error() string {
+	return "permissions both allowed and denied: " + strings.Join(e.Permissions, ", ")
+}
+
+func (e *PermissionConflictError) Is(target error) bool {
+	return target == ErrPermissionConflict
 }
