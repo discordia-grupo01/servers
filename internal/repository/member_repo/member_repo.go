@@ -178,11 +178,11 @@ func (r *MemberRepository) RemoveRole(ctx context.Context, serverID uuid.UUID, u
 
 func (r *MemberRepository) ListRolesForMember(ctx context.Context, serverID uuid.UUID, userID string) ([]role.Role, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT r.id, r.server_id, r.name, r.color, r.permissions, r.position, r.created_at, r.updated_at
+		SELECT r.id, r.server_id, r.name, r.color, r.permissions, r.position, r.is_everyone, r.created_at, r.updated_at
 		  FROM roles r
 		  JOIN member_roles mr ON mr.role_id = r.id
 		 WHERE mr.server_id = $1 AND mr.user_id = $2
-		 ORDER BY r.position, r.id`,
+		 ORDER BY r.is_everyone, r.position, r.id`,
 		serverID, userID,
 	)
 	if err != nil {
@@ -193,7 +193,7 @@ func (r *MemberRepository) ListRolesForMember(ctx context.Context, serverID uuid
 	roles := make([]role.Role, 0)
 	for rows.Next() {
 		var rl role.Role
-		if err := rows.Scan(&rl.ID, &rl.ServerID, &rl.Name, &rl.Color, &rl.Permissions, &rl.Position, &rl.CreatedAt, &rl.UpdatedAt); err != nil {
+		if err := rows.Scan(&rl.ID, &rl.ServerID, &rl.Name, &rl.Color, &rl.Permissions, &rl.Position, &rl.IsEveryone, &rl.CreatedAt, &rl.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan member role: %w", err)
 		}
 		roles = append(roles, rl)

@@ -178,6 +178,57 @@ func TestMemberRepo_RemoveRole_ThenListIsEmpty(t *testing.T) {
 	}
 }
 
+func TestMemberRepo_ListRolesForMember_ReportsIsEveryone(t *testing.T) {
+	members, servers, roles, pool := newRepo(t)
+	ctx := context.Background()
+	srv, member := seedServerWithMember(ctx, t, servers, pool)
+	mod := seedRole(ctx, t, roles, srv.ID, "Moderator")
+
+	all, err := roles.ListByServer(ctx, srv.ID)
+	if err != nil {
+		t.Fatalf("ListByServer: %v", err)
+	}
+	var everyone role.Role
+	found := false
+	for _, rl := range all {
+		if rl.IsEveryone {
+			everyone = rl
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("server %v has no @everyone role; CreateServer should always seed one", srv.ID)
+	}
+
+	for _, id := range []uuid.UUID{everyone.ID, mod.ID} {
+		if err := members.AssignRole(ctx, srv.ID, member, id); err != nil {
+			t.Fatalf("AssignRole(%v): %v", id, err)
+		}
+	}
+
+	got, err := members.ListRolesForMember(ctx, srv.ID, member)
+	if err != nil {
+		t.Fatalf("ListRolesForMember: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %d roles, want 2", len(got))
+	}
+
+	isEveryoneByID := make(map[uuid.UUID]bool, len(got))
+	for _, rl := range got {
+		isEveryoneByID[rl.ID] = rl.IsEveryone
+	}
+	if !isEveryoneByID[everyone.ID] {
+		t.Errorf("IsEveryone for the @everyone role (%v) = false, want true -- "+
+			"this is exactly the bug that let @everyone show up as a normal, "+
+			"removable badge on a member's profile", everyone.ID)
+	}
+	if isEveryoneByID[mod.ID] {
+		t.Errorf("IsEveryone for the Moderator role (%v) = true, want false", mod.ID)
+	}
+}
+
 func TestMemberRepo_RemoveRole_NotAssigned_ReturnsErrMemberRoleNotFound(t *testing.T) {
 	members, servers, roles, pool := newRepo(t)
 	ctx := context.Background()
