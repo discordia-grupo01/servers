@@ -22,6 +22,9 @@ const (
 	// PermCreateInvite lets its holder generate and list the server's
 	// invitations (administrators hold it implicitly).
 	PermCreateInvite
+	// PermManageMessages lets its holder delete other members' messages
+	// (administrators hold it implicitly).
+	PermManageMessages
 )
 
 // DefaultPermissions are the permissions a newly created role starts with
@@ -29,9 +32,9 @@ const (
 // created before this default existed keep whatever they had.
 const DefaultPermissions = PermViewChannels | PermSendMessages
 
-// AllPermissions is every permission in the catalog. PermCreateInvite is the
+// AllPermissions is every permission in the catalog. PermManageMessages is the
 // last bit, so all bits up to and including it are set.
-const AllPermissions = PermCreateInvite<<1 - 1
+const AllPermissions = PermManageMessages<<1 - 1
 
 var permissionsByName = map[string]Permission{
 	"VIEW_CHANNELS":   PermViewChannels,
@@ -43,6 +46,7 @@ var permissionsByName = map[string]Permission{
 	"MANAGE_SERVER":   PermManageServer,
 	"ADMINISTRATOR":   PermAdministrator,
 	"CREATE_INVITE":   PermCreateInvite,
+	"MANAGE_MESSAGES": PermManageMessages,
 }
 
 // ParsePermissions translates permission names into a bitmask. If any name is

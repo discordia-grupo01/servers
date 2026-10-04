@@ -207,8 +207,8 @@ borrar nada en el mismo deploy en que se deja de usar.
 Cada rol tiene un conjunto de permisos del catálogo cerrado
 (`internal/model/role/permission.go`): `VIEW_CHANNELS`, `SEND_MESSAGES`,
 `MANAGE_CHANNELS`, `MANAGE_ROLES`, `KICK_MEMBERS`, `BAN_MEMBERS`,
-`MANAGE_SERVER`, `ADMINISTRATOR` y `CREATE_INVITE`. La API siempre usa los
-nombres; la máscara de bits es interna.
+`MANAGE_SERVER`, `ADMINISTRATOR`, `CREATE_INVITE` y `MANAGE_MESSAGES`. La API
+siempre usa los nombres; la máscara de bits es interna.
 
 - **Administradores.** Son el dueño del servidor y los miembros con algún rol
   que tenga `ADMINISTRATOR`. Tienen todos los permisos de forma implícita. Lo
@@ -220,6 +220,12 @@ nombres; la máscara de bits es interna.
   quitar, reordenar, rol por defecto) pide `MANAGE_ROLES`; canales y
   categorías, `MANAGE_CHANNELS`; la configuración del servidor,
   `MANAGE_SERVER`. Los administradores los tienen implícitos.
+- **Moderar mensajes.** `MANAGE_MESSAGES` permite eliminar mensajes de otros
+  miembros (lo aplica el servicio `messaging`, que consulta los permisos
+  efectivos con `GET /v1/servers/{serverId}/members/{userId}/permissions`).
+  No viene en el conjunto por defecto de un rol nuevo: se asigna con
+  `PATCH /v1/roles/{roleId}`. El autor de un mensaje puede eliminar el suyo sin
+  este permiso.
 - **No se puede dar lo que no se tiene.** Quien no es administrador no puede
   agregarle a un rol un permiso que él mismo no tiene, ni asignar un rol que
   traiga alguno (`403` con `reason: permission_not_held`). Si no, alguien con
