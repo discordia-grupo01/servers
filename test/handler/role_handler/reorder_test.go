@@ -94,7 +94,7 @@ func TestReorderRoles_DomainErrorsMapToHTTP(t *testing.T) {
 		reason string
 	}{
 		"list does not match":  {model.ErrRoleReorderInvalid, http.StatusBadRequest, "reorder_invalid"},
-		"role above own (CA2)": {model.ErrRoleReorderAboveOwn, http.StatusForbidden, "role_above_own"},
+		"role above own (CA2)": {model.ErrRoleReorderAboveOwn, http.StatusForbidden, "reorder_above_own"},
 		"not an administrator": {model.ErrForbiddenNotAdmin, http.StatusForbidden, ""},
 		"server not found":     {model.ErrServerNotFound, http.StatusNotFound, ""},
 	}
