@@ -1,6 +1,9 @@
 package model
 
-import "errors"
+import (
+	"errors"
+	"strings"
+)
 
 var (
 	ErrNameRequired     = errors.New("name must be provided")
@@ -106,4 +109,18 @@ func (e *InvalidPermissionError) Error() string {
 
 func (e *InvalidPermissionError) Is(target error) bool {
 	return target == ErrInvalidPermission
+}
+
+// PermissionNotHeldError wraps ErrPermissionNotHeld with the names of exactly
+// the permissions the actor tried to grant but does not hold
+type PermissionNotHeldError struct {
+	Permissions []string
+}
+
+func (e *PermissionNotHeldError) Error() string {
+	return "cannot grant permissions you do not have: " + strings.Join(e.Permissions, ", ")
+}
+
+func (e *PermissionNotHeldError) Is(target error) bool {
+	return target == ErrPermissionNotHeld
 }
