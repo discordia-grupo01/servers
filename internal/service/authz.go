@@ -86,10 +86,11 @@ func RequireRoleBelow(actor role.Standing, rl role.Role) error {
 // granting it -- through editing a role's permissions (only the newly added
 // ones) or assigning a role. Removing permissions is never restricted.
 func RequireCanGrant(actor role.Standing, p role.Permission) error {
-	if !actor.CanGrant(p) {
-		return model.ErrPermissionNotHeld
+	missing := p &^ actor.Effective()
+	if missing == 0 {
+		return nil
 	}
-	return nil
+	return &model.PermissionNotHeldError{Permissions: role.PermissionNames(missing)}
 }
 
 // requirePermission is the rule shared by the RequireManageX checks: the

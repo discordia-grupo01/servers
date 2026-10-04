@@ -147,10 +147,17 @@ func WriteDomainError(c *gin.Context, err error) {
 		RespondError(c, http.StatusBadRequest, err.Error(), nil)
 	case errors.Is(err, model.ErrRoleReorderInvalid):
 		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("role_ids", "reorder_invalid"))
-	case errors.Is(err, model.ErrRoleReorderAboveOwn), errors.Is(err, model.ErrRoleAboveOwn):
+	case errors.Is(err, model.ErrRoleReorderAboveOwn):
+		RespondError(c, http.StatusForbidden, err.Error(), map[string]any{"reason": "reorder_above_own"})
+	case errors.Is(err, model.ErrRoleAboveOwn):
 		RespondError(c, http.StatusForbidden, err.Error(), map[string]any{"reason": "role_above_own"})
 	case errors.Is(err, model.ErrPermissionNotHeld):
-		RespondError(c, http.StatusForbidden, err.Error(), map[string]any{"reason": "permission_not_held"})
+		details := map[string]any{"reason": "permission_not_held"}
+		var pnh *model.PermissionNotHeldError
+		if errors.As(err, &pnh) {
+			details["permissions"] = pnh.Permissions
+		}
+		RespondError(c, http.StatusForbidden, err.Error(), details)
 	case errors.Is(err, model.ErrForbiddenMissingPermission):
 		RespondError(c, http.StatusForbidden, err.Error(), map[string]any{"reason": "missing_permission"})
 	case errors.Is(err, model.ErrBanTargetRequired):
