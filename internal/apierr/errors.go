@@ -166,6 +166,10 @@ func WriteDomainError(c *gin.Context, err error) {
 		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("user_id", "cannot_ban_self"))
 	case errors.Is(err, model.ErrCannotBanOwner):
 		RespondError(c, http.StatusForbidden, err.Error(), map[string]any{"reason": "cannot_ban_owner"})
+	case errors.Is(err, model.ErrCannotKickSelf):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("user_id", "cannot_kick_self"))
+	case errors.Is(err, model.ErrCannotKickOwner):
+		RespondError(c, http.StatusForbidden, err.Error(), map[string]any{"reason": "cannot_kick_owner"})
 	case errors.Is(err, model.ErrTargetOutranksActor):
 		RespondError(c, http.StatusForbidden, err.Error(), map[string]any{"reason": "target_outranks_actor"})
 	case errors.Is(err, model.ErrAlreadyBanned):

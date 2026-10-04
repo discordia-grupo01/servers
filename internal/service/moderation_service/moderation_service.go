@@ -1,5 +1,5 @@
 // Package moderation_service implements the Moderación epic: banning members
-// (#25), revoking bans (#26) and listing bans.
+// (#25), revoking bans (#26), listing bans and kicking members (#59).
 package moderation_service
 
 import (
@@ -124,6 +124,80 @@ func (s *Service) BanMember(ctx context.Context, p BanParams) (moderation.Ban, e
 		return moderation.Ban{}, err
 	}
 	return ban, nil
+}
+
+// KickMember removes a current member from the server (#59). The actor needs
+// KICK_MEMBERS (the owner and administrators hold it implicitly, CA3) and
+// must outrank the target in the role hierarchy (CA2); nobody can kick the
+// owner or themselves (to leave, there is the leave endpoint). Unlike a ban,
+// nothing keeps them out: they can rejoin with any valid invitation (CA1).
+//
+// Both servers.member_left and servers.member_kicked are published, so
+// consumers that only track membership don't need to know about kicks.
+func (s *Service) KickMember(ctx context.Context, p KickParams) error {
+	if p.ActorUserID == "" {
+		return model.ErrUnauthorized
+	}
+	target := strings.TrimSpace(p.TargetUserID)
+	if target == "" {
+		return model.ErrBanTargetRequired
+	}
+
+	srv, err := s.servers.GetByID(ctx, p.ServerID)
+	if err != nil {
+		return err
+	}
+	actor, err := service.ResolveStanding(ctx, s.standings, srv, p.ActorUserID)
+	if err != nil {
+		return err
+	}
+	if err := service.RequirePermission(actor, role.PermKickMembers); err != nil {
+		return err
+	}
+
+	if target == p.ActorUserID {
+		return model.ErrCannotKickSelf
+	}
+	if target == srv.OwnerID {
+		return model.ErrCannotKickOwner
+	}
+	targetStanding, err := service.ResolveStanding(ctx, s.standings, srv, target)
+	if err != nil {
+		return err
+	}
+	if err := service.RequireOutranks(actor, targetStanding); err != nil {
+		return err
+	}
+
+	now := s.now()
+	memberLeft, err := outbox.New(membership.RoutingKeyMemberLeft, membership.MemberLeft{
+		Meta:     envelope.Meta{EventID: uuid.NewString(), OccurredAt: now},
+		ServerID: p.ServerID.String(),
+		UserID:   target,
+	})
+	if err != nil {
+		return err
+	}
+	memberKicked, err := outbox.New(moderationevents.RoutingKeyMemberKicked, moderationevents.MemberKicked{
+		Meta:     envelope.Meta{EventID: uuid.NewString(), OccurredAt: now},
+		ServerID: p.ServerID.String(),
+		UserID:   target,
+		KickedBy: p.ActorUserID,
+	})
+	if err != nil {
+		return err
+	}
+
+	// Same as BanMember: the checks above fail fast with a precise error;
+	// this one decides, with both standings re-read under the server lock.
+	recheck := func(actor, target role.Standing) error {
+		if err := service.RequirePermission(actor, role.PermKickMembers); err != nil {
+			return err
+		}
+		return service.RequireOutranks(actor, target)
+	}
+	kick := moderation.Kick{ServerID: p.ServerID, UserID: target, KickedBy: p.ActorUserID, KickedAt: now}
+	return s.repo.KickMember(ctx, kick, recheck, memberLeft, memberKicked)
 }
 
 // UnbanMember revokes a ban (#26). Like banning, it needs BAN_MEMBERS (CA2),

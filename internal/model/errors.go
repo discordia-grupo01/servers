@@ -61,6 +61,8 @@ var (
 	ErrTargetOutranksActor        = errors.New("target has an equal or higher role")
 	ErrAlreadyBanned              = errors.New("user is already banned from this server")
 	ErrBanNotFound                = errors.New("user is not banned from this server")
+	ErrCannotKickSelf             = errors.New("you cannot kick yourself; leave the server instead")
+	ErrCannotKickOwner            = errors.New("the server owner cannot be kicked")
 
 	ErrMemberNotFound     = errors.New("member not found")
 	ErrMemberRoleNotFound = errors.New("member does not have this role")

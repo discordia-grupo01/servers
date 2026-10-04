@@ -55,6 +55,11 @@ type fakeRepo struct {
 	banned   moderation.Ban
 	events   []outbox.Event
 
+	kickErr    error
+	kickCalls  int
+	kicked     moderation.Kick
+	kickEvents []outbox.Event
+
 	unbanErr      error
 	unbanCalls    int
 	unbanServerID uuid.UUID
@@ -86,6 +91,27 @@ func (f *fakeRepo) BanMember(_ context.Context, ban moderation.Ban, check func(a
 		}
 	}
 	f.banned, f.events = ban, events
+	return nil
+}
+
+func (f *fakeRepo) KickMember(_ context.Context, kick moderation.Kick, check func(actor, target role.Standing) error, events ...outbox.Event) error {
+	f.kickCalls++
+	if f.kickErr != nil {
+		return f.kickErr
+	}
+	if f.standings != nil {
+		actor, target := f.standingOf(kick.KickedBy), f.standingOf(kick.UserID)
+		if f.txActor != nil {
+			actor = *f.txActor
+		}
+		if f.txTarget != nil {
+			target = *f.txTarget
+		}
+		if err := check(actor, target); err != nil {
+			return err
+		}
+	}
+	f.kicked, f.kickEvents = kick, events
 	return nil
 }
 
@@ -144,6 +170,12 @@ func newFixture() *fixture {
 func (f *fixture) ban(actor, target string, reason *string) (moderation.Ban, error) {
 	return f.svc.BanMember(context.Background(), moderation_service.BanParams{
 		ServerID: f.server.ID, ActorUserID: actor, TargetUserID: target, Reason: reason,
+	})
+}
+
+func (f *fixture) kick(actor, target string) error {
+	return f.svc.KickMember(context.Background(), moderation_service.KickParams{
+		ServerID: f.server.ID, ActorUserID: actor, TargetUserID: target,
 	})
 }
 

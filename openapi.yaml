@@ -1278,6 +1278,62 @@ paths:
       summary: Generate an invitation
       tags:
         - invitations
+  "/v1/servers/{serverId}/kicks":
+    post:
+      description: Requires KICK_MEMBERS (the owner and administrators hold it
+        implicitly). The target must be a current member ranked strictly below
+        the caller in the role hierarchy; the owner and the caller themselves
+        can't be kicked (to leave, use DELETE
+        /v1/servers/{serverId}/members/{userId}). The member is removed (with
+        their roles) and a pending ownership transfer to them is cancelled.
+        Unlike a ban, they can rejoin with any valid invitation.
+      parameters:
+        - description: Server ID
+          in: path
+          name: serverId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/moderation_handler.kickRequest"
+        description: Who to kick
+        required: true
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: missing user_id, or kicking yourself
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "403":
+          description: missing KICK_MEMBERS, target is the owner, or target has an equal
+            or higher role
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "404":
+          description: server not found, or target is not a member
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+      security:
+        - BearerAuth: []
+      summary: Kick a member from the server
+      tags:
+        - moderation
   "/v1/servers/{serverId}/members":
     get:
       description: Caller must already be a member. Paginated. Each member carries
@@ -2289,6 +2345,11 @@ components:
       properties:
         reason:
           type: string
+        user_id:
+          type: string
+      type: object
+    moderation_handler.kickRequest:
+      properties:
         user_id:
           type: string
       type: object

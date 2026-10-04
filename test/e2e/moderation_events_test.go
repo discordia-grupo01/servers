@@ -151,6 +151,78 @@ func TestModerationEvents_BanAndUnbanEndToEnd(t *testing.T) {
 	}
 }
 
+// #59 CA1, end to end over HTTP: the owner kicks a member, both
+// servers.member_left and servers.member_kicked reach the discordia.events
+// exchange, and -- unlike a ban -- the kicked user can rejoin right away with
+// the same invitation.
+func TestModerationEvents_KickEndToEnd(t *testing.T) {
+	router, deliveries := setupE2E(t)
+
+	owner := "owner-" + uuid.NewString()
+	target := "target-" + uuid.NewString()
+
+	w := postCreateServer(t, router, owner, "E2E Kick Server")
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create server: code=%d body=%s", w.Code, w.Body.String())
+	}
+	var srv struct {
+		ID string `json:"id"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &srv)
+	waitForEvent(t, deliveries, membership.RoutingKeyMemberJoined) // owner
+
+	w = doAsUser(t, router, http.MethodPost, "/v1/servers/"+srv.ID+"/invites", owner)
+	var inv struct {
+		Code string `json:"code"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &inv)
+	if w = doAsUser(t, router, http.MethodPost, "/v1/invites/"+inv.Code+"/join", target); w.Code != http.StatusCreated {
+		t.Fatalf("join: code=%d body=%s", w.Code, w.Body.String())
+	}
+	waitForEvent(t, deliveries, membership.RoutingKeyMemberJoined) // target
+
+	// A plain member can't kick (CA3).
+	if w = doJSONAsUser(t, router, http.MethodPost, "/v1/servers/"+srv.ID+"/kicks", target, `{"user_id":"`+owner+`"}`); w.Code != http.StatusForbidden {
+		t.Fatalf("kick by a plain member: code=%d body=%s, want 403", w.Code, w.Body.String())
+	}
+
+	if w = doJSONAsUser(t, router, http.MethodPost, "/v1/servers/"+srv.ID+"/kicks", owner, `{"user_id":"`+target+`"}`); w.Code != http.StatusNoContent {
+		t.Fatalf("kick: code=%d body=%s", w.Code, w.Body.String())
+	}
+
+	got := nextDeliveries(t, deliveries, 2)
+	left, ok := got[membership.RoutingKeyMemberLeft]
+	if !ok {
+		t.Fatalf("no member_left event, got %v", keys(got))
+	}
+	var leftEvt membership.MemberLeft
+	_ = json.Unmarshal(left.Body, &leftEvt)
+	if leftEvt.ServerID != srv.ID || leftEvt.UserID != target {
+		t.Errorf("member_left = %+v", leftEvt)
+	}
+	kicked, ok := got[moderationevents.RoutingKeyMemberKicked]
+	if !ok {
+		t.Fatalf("no member_kicked event, got %v", keys(got))
+	}
+	var kickedEvt moderationevents.MemberKicked
+	_ = json.Unmarshal(kicked.Body, &kickedEvt)
+	if kickedEvt.ServerID != srv.ID || kickedEvt.UserID != target || kickedEvt.KickedBy != owner || kickedEvt.EventID == "" {
+		t.Errorf("member_kicked = %+v", kickedEvt)
+	}
+
+	// Not a member anymore: kicking again is a 404, and nothing was banned.
+	if w = doJSONAsUser(t, router, http.MethodPost, "/v1/servers/"+srv.ID+"/kicks", owner, `{"user_id":"`+target+`"}`); w.Code != http.StatusNotFound {
+		t.Errorf("second kick: code=%d body=%s, want 404", w.Code, w.Body.String())
+	}
+
+	if w = doAsUser(t, router, http.MethodPost, "/v1/invites/"+inv.Code+"/join", target); w.Code != http.StatusCreated {
+		t.Fatalf("rejoin after kick: code=%d body=%s", w.Code, w.Body.String())
+	}
+	if evt := waitForEvent(t, deliveries, membership.RoutingKeyMemberJoined); evt.ServerID != srv.ID || evt.UserID != target {
+		t.Errorf("rejoin event = %+v", evt)
+	}
+}
+
 func keys(m map[string]amqp.Delivery) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {

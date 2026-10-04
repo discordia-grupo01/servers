@@ -29,6 +29,10 @@ type fakeModeration struct {
 	gotBan    moderation_service.BanParams
 	banResult moderation.Ban
 
+	kickErr    error
+	kickCalled bool
+	gotKick    moderation_service.KickParams
+
 	unbanErr    error
 	unbanCalled bool
 	gotUnban    moderation_service.UnbanParams
@@ -42,6 +46,11 @@ type fakeModeration struct {
 func (f *fakeModeration) BanMember(_ context.Context, p moderation_service.BanParams) (moderation.Ban, error) {
 	f.banCalled, f.gotBan = true, p
 	return f.banResult, f.banErr
+}
+
+func (f *fakeModeration) KickMember(_ context.Context, p moderation_service.KickParams) error {
+	f.kickCalled, f.gotKick = true, p
+	return f.kickErr
 }
 
 func (f *fakeModeration) UnbanMember(_ context.Context, p moderation_service.UnbanParams) error {
