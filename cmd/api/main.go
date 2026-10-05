@@ -84,8 +84,9 @@ func main() {
 	categoryRepo := category_repo.NewCategoryRepository(pool)
 	channelRepo := channel_repo.NewChannelRepository(pool)
 	moderationRepo := moderation_repo.NewRepository(pool)
+	channelPermRepo := channelperm_repo.NewRepository(pool)
 
-	svc := service.New(serverRepo, icons, memberRepo)
+	svc := service.New(serverRepo, icons, memberRepo, channelPermRepo)
 	roleSvc := role_service.New(serverRepo, roleRepo, memberRepo)
 	memberRoleSvc := member_role_service.New(serverRepo, roleRepo, memberRepo)
 	membershipSvc := membership_service.New(serverRepo, memberRepo)
@@ -99,9 +100,9 @@ func main() {
 	}
 	invSvc := invitation.NewService(repository.NewInvitationRepository(pool), serverRepo, memberRepo)
 	categorySvc := category_service.New(serverRepo, categoryRepo, memberRepo)
-	channelSvc := channel_service.New(serverRepo, categoryRepo, channelRepo, memberRepo)
+	channelSvc := channel_service.New(serverRepo, categoryRepo, channelRepo, memberRepo, channelPermRepo)
 	moderationSvc := moderation_service.New(serverRepo, memberRepo, moderationRepo)
-	channelPermSvc := channelperm_service.New(serverRepo, channelRepo, roleRepo, memberRepo, channelperm_repo.NewRepository(pool))
+	channelPermSvc := channelperm_service.New(serverRepo, channelRepo, roleRepo, memberRepo, channelPermRepo)
 
 	router := handler.NewRouter(handler.Deps{
 		Servers:            svc,

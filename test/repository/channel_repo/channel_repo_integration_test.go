@@ -332,7 +332,7 @@ func TestChannelRepo_ReorderPositions_UpdatesInOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := channels.ReorderPositions(ctx, []uuid.UUID{b.ID, a.ID}); err != nil {
+	if err := channels.ReorderPositions(ctx, srv.ID, nil, []uuid.UUID{b.ID, a.ID}, nil); err != nil {
 		t.Fatalf("ReorderPositions: %v", err)
 	}
 
@@ -342,6 +342,53 @@ func TestChannelRepo_ReorderPositions_UpdatesInOrder(t *testing.T) {
 	}
 	if len(got) != 2 || got[0].ID != b.ID || got[1].ID != a.ID {
 		t.Errorf("order = %+v, want [b, a]", got)
+	}
+}
+
+// #57: with a channel hidden from the actor, only the visible ones are sent
+// and the hidden one keeps its place: [reglas, staff*, charla, memes] +
+// [memes, reglas, charla] -> [memes, staff, reglas, charla].
+func TestChannelRepo_ReorderPositions_HiddenChannelsKeepTheirPlace(t *testing.T) {
+	channels, _, servers := newRepo(t)
+	ctx := context.Background()
+	srv, chans := serverFixture("owner-" + uuid.NewString())
+	if err := servers.CreateServer(ctx, srv, nil, chans, []outbox.Event{testOutboxEvent()}); err != nil {
+		t.Fatalf("seed server: %v", err)
+	}
+	reglas, staff, charla, memes := channelFixture(srv.ID, "reglas", nil), channelFixture(srv.ID, "staff", nil),
+		channelFixture(srv.ID, "charla", nil), channelFixture(srv.ID, "memes", nil)
+	for _, ch := range []model.Channel{reglas, staff, charla, memes} {
+		if err := channels.Create(ctx, ch, testOutboxEvent()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := channels.ReorderPositions(ctx, srv.ID, nil, []uuid.UUID{reglas.ID, staff.ID, charla.ID, memes.ID}, nil); err != nil {
+		t.Fatalf("seed order: %v", err)
+	}
+
+	hidden := map[uuid.UUID]bool{staff.ID: true}
+	if err := channels.ReorderPositions(ctx, srv.ID, nil, []uuid.UUID{memes.ID, reglas.ID, charla.ID}, hidden); err != nil {
+		t.Fatalf("ReorderPositions: %v", err)
+	}
+	got, err := channels.ListByServerAndCategory(ctx, srv.ID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []uuid.UUID{memes.ID, staff.ID, reglas.ID, charla.ID}
+	for i, ch := range got {
+		if i >= len(want) || ch.ID != want[i] || ch.Position != i {
+			t.Fatalf("order = %+v, want memes, staff, reglas, charla at positions 0..3", got)
+		}
+	}
+
+	// Sending the hidden channel, or all four, is a stale/invalid list.
+	for _, bad := range [][]uuid.UUID{
+		{memes.ID, staff.ID, reglas.ID, charla.ID},
+		{memes.ID, reglas.ID},
+	} {
+		if err := channels.ReorderPositions(ctx, srv.ID, nil, bad, hidden); !errors.Is(err, model.ErrChannelReorderInvalid) {
+			t.Errorf("%v: err = %v, want ErrChannelReorderInvalid", bad, err)
+		}
 	}
 }
 

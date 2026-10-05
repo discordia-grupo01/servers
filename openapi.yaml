@@ -83,7 +83,9 @@ paths:
         - categories
   "/v1/channels/{channelId}":
     delete:
-      description: Administrators only (the owner, or a member with ADMINISTRATOR).
+      description: Administrators only (the owner, or a member with ADMINISTRATOR). A
+        channel hidden from the caller by a permission override (no
+        VIEW_CHANNELS there) is reported as 404, as if it didn't exist.
       parameters:
         - description: Channel ID
           in: path
@@ -119,7 +121,9 @@ paths:
         - channels
     patch:
       description: Administrators only (the owner, or a member with ADMINISTRATOR).
-        `name`/`topic` omitted leave the field unchanged.
+        `name`/`topic` omitted leave the field unchanged. A channel hidden from
+        the caller by a permission override (no VIEW_CHANNELS there) is reported
+        as 404, as if it didn't exist.
       parameters:
         - description: Channel ID
           in: path
@@ -174,7 +178,9 @@ paths:
     patch:
       description: Administrators only (the owner, or a member with ADMINISTRATOR).
         `category_id` omitted/null moves it to the server's "Sin asignar"
-        fallback category ("no category" is not a valid state).
+        fallback category ("no category" is not a valid state). A channel hidden
+        from the caller by a permission override (no VIEW_CHANNELS there) is
+        reported as 404, as if it didn't exist.
       parameters:
         - description: Channel ID
           in: path
@@ -675,7 +681,9 @@ paths:
         - roles
   /v1/servers:
     get:
-      description: Servers the caller is a member of.
+      description: Servers the caller is a member of, each with only the channels the
+        caller can see (channels where an override takes VIEW_CHANNELS away from
+        them are left out; the owner and administrators see all).
       responses:
         "200":
           description: OK
@@ -799,7 +807,10 @@ paths:
       tags:
         - servers
     get:
-      description: Full detail of one server, including its channels and categories.
+      description: "Full detail of one server, including its categories and the
+        channels the caller can see: channels where an override takes
+        VIEW_CHANNELS away from them are left out (the owner and administrators
+        see all). A caller who isn't a member gets the server with no channels."
       parameters:
         - description: Server ID
           in: path
@@ -1278,9 +1289,12 @@ paths:
         - channels
   "/v1/servers/{serverId}/channels/reorder":
     patch:
-      description: Administrators only (the owner, or a member with ADMINISTRATOR).
-        `channel_ids` is the full, final order for that category (or for "sin
-        categoria" if `category_id` is omitted/null).
+      description: 'Administrators only (the owner, or a member with ADMINISTRATOR).
+        `channel_ids` is the full, final order of the channels of that category
+        the caller can see (or of "sin categoria" if `category_id` is
+        omitted/null). Channels hidden from the caller by a permission override
+        must not be sent: they keep their place, and the visible ones fill the
+        remaining places in the given order.'
       parameters:
         - description: Server ID
           in: path

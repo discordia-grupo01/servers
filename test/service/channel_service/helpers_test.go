@@ -2,10 +2,12 @@ package channel_service_test
 
 import (
 	"context"
+	"errors"
 
 	"github.com/google/uuid"
 
 	"github.com/discordia-grupo01/servers/internal/model"
+	"github.com/discordia-grupo01/servers/internal/model/channelperm"
 	"github.com/discordia-grupo01/servers/internal/model/role"
 	"github.com/discordia-grupo01/servers/internal/outbox"
 	"github.com/discordia-grupo01/servers/internal/service/channel_service"
@@ -62,10 +64,10 @@ type fakeChannels struct {
 	moveCalled    bool
 
 	listResult []model.Channel
-	listErr    error
 
 	reorderErr   error
 	reorderedIDs []uuid.UUID
+	gotHidden    map[uuid.UUID]bool
 }
 
 func (f *fakeChannels) Create(_ context.Context, ch model.Channel, evt outbox.Event) error {
@@ -109,16 +111,24 @@ func (f *fakeChannels) MoveToCategory(_ context.Context, id uuid.UUID, categoryI
 	return f.moveErr
 }
 
-func (f *fakeChannels) ListByServerAndCategory(_ context.Context, _ uuid.UUID, _ *uuid.UUID) ([]model.Channel, error) {
-	if f.listErr != nil {
-		return nil, f.listErr
+// ReorderPositions validates and merges like the real repository: listResult
+// is the bucket's current order, and reorderedIDs records the full order
+// written (nil if nothing was).
+func (f *fakeChannels) ReorderPositions(_ context.Context, _ uuid.UUID, _ *uuid.UUID, requested []uuid.UUID, hidden map[uuid.UUID]bool) error {
+	f.gotHidden = hidden
+	if f.reorderErr != nil {
+		return f.reorderErr
 	}
-	return f.listResult, nil
-}
-
-func (f *fakeChannels) ReorderPositions(_ context.Context, orderedIDs []uuid.UUID) error {
-	f.reorderedIDs = orderedIDs
-	return f.reorderErr
+	current := make([]uuid.UUID, 0, len(f.listResult))
+	for _, ch := range f.listResult {
+		current = append(current, ch.ID)
+	}
+	merged, ok := channelperm.MergeVisibleOrder(current, hidden, requested)
+	if !ok {
+		return model.ErrChannelReorderInvalid
+	}
+	f.reorderedIDs = merged
+	return nil
 }
 
 func ownerServer() model.Server {
@@ -130,7 +140,28 @@ func newService(servers *fakeServers, categories *fakeCategories, channels *fake
 }
 
 func newServiceWithStandings(servers *fakeServers, categories *fakeCategories, channels *fakeChannels, standings *fakeStandings) *channel_service.ChannelService {
-	return channel_service.New(servers, categories, channels, standings)
+	return newServiceWithVisibility(servers, categories, channels, standings, &fakeVisibility{})
+}
+
+func newServiceWithVisibility(servers *fakeServers, categories *fakeCategories, channels *fakeChannels, standings *fakeStandings, visibility *fakeVisibility) *channel_service.ChannelService {
+	return channel_service.New(servers, categories, channels, standings, visibility)
+}
+
+// fakeVisibility returns the same channel overrides for every user; the zero
+// value means no overrides at all.
+type fakeVisibility struct {
+	layers map[uuid.UUID]channelperm.Layers
+	err    error
+	calls  int
+}
+
+func (f *fakeVisibility) MemberStandings(context.Context, string, []uuid.UUID) (map[uuid.UUID]role.Standing, error) {
+	return nil, errors.New("channel_service must not need MemberStandings")
+}
+
+func (f *fakeVisibility) ChannelLayers(context.Context, string, []uuid.UUID) (map[uuid.UUID]channelperm.Layers, error) {
+	f.calls++
+	return f.layers, f.err
 }
 
 // fakeStandings returns the same standing for every non-owner caller (the

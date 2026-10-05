@@ -273,3 +273,66 @@ func TestForMember_SplitsEveryoneAndKeepsOnlyTheUsersRoles(t *testing.T) {
 		t.Error("mod-1 should see the channel")
 	}
 }
+
+// One query for several servers: membership, permissions and rank per
+// server, like repository.MemberStanding.
+func TestMemberStandings_SeveralServersAtOnce(t *testing.T) {
+	pool := newPool(t)
+	ctx := context.Background()
+	a := seedWorld(ctx, t, pool)
+	b := seedWorld(ctx, t, pool)
+	exec(ctx, t, pool, `DELETE FROM member_roles WHERE server_id = $1 AND user_id = 'mod-1'`, b.serverID)
+	exec(ctx, t, pool, `DELETE FROM server_members WHERE server_id = $1 AND user_id = 'mod-1'`, b.serverID)
+	repo := channelperm_repo.NewRepository(pool)
+
+	got, err := repo.MemberStandings(ctx, "mod-1", []uuid.UUID{a.serverID, b.serverID, uuid.New()})
+	if err != nil {
+		t.Fatalf("MemberStandings: %v", err)
+	}
+	inA := got[a.serverID]
+	if !inA.IsMember || inA.Permissions != role.PermManageRoles|3 || inA.TopPosition == nil || *inA.TopPosition != 1 {
+		t.Errorf("server A = %+v", inA)
+	}
+	if inB := got[b.serverID]; inB.IsMember || inB.Permissions != 0 || inB.TopPosition != nil {
+		t.Errorf("server B (not a member) = %+v", inB)
+	}
+	if len(got) != 2 {
+		t.Errorf("got %d servers, want 2 (unknown ones are absent)", len(got))
+	}
+}
+
+// One query for every channel of several servers: only the overrides of the
+// user's roles, grouped by channel and split into @everyone's and the rest.
+func TestChannelLayers_GroupsPerChannel(t *testing.T) {
+	pool := newPool(t)
+	ctx := context.Background()
+	a := seedWorld(ctx, t, pool)
+	b := seedWorld(ctx, t, pool)
+	repo := channelperm_repo.NewRepository(pool)
+
+	exec(ctx, t, pool, insertOverride, a.channelID, a.everyoneID, 0, role.PermViewChannels)
+	exec(ctx, t, pool, insertOverride, a.channelID, a.modID, role.PermViewChannels, 0)
+	exec(ctx, t, pool, insertOverride, a.channelID, a.lowID, 0, role.PermSendMessages) // nobody holds Low
+	exec(ctx, t, pool, insertOverride, b.channelID, b.everyoneID, 0, role.PermSendMessages)
+
+	got, err := repo.ChannelLayers(ctx, "mod-1", []uuid.UUID{a.serverID, b.serverID})
+	if err != nil {
+		t.Fatalf("ChannelLayers: %v", err)
+	}
+	la := got[a.channelID]
+	if la.Everyone.Deny != role.PermViewChannels || len(la.Roles) != 1 || la.Roles[0].RoleID != a.modID {
+		t.Errorf("channel A = %+v", la)
+	}
+	if lb := got[b.channelID]; lb.Everyone.Deny != role.PermSendMessages || len(lb.Roles) != 0 {
+		t.Errorf("channel B = %+v", lb)
+	}
+
+	only, err := repo.ChannelLayers(ctx, "member-1", []uuid.UUID{a.serverID})
+	if err != nil || len(only) != 1 || len(only[a.channelID].Roles) != 0 {
+		t.Errorf("member-1 in A: %+v, err %v", only, err)
+	}
+	none, err := repo.ChannelLayers(ctx, "stranger", []uuid.UUID{a.serverID, b.serverID})
+	if err != nil || len(none) != 0 {
+		t.Errorf("stranger: %+v, err %v", none, err)
+	}
+}

@@ -30,6 +30,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/middleware"
 	"github.com/discordia-grupo01/servers/internal/outbox"
 	"github.com/discordia-grupo01/servers/internal/repository"
+	"github.com/discordia-grupo01/servers/internal/repository/channelperm_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/member_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/moderation_repo"
 	"github.com/discordia-grupo01/servers/internal/service"
@@ -114,7 +115,7 @@ func setupE2E(t *testing.T) (*gin.Engine, <-chan amqp.Delivery) {
 
 	gin.SetMode(gin.TestMode)
 	router := handler.NewRouter(handler.Deps{
-		Servers:     service.New(serverRepo, icons, memberRepo),
+		Servers:     service.New(serverRepo, icons, memberRepo, channelperm_repo.NewRepository(pool)),
 		Icons:       icons,
 		Membership:  membership_service.New(serverRepo, memberRepo),
 		Invitations: invitation.NewService(repository.NewInvitationRepository(pool), serverRepo, memberRepo),

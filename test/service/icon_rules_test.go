@@ -54,7 +54,7 @@ func TestCreateServer_EmptyIconIsTreatedAsNoIcon_GetsDefault(t *testing.T) {
 
 func TestCreateServer_WhenDefaultIconGenerationFails_ServerIsNotCreated(t *testing.T) {
 	repo, icons := &fakeRepoHelper{}, &fakeIconsHelper{generateErr: errors.New("rng down")}
-	_, err := service.New(repo, icons, repo).CreateServer(context.Background(), validParams("Sin Icono"))
+	_, err := service.New(repo, icons, repo, repo).CreateServer(context.Background(), validParams("Sin Icono"))
 	if err == nil {
 		t.Fatal("expected the icon generation error to surface")
 	}
