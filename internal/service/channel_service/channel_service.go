@@ -40,20 +40,30 @@ type Repo interface {
 	ReorderPositions(ctx context.Context, orderedIDs []uuid.UUID) error
 }
 
+type ProfileNameReader interface {
+	GetName(ctx context.Context, userID string) (string, error)
+}
+
 type ChannelService struct {
 	servers    Servers
 	categories Categories
 	channels   Repo
 	standings  service.StandingReader
+	profiles   ProfileNameReader
 }
 
 type VoiceAccess struct {
 	ChannelID uuid.UUID
 	ServerID  uuid.UUID
+	Name      string
 }
 
-func New(servers Servers, categories Categories, channels Repo, standings service.StandingReader) *ChannelService {
-	return &ChannelService{servers: servers, categories: categories, channels: channels, standings: standings}
+func New(servers Servers, categories Categories, channels Repo, standings service.StandingReader, profiles ...ProfileNameReader) *ChannelService {
+	var profileReader ProfileNameReader
+	if len(profiles) > 0 {
+		profileReader = profiles[0]
+	}
+	return &ChannelService{servers: servers, categories: categories, channels: channels, standings: standings, profiles: profileReader}
 }
 
 func (s *ChannelService) AuthorizeVoice(ctx context.Context, channelID uuid.UUID, userID string) (VoiceAccess, error) {
@@ -77,7 +87,18 @@ func (s *ChannelService) AuthorizeVoice(ctx context.Context, channelID uuid.UUID
 		return VoiceAccess{}, err
 	}
 
-	return VoiceAccess{ChannelID: ch.ID, ServerID: ch.ServerID}, nil
+	name := userID
+	if s.profiles != nil {
+		profileName, err := s.profiles.GetName(ctx, userID)
+		if err != nil {
+			return VoiceAccess{}, err
+		}
+		if profileName != "" {
+			name = profileName
+		}
+	}
+
+	return VoiceAccess{ChannelID: ch.ID, ServerID: ch.ServerID, Name: name}, nil
 }
 
 // resolveCategory fetches the category (if any) and confirms it belongs to serverID.

@@ -42,7 +42,7 @@ func newRouter(access *fakeAccess) *gin.Engine {
 func TestAuthorizeVoice_ReturnsAccessAndAuthenticatedUser(t *testing.T) {
 	channelID := uuid.New()
 	serverID := uuid.New()
-	access := &fakeAccess{access: channel_service.VoiceAccess{ServerID: serverID}}
+	access := &fakeAccess{access: channel_service.VoiceAccess{ServerID: serverID, Name: "John"}}
 	r := newRouter(access)
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/channels/"+channelID.String()+"/voice-access", nil)
@@ -57,7 +57,8 @@ func TestAuthorizeVoice_ReturnsAccessAndAuthenticatedUser(t *testing.T) {
 		t.Errorf("userID = %q, want member-1", access.userID)
 	}
 	if w.Body.String() == "" || !strings.Contains(w.Body.String(), channelID.String()) ||
-		!strings.Contains(w.Body.String(), serverID.String()) || !strings.Contains(w.Body.String(), "true") {
+		!strings.Contains(w.Body.String(), serverID.String()) || !strings.Contains(w.Body.String(), "John") ||
+		!strings.Contains(w.Body.String(), "true") {
 		t.Errorf("body = %s", w.Body.String())
 	}
 }
