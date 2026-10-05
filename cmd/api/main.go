@@ -111,6 +111,7 @@ func main() {
 		Channels:           channelSvc,
 		Categories:         categorySvc,
 		Moderation:         moderationSvc,
+		VoiceAccess:        channelSvc,
 		Auth:               middleware.AuthConfig{UserIDHeader: cfg.UserIDHeader},
 		DB:                 pool,
 	})

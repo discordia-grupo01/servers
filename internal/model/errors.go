@@ -85,6 +85,7 @@ var (
 	ErrChannelNameTaken        = errors.New("a channel with that name already exists in this category")
 	ErrChannelKindInvalid      = errors.New("channel kind must be 'text' or 'voice'")
 	ErrChannelServerMismatch   = errors.New("channel does not belong to this server")
+	ErrVoiceChannelRequired    = errors.New("voice channel access requires a voice channel")
 
 	ErrCategoryNotFound         = errors.New("category not found")
 	ErrCategoryNameRequired     = errors.New("category name must be provided")

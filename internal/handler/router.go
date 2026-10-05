@@ -15,6 +15,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/handler/moderation_handler"
 	"github.com/discordia-grupo01/servers/internal/handler/ownership_transfer_handler"
 	"github.com/discordia-grupo01/servers/internal/handler/role_handler"
+	"github.com/discordia-grupo01/servers/internal/handler/voice_access_handler"
 	"github.com/discordia-grupo01/servers/internal/middleware"
 )
 
@@ -33,6 +34,7 @@ type Deps struct {
 	Channels           channel_handler.ChannelUseCases
 	Categories         category_handler.CategoryUseCases
 	Moderation         moderation_handler.UseCases
+	VoiceAccess        voice_access_handler.UseCases
 	Auth               middleware.AuthConfig
 	DB                 Pinger
 }
@@ -46,6 +48,7 @@ func NewRouter(d Deps) *gin.Engine {
 	channelH := channel_handler.New(d.Channels)
 	categoryH := category_handler.New(d.Categories)
 	moderationH := moderation_handler.New(d.Moderation)
+	voiceAccessH := voice_access_handler.New(d.VoiceAccess)
 
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery())
@@ -94,6 +97,9 @@ func NewRouter(d Deps) *gin.Engine {
 	v1.POST("/servers/:serverId/channels", channelH.CreateChannel)
 	v1.PATCH("/channels/:channelId", channelH.UpdateChannel)
 	v1.DELETE("/channels/:channelId", channelH.DeleteChannel)
+	if d.VoiceAccess != nil {
+		v1.GET("/channels/:channelId/voice-access", voiceAccessH.AuthorizeVoice)
+	}
 	v1.PATCH("/channels/:channelId/category", channelH.MoveToCategory)
 	v1.PATCH("/servers/:serverId/channels/reorder", channelH.Reorder)
 

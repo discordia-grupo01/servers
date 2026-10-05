@@ -14,6 +14,7 @@ import (
 	"github.com/discordia-grupo01/events-contract/channels"
 	"github.com/discordia-grupo01/events-contract/envelope"
 	"github.com/discordia-grupo01/servers/internal/model"
+	"github.com/discordia-grupo01/servers/internal/model/role"
 	"github.com/discordia-grupo01/servers/internal/outbox"
 	"github.com/discordia-grupo01/servers/internal/service"
 )
@@ -46,8 +47,37 @@ type ChannelService struct {
 	standings  service.StandingReader
 }
 
+type VoiceAccess struct {
+	ChannelID uuid.UUID
+	ServerID  uuid.UUID
+}
+
 func New(servers Servers, categories Categories, channels Repo, standings service.StandingReader) *ChannelService {
 	return &ChannelService{servers: servers, categories: categories, channels: channels, standings: standings}
+}
+
+func (s *ChannelService) AuthorizeVoice(ctx context.Context, channelID uuid.UUID, userID string) (VoiceAccess, error) {
+	ch, err := s.channels.GetByID(ctx, channelID)
+	if err != nil {
+		return VoiceAccess{}, err
+	}
+	if ch.Kind != model.ChannelVoice {
+		return VoiceAccess{}, model.ErrVoiceChannelRequired
+	}
+
+	srv, err := s.servers.GetByID(ctx, ch.ServerID)
+	if err != nil {
+		return VoiceAccess{}, err
+	}
+	standing, err := service.ResolveStanding(ctx, s.standings, srv, userID)
+	if err != nil {
+		return VoiceAccess{}, err
+	}
+	if err := service.RequirePermission(standing, role.PermViewChannels); err != nil {
+		return VoiceAccess{}, err
+	}
+
+	return VoiceAccess{ChannelID: ch.ID, ServerID: ch.ServerID}, nil
 }
 
 // resolveCategory fetches the category (if any) and confirms it belongs to serverID.
