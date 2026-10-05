@@ -54,6 +54,7 @@ var (
 
 	ErrPermissionNotOverridable = errors.New("permission cannot be overridden per channel")
 	ErrPermissionConflict       = errors.New("a permission cannot be both allowed and denied")
+	ErrChannelOverrideNotFound  = errors.New("this role has no permission override in this channel")
 
 	ErrEveryoneRoleIsAutomatic = errors.New("@everyone is managed automatically: it can't be deleted, renamed, recolored, or assigned/unassigned by hand")
 

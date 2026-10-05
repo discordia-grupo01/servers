@@ -16,6 +16,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/repository"
 	"github.com/discordia-grupo01/servers/internal/repository/category_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/channel_repo"
+	"github.com/discordia-grupo01/servers/internal/repository/channelperm_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/member_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/moderation_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/ownership_transfer_repo"
@@ -24,6 +25,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/service"
 	"github.com/discordia-grupo01/servers/internal/service/category_service"
 	"github.com/discordia-grupo01/servers/internal/service/channel_service"
+	"github.com/discordia-grupo01/servers/internal/service/channelperm_service"
 	"github.com/discordia-grupo01/servers/internal/service/invitation"
 	"github.com/discordia-grupo01/servers/internal/service/member_role_service"
 	"github.com/discordia-grupo01/servers/internal/service/membership_service"
@@ -99,6 +101,7 @@ func main() {
 	categorySvc := category_service.New(serverRepo, categoryRepo, memberRepo)
 	channelSvc := channel_service.New(serverRepo, categoryRepo, channelRepo, memberRepo)
 	moderationSvc := moderation_service.New(serverRepo, memberRepo, moderationRepo)
+	channelPermSvc := channelperm_service.New(serverRepo, channelRepo, roleRepo, memberRepo, channelperm_repo.NewRepository(pool))
 
 	router := handler.NewRouter(handler.Deps{
 		Servers:            svc,
@@ -111,6 +114,7 @@ func main() {
 		Channels:           channelSvc,
 		Categories:         categorySvc,
 		Moderation:         moderationSvc,
+		ChannelPermissions: channelPermSvc,
 		Auth:               middleware.AuthConfig{UserIDHeader: cfg.UserIDHeader},
 		DB:                 pool,
 	})

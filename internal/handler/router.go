@@ -9,6 +9,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/apierr"
 	"github.com/discordia-grupo01/servers/internal/handler/category_handler"
 	"github.com/discordia-grupo01/servers/internal/handler/channel_handler"
+	"github.com/discordia-grupo01/servers/internal/handler/channelperm_handler"
 	"github.com/discordia-grupo01/servers/internal/handler/invitation"
 	"github.com/discordia-grupo01/servers/internal/handler/member_role_handler"
 	"github.com/discordia-grupo01/servers/internal/handler/membership_handler"
@@ -33,6 +34,7 @@ type Deps struct {
 	Channels           channel_handler.ChannelUseCases
 	Categories         category_handler.CategoryUseCases
 	Moderation         moderation_handler.UseCases
+	ChannelPermissions channelperm_handler.UseCases
 	Auth               middleware.AuthConfig
 	DB                 Pinger
 }
@@ -46,6 +48,7 @@ func NewRouter(d Deps) *gin.Engine {
 	channelH := channel_handler.New(d.Channels)
 	categoryH := category_handler.New(d.Categories)
 	moderationH := moderation_handler.New(d.Moderation)
+	channelPermH := channelperm_handler.New(d.ChannelPermissions)
 
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery())
@@ -96,6 +99,11 @@ func NewRouter(d Deps) *gin.Engine {
 	v1.DELETE("/channels/:channelId", channelH.DeleteChannel)
 	v1.PATCH("/channels/:channelId/category", channelH.MoveToCategory)
 	v1.PATCH("/servers/:serverId/channels/reorder", channelH.Reorder)
+
+	v1.GET("/channels/:channelId/permissions", channelPermH.ListOverrides)
+	v1.PUT("/channels/:channelId/permissions/roles/:roleId", channelPermH.SetOverride)
+	v1.DELETE("/channels/:channelId/permissions/roles/:roleId", channelPermH.DeleteOverride)
+	v1.GET("/channels/:channelId/members/:userId/permissions", channelPermH.EffectivePermissions)
 
 	v1.POST("/servers/:serverId/categories", categoryH.CreateCategory)
 	v1.PATCH("/categories/:categoryId", categoryH.UpdateCategory)
