@@ -97,7 +97,7 @@ func main() {
 	}
 	invSvc := invitation.NewService(repository.NewInvitationRepository(pool), serverRepo, memberRepo)
 	categorySvc := category_service.New(serverRepo, categoryRepo, memberRepo)
-	channelSvc := channel_service.New(serverRepo, categoryRepo, channelRepo, memberRepo)
+	channelSvc := channel_service.New(serverRepo, categoryRepo, channelRepo, memberRepo, user_profile_repo.NewUserProfileRepository(pool))
 	moderationSvc := moderation_service.New(serverRepo, memberRepo, moderationRepo)
 
 	router := handler.NewRouter(handler.Deps{

@@ -28,6 +28,7 @@ type response struct {
 	ChannelID string `json:"channel_id"`
 	ServerID  string `json:"server_id"`
 	Allowed   bool   `json:"allowed"`
+	Name      string `json:"name"`
 }
 
 // AuthorizeVoice godoc
@@ -59,5 +60,6 @@ func (h *Handler) AuthorizeVoice(c *gin.Context) {
 		ChannelID: access.ChannelID.String(),
 		ServerID:  access.ServerID.String(),
 		Allowed:   true,
+		Name:      access.Name,
 	})
 }

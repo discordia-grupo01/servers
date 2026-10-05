@@ -89,6 +89,64 @@ func TestAuthorizeVoice_MemberWithViewPermission_IsAllowed(t *testing.T) {
 	}
 }
 
+func TestAuthorizeVoice_UsesReplicatedProfileName(t *testing.T) {
+	srv := ownerServer()
+	channel := model.Channel{ID: uuid.New(), ServerID: srv.ID, Kind: model.ChannelVoice}
+	svc := channel_service.New(
+		&fakeServers{server: srv},
+		&fakeCategories{},
+		&fakeChannels{getByIDChannel: channel},
+		&fakeStandings{standing: role.Standing{IsMember: true, Permissions: role.PermViewChannels}},
+		&fakeProfileNames{name: "John"},
+	)
+
+	access, err := svc.AuthorizeVoice(context.Background(), channel.ID, "member-1")
+	if err != nil {
+		t.Fatalf("AuthorizeVoice: %v", err)
+	}
+	if access.Name != "John" {
+		t.Errorf("Name = %q, want John", access.Name)
+	}
+}
+
+func TestAuthorizeVoice_FallsBackToIdentityWithoutReplicatedProfile(t *testing.T) {
+	srv := ownerServer()
+	channel := model.Channel{ID: uuid.New(), ServerID: srv.ID, Kind: model.ChannelVoice}
+	svc := channel_service.New(
+		&fakeServers{server: srv},
+		&fakeCategories{},
+		&fakeChannels{getByIDChannel: channel},
+		&fakeStandings{standing: role.Standing{IsMember: true, Permissions: role.PermViewChannels}},
+		&fakeProfileNames{},
+	)
+
+	access, err := svc.AuthorizeVoice(context.Background(), channel.ID, "member-1")
+	if err != nil {
+		t.Fatalf("AuthorizeVoice: %v", err)
+	}
+	if access.Name != "member-1" {
+		t.Errorf("Name = %q, want member-1", access.Name)
+	}
+}
+
+func TestAuthorizeVoice_ProfileLookupErrorIsReturned(t *testing.T) {
+	srv := ownerServer()
+	channel := model.Channel{ID: uuid.New(), ServerID: srv.ID, Kind: model.ChannelVoice}
+	profileErr := errors.New("profile store unavailable")
+	svc := channel_service.New(
+		&fakeServers{server: srv},
+		&fakeCategories{},
+		&fakeChannels{getByIDChannel: channel},
+		&fakeStandings{standing: role.Standing{IsMember: true, Permissions: role.PermViewChannels}},
+		&fakeProfileNames{err: profileErr},
+	)
+
+	_, err := svc.AuthorizeVoice(context.Background(), channel.ID, "member-1")
+	if !errors.Is(err, profileErr) {
+		t.Errorf("err = %v, want profile lookup error", err)
+	}
+}
+
 func TestCreateChannel_EmptyName_ErrNameRequired(t *testing.T) {
 	svc := newService(&fakeServers{server: ownerServer()}, &fakeCategories{}, &fakeChannels{})
 	_, err := svc.CreateChannel(context.Background(), channel_service.CreateChannelParams{

@@ -2391,6 +2391,8 @@ components:
           type: boolean
         channel_id:
           type: string
+        name:
+          type: string
         server_id:
           type: string
       type: object
