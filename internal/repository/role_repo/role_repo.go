@@ -238,3 +238,23 @@ func deleteRole(ctx context.Context, tx pgx.Tx, id uuid.UUID) error {
 	}
 	return model.ErrRoleNotFound
 }
+
+// FilterMentionable returns which of roleIDs are roles of serverID that can be
+// mentioned by id, in hierarchy order. @everyone is left out: mentioning
+// everybody goes through the @everyone mention, not its role id.
+func (r *RoleRepository) FilterMentionable(ctx context.Context, serverID uuid.UUID, roleIDs []uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id FROM roles
+		 WHERE server_id = $1 AND id = ANY($2) AND NOT is_everyone
+		 ORDER BY position, id`,
+		serverID, roleIDs,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("filter mentionable roles: %w", err)
+	}
+	ids, err := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+	if err != nil {
+		return nil, fmt.Errorf("filter mentionable roles: %w", err)
+	}
+	return ids, nil
+}
