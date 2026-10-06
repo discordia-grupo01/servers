@@ -19,6 +19,7 @@ moderación). Historias cubiertas hasta ahora:
 - **Reordenar canales dentro de una categoría, y categorías entre sí** (optativa).
 - **Banear miembro del servidor** (#25).
 - **Revocar baneo** (#26).
+- **Menciones** (#46, optativa)
 
 ## Stack
 - Lenguaje: Go
@@ -207,8 +208,9 @@ borrar nada en el mismo deploy en que se deja de usar.
 Cada rol tiene un conjunto de permisos del catálogo cerrado
 (`internal/model/role/permission.go`): `VIEW_CHANNELS`, `SEND_MESSAGES`,
 `MANAGE_CHANNELS`, `MANAGE_ROLES`, `KICK_MEMBERS`, `BAN_MEMBERS`,
-`MANAGE_SERVER`, `ADMINISTRATOR` y `CREATE_INVITE`. La API siempre usa los
-nombres; la máscara de bits es interna.
+`MANAGE_SERVER`, `ADMINISTRATOR`, `CREATE_INVITE`, `MANAGE_MESSAGES` y
+`MENTION_EVERYONE`. La API siempre usa los nombres; la máscara de bits es
+interna.
 
 - **Administradores.** Son el dueño del servidor y los miembros con algún rol
   que tenga `ADMINISTRATOR`. Tienen todos los permisos de forma implícita. Lo
@@ -220,6 +222,18 @@ nombres; la máscara de bits es interna.
   quitar, reordenar, rol por defecto) pide `MANAGE_ROLES`; canales y
   categorías, `MANAGE_CHANNELS`; la configuración del servidor,
   `MANAGE_SERVER`. Los administradores los tienen implícitos.
+- **Moderar mensajes.** `MANAGE_MESSAGES` permite eliminar mensajes de otros
+  miembros (lo aplica el servicio `messaging`, que consulta los permisos
+  efectivos con `GET /v1/servers/{serverId}/members/{userId}/permissions`).
+  No viene en el conjunto por defecto de un rol nuevo: se asigna con
+  `PATCH /v1/roles/{roleId}`. El autor de un mensaje puede eliminar el suyo sin
+  este permiso.
+- **Mencionar a todos.** `MENTION_EVERYONE` permite mencionar `@everyone` y
+  cualquier rol en un mensaje (historia #46, CA2/CA3). Sin él esas menciones
+  quedan como texto plano: el mensaje se envía igual, pero no notifica a nadie
+  (CA4). Mencionar a un usuario puntual no pide ningún permiso (CA1). Como
+  `MANAGE_MESSAGES`, no viene en el conjunto por defecto de un rol nuevo y los
+  administradores lo tienen implícito. Ver [Menciones](#menciones).
 - **No se puede dar lo que no se tiene.** Quien no es administrador no puede
   agregarle a un rol un permiso que él mismo no tiene, ni asignar un rol que
   traiga alguno (`403` con `reason: permission_not_held`). Si no, alguien con
@@ -299,6 +313,41 @@ Eventos que publica el servicio (exchange `discordia.events`, contratos en
 `servers.member_unbanned`, `servers.channel_created`, `servers.channel_deleted` y
 `servers.server_deleted`.
 
+## Menciones
+Los mensajes viven en `messaging`, pero quién puede mencionar a quién depende
+de los miembros, roles y permisos, que viven acá. Antes de guardar un mensaje
+con menciones, `messaging` llama (con el JWT del autor) a
+`POST /v1/servers/{serverId}/mentions/resolve` con el canal y lo que encontró
+en el texto:
+
+```json
+{ "channel_id": "...", "user_ids": ["..."], "role_ids": ["..."], "everyone": true }
+```
+
+y recibe qué menciones valen y a quién notificar:
+
+```json
+{ "user_ids": ["..."], "role_ids": ["..."], "everyone": true, "recipient_ids": ["..."] }
+```
+
+- `user_ids`: solo los mencionados que son miembros del servidor.
+- `role_ids` y `everyone`: solo si el autor tiene `MENTION_EVERYONE` (si no,
+  vuelven vacíos/`false` y el mensaje se envía con eso como texto plano).
+  El id del rol `@everyone` nunca cuenta como mención de rol: para eso está
+  `everyone`.
+- `recipient_ids`: la unión de todo lo anterior, filtrada a quienes pueden ver
+  el canal (`VIEW_CHANNELS`, la misma regla que `Standing.Has`: el dueño y los
+  administradores siempre), y **sin el autor**. Con `everyone`, son todos los
+  miembros que ven el canal.
+- El autor tiene que ser miembro (`403` si no). Si puede escribir en el canal
+  lo sigue chequeando `messaging` con `SEND_MESSAGES`.
+- Los repetidos cuentan una vez. Máximo 50 usuarios y 20 roles distintos por
+  mensaje (`400` con `reason: too_many`).
+- `channel_id` tiene que ser un canal de ese servidor (`404` si no existe,
+  `400` si es de otro). Hoy `VIEW_CHANNELS` es a nivel servidor, así que el
+  canal no cambia quién lo ve; se pide igual para que el día que haya permisos
+  por canal solo cambie la query.
+
 ## Endpoints
 Ver [`openapi.yaml`](openapi.yaml) -- **generado automáticamente y actualizado
 solo**, no se edita a mano ni hace falta correr nada vos. Sale de las
@@ -358,6 +407,7 @@ admins lo tienen implícito); ver "Roles, permisos y jerarquía".
 | POST | `/v1/servers/{serverId}/bans` | si (`BAN_MEMBERS`) | Banear a un miembro de rango menor (`user_id`, `reason?`). 201 con el baneo; 403 si es el dueño o tiene rango igual o mayor; 404 si no es miembro; 409 si ya está baneado. |
 | GET | `/v1/servers/{serverId}/bans` | si (`BAN_MEMBERS`) | Listar los baneos del server (paginado: `limit`, `offset`; más nuevo primero). |
 | DELETE | `/v1/servers/{serverId}/bans/{userId}` | si (`BAN_MEMBERS`) | Revocar un baneo. 204; 404 si el usuario no está baneado. No lo vuelve miembro: tiene que volver a unirse con una invitación. |
+| POST | `/v1/servers/{serverId}/mentions/resolve` | si (miembro) | Para `messaging`: valida las menciones de un mensaje (`channel_id`, `user_ids`, `role_ids`, `everyone`) y devuelve cuáles valen y a quién notificar (`recipient_ids`). Roles y `@everyone` solo cuentan con `MENTION_EVERYONE`. Ver "Menciones". |
 | GET | `/livez` `/readyz` | no | Health checks. |
 
 ## Health checks

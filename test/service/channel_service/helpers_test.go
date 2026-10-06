@@ -148,6 +148,15 @@ func (f *fakeStandings) MemberStanding(_ context.Context, _ uuid.UUID, _ string)
 	return f.standing, nil
 }
 
+type fakeProfileNames struct {
+	name string
+	err  error
+}
+
+func (f *fakeProfileNames) GetName(_ context.Context, _ string) (string, error) {
+	return f.name, f.err
+}
+
 // adminStanding is a non-owner member holding ADMINISTRATOR through a role.
 func adminStanding() role.Standing {
 	return role.Standing{IsMember: true, Permissions: role.PermAdministrator}

@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/discordia-grupo01/servers/internal/model/userprofile"
@@ -17,6 +18,18 @@ type UserProfileRepository struct {
 
 func NewUserProfileRepository(pool *pgxpool.Pool) *UserProfileRepository {
 	return &UserProfileRepository{pool: pool}
+}
+
+func (r *UserProfileRepository) GetName(ctx context.Context, userID string) (string, error) {
+	var name string
+	err := r.pool.QueryRow(ctx, `SELECT name FROM user_profiles WHERE user_id = $1`, userID).Scan(&name)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return "", nil
+		}
+		return "", fmt.Errorf("get user profile name: %w", err)
+	}
+	return name, nil
 }
 
 // Upsert stores p unless a profile with the same or a higher version is

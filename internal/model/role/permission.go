@@ -22,6 +22,13 @@ const (
 	// PermCreateInvite lets its holder generate and list the server's
 	// invitations (administrators hold it implicitly).
 	PermCreateInvite
+	// PermManageMessages lets its holder delete other members' messages
+	// (administrators hold it implicitly).
+	PermManageMessages
+	// PermMentionEveryone lets its holder mention @everyone and any role in a
+	// message, notifying every member reached (administrators hold it
+	// implicitly). Without it those mentions stay plain text.
+	PermMentionEveryone
 )
 
 // DefaultPermissions are the permissions a newly created role starts with
@@ -29,20 +36,22 @@ const (
 // created before this default existed keep whatever they had.
 const DefaultPermissions = PermViewChannels | PermSendMessages
 
-// AllPermissions is every permission in the catalog. PermCreateInvite is the
+// AllPermissions is every permission in the catalog. PermMentionEveryone is the
 // last bit, so all bits up to and including it are set.
-const AllPermissions = PermCreateInvite<<1 - 1
+const AllPermissions = PermMentionEveryone<<1 - 1
 
 var permissionsByName = map[string]Permission{
-	"VIEW_CHANNELS":   PermViewChannels,
-	"SEND_MESSAGES":   PermSendMessages,
-	"MANAGE_CHANNELS": PermManageChannels,
-	"MANAGE_ROLES":    PermManageRoles,
-	"KICK_MEMBERS":    PermKickMembers,
-	"BAN_MEMBERS":     PermBanMembers,
-	"MANAGE_SERVER":   PermManageServer,
-	"ADMINISTRATOR":   PermAdministrator,
-	"CREATE_INVITE":   PermCreateInvite,
+	"VIEW_CHANNELS":    PermViewChannels,
+	"SEND_MESSAGES":    PermSendMessages,
+	"MANAGE_CHANNELS":  PermManageChannels,
+	"MANAGE_ROLES":     PermManageRoles,
+	"KICK_MEMBERS":     PermKickMembers,
+	"BAN_MEMBERS":      PermBanMembers,
+	"MANAGE_SERVER":    PermManageServer,
+	"ADMINISTRATOR":    PermAdministrator,
+	"CREATE_INVITE":    PermCreateInvite,
+	"MANAGE_MESSAGES":  PermManageMessages,
+	"MENTION_EVERYONE": PermMentionEveryone,
 }
 
 // ParsePermissions translates permission names into a bitmask. If any name is

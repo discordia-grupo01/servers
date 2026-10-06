@@ -10,6 +10,7 @@ import (
 
 	"github.com/discordia-grupo01/events-contract/channels"
 	"github.com/discordia-grupo01/servers/internal/model"
+	"github.com/discordia-grupo01/servers/internal/model/role"
 	"github.com/discordia-grupo01/servers/internal/service/channel_service"
 )
 
@@ -29,6 +30,120 @@ func TestCreateChannel_Valid_CreatesTextChannel(t *testing.T) {
 	}
 	if channels.createCalls != 1 {
 		t.Errorf("createCalls = %d, want 1", channels.createCalls)
+	}
+}
+
+func TestAuthorizeVoice_OwnerOfVoiceChannel_IsAllowed(t *testing.T) {
+	srv := ownerServer()
+	channel := model.Channel{ID: uuid.New(), ServerID: srv.ID, Kind: model.ChannelVoice}
+	svc := newService(&fakeServers{server: srv}, &fakeCategories{}, &fakeChannels{getByIDChannel: channel})
+
+	access, err := svc.AuthorizeVoice(context.Background(), channel.ID, testOwner)
+	if err != nil {
+		t.Fatalf("AuthorizeVoice: %v", err)
+	}
+	if access.ChannelID != channel.ID || access.ServerID != srv.ID {
+		t.Errorf("access = %+v, want channel %s and server %s", access, channel.ID, srv.ID)
+	}
+}
+
+func TestAuthorizeVoice_TextChannel_IsRejected(t *testing.T) {
+	srv := ownerServer()
+	channel := model.Channel{ID: uuid.New(), ServerID: srv.ID, Kind: model.ChannelText}
+	svc := newService(&fakeServers{server: srv}, &fakeCategories{}, &fakeChannels{getByIDChannel: channel})
+
+	_, err := svc.AuthorizeVoice(context.Background(), channel.ID, testOwner)
+	if !errors.Is(err, model.ErrVoiceChannelRequired) {
+		t.Errorf("err = %v, want ErrVoiceChannelRequired", err)
+	}
+}
+
+func TestAuthorizeVoice_NonMemberWithoutViewPermission_IsRejected(t *testing.T) {
+	srv := ownerServer()
+	channel := model.Channel{ID: uuid.New(), ServerID: srv.ID, Kind: model.ChannelVoice}
+	svc := newServiceWithStandings(
+		&fakeServers{server: srv},
+		&fakeCategories{},
+		&fakeChannels{getByIDChannel: channel},
+		&fakeStandings{standing: role.Standing{IsMember: false}},
+	)
+
+	_, err := svc.AuthorizeVoice(context.Background(), channel.ID, "member-1")
+	if !errors.Is(err, model.ErrForbiddenMissingPermission) {
+		t.Errorf("err = %v, want ErrForbiddenMissingPermission", err)
+	}
+}
+
+func TestAuthorizeVoice_MemberWithViewPermission_IsAllowed(t *testing.T) {
+	srv := ownerServer()
+	channel := model.Channel{ID: uuid.New(), ServerID: srv.ID, Kind: model.ChannelVoice}
+	svc := newServiceWithStandings(
+		&fakeServers{server: srv},
+		&fakeCategories{},
+		&fakeChannels{getByIDChannel: channel},
+		&fakeStandings{standing: role.Standing{IsMember: true, Permissions: role.PermViewChannels}},
+	)
+
+	if _, err := svc.AuthorizeVoice(context.Background(), channel.ID, "member-1"); err != nil {
+		t.Fatalf("AuthorizeVoice: %v", err)
+	}
+}
+
+func TestAuthorizeVoice_UsesReplicatedProfileName(t *testing.T) {
+	srv := ownerServer()
+	channel := model.Channel{ID: uuid.New(), ServerID: srv.ID, Kind: model.ChannelVoice}
+	svc := channel_service.New(
+		&fakeServers{server: srv},
+		&fakeCategories{},
+		&fakeChannels{getByIDChannel: channel},
+		&fakeStandings{standing: role.Standing{IsMember: true, Permissions: role.PermViewChannels}},
+		&fakeProfileNames{name: "John"},
+	)
+
+	access, err := svc.AuthorizeVoice(context.Background(), channel.ID, "member-1")
+	if err != nil {
+		t.Fatalf("AuthorizeVoice: %v", err)
+	}
+	if access.Name != "John" {
+		t.Errorf("Name = %q, want John", access.Name)
+	}
+}
+
+func TestAuthorizeVoice_FallsBackToIdentityWithoutReplicatedProfile(t *testing.T) {
+	srv := ownerServer()
+	channel := model.Channel{ID: uuid.New(), ServerID: srv.ID, Kind: model.ChannelVoice}
+	svc := channel_service.New(
+		&fakeServers{server: srv},
+		&fakeCategories{},
+		&fakeChannels{getByIDChannel: channel},
+		&fakeStandings{standing: role.Standing{IsMember: true, Permissions: role.PermViewChannels}},
+		&fakeProfileNames{},
+	)
+
+	access, err := svc.AuthorizeVoice(context.Background(), channel.ID, "member-1")
+	if err != nil {
+		t.Fatalf("AuthorizeVoice: %v", err)
+	}
+	if access.Name != "member-1" {
+		t.Errorf("Name = %q, want member-1", access.Name)
+	}
+}
+
+func TestAuthorizeVoice_ProfileLookupErrorIsReturned(t *testing.T) {
+	srv := ownerServer()
+	channel := model.Channel{ID: uuid.New(), ServerID: srv.ID, Kind: model.ChannelVoice}
+	profileErr := errors.New("profile store unavailable")
+	svc := channel_service.New(
+		&fakeServers{server: srv},
+		&fakeCategories{},
+		&fakeChannels{getByIDChannel: channel},
+		&fakeStandings{standing: role.Standing{IsMember: true, Permissions: role.PermViewChannels}},
+		&fakeProfileNames{err: profileErr},
+	)
+
+	_, err := svc.AuthorizeVoice(context.Background(), channel.ID, "member-1")
+	if !errors.Is(err, profileErr) {
+		t.Errorf("err = %v, want profile lookup error", err)
 	}
 }
 

@@ -60,3 +60,74 @@ func TestPermissionNames_ZeroMask_ReturnsEmpty(t *testing.T) {
 		t.Errorf("got %v, want empty", got)
 	}
 }
+
+func TestManageMessages_IsInTheCatalogWithoutShiftingExistingBits(t *testing.T) {
+	mask, invalid, ok := role.ParsePermissions([]string{"MANAGE_MESSAGES"})
+	if !ok {
+		t.Fatalf("MANAGE_MESSAGES should be in the catalog, invalid=%q", invalid)
+	}
+	if mask != role.PermManageMessages {
+		t.Errorf("mask = %d, want %d", mask, role.PermManageMessages)
+	}
+	if role.PermCreateInvite != 256 || role.PermManageMessages != 512 {
+		t.Errorf("bits shifted: CREATE_INVITE=%d MANAGE_MESSAGES=%d, want 256 and 512",
+			role.PermCreateInvite, role.PermManageMessages)
+	}
+	if role.DefaultPermissions&role.PermManageMessages != 0 {
+		t.Error("a new role must not start with MANAGE_MESSAGES")
+	}
+}
+
+func TestStanding_ManageMessages_ImplicitForOwnerAndAdministratorsOnly(t *testing.T) {
+	cases := map[string]struct {
+		st   role.Standing
+		want bool
+	}{
+		"owner":                   {role.Standing{IsMember: true, IsOwner: true}, true},
+		"administrator":           {role.Standing{IsMember: true, Permissions: role.PermAdministrator}, true},
+		"member with the grant":   {role.Standing{IsMember: true, Permissions: role.PermManageMessages}, true},
+		"member with default set": {role.Standing{IsMember: true, Permissions: role.DefaultPermissions}, false},
+	}
+	for name, tc := range cases {
+		if got := tc.st.Has(role.PermManageMessages); got != tc.want {
+			t.Errorf("%s: Has(MANAGE_MESSAGES) = %v, want %v", name, got, tc.want)
+		}
+	}
+}
+
+func TestMentionEveryone_IsInTheCatalogWithoutShiftingExistingBits(t *testing.T) {
+	mask, invalid, ok := role.ParsePermissions([]string{"MENTION_EVERYONE"})
+	if !ok {
+		t.Fatalf("MENTION_EVERYONE should be in the catalog, invalid=%q", invalid)
+	}
+	if mask != role.PermMentionEveryone {
+		t.Errorf("mask = %d, want %d", mask, role.PermMentionEveryone)
+	}
+	if role.PermManageMessages != 512 || role.PermMentionEveryone != 1024 {
+		t.Errorf("bits shifted: MANAGE_MESSAGES=%d MENTION_EVERYONE=%d, want 512 and 1024",
+			role.PermManageMessages, role.PermMentionEveryone)
+	}
+	if role.DefaultPermissions&role.PermMentionEveryone != 0 {
+		t.Error("a new role must not start with MENTION_EVERYONE")
+	}
+	if got := role.PermissionNames(role.PermMentionEveryone); len(got) != 1 || got[0] != "MENTION_EVERYONE" {
+		t.Errorf("PermissionNames = %v, want [MENTION_EVERYONE]", got)
+	}
+}
+
+func TestStanding_MentionEveryone_ImplicitForOwnerAndAdministratorsOnly(t *testing.T) {
+	cases := map[string]struct {
+		st   role.Standing
+		want bool
+	}{
+		"owner":                   {role.Standing{IsMember: true, IsOwner: true}, true},
+		"administrator":           {role.Standing{IsMember: true, Permissions: role.PermAdministrator}, true},
+		"member with the grant":   {role.Standing{IsMember: true, Permissions: role.PermMentionEveryone}, true},
+		"member with default set": {role.Standing{IsMember: true, Permissions: role.DefaultPermissions}, false},
+	}
+	for name, tc := range cases {
+		if got := tc.st.Has(role.PermMentionEveryone); got != tc.want {
+			t.Errorf("%s: Has(MENTION_EVERYONE) = %v, want %v", name, got, tc.want)
+		}
+	}
+}
