@@ -36,8 +36,10 @@ type Repo interface {
 	Update(ctx context.Context, id uuid.UUID, name string, topic *string) error
 	Delete(ctx context.Context, id uuid.UUID, channelDeletedEvent outbox.Event) error
 	MoveToCategory(ctx context.Context, id uuid.UUID, categoryID *uuid.UUID) error
-	ListByServerAndCategory(ctx context.Context, serverID uuid.UUID, categoryID *uuid.UUID) ([]model.Channel, error)
-	ReorderPositions(ctx context.Context, orderedIDs []uuid.UUID) error
+	// ReorderPositions reorders the (serverID, categoryID) bucket: requested
+	// is the new order of its channels outside hidden. It fails with
+	// model.ErrChannelReorderInvalid if requested isn't exactly those.
+	ReorderPositions(ctx context.Context, serverID uuid.UUID, categoryID *uuid.UUID, requested []uuid.UUID, hidden map[uuid.UUID]bool) error
 }
 
 type ProfileNameReader interface {
@@ -49,6 +51,7 @@ type ChannelService struct {
 	categories Categories
 	channels   Repo
 	standings  service.StandingReader
+	visibility service.ChannelVisibility
 	profiles   ProfileNameReader
 }
 
@@ -58,12 +61,12 @@ type VoiceAccess struct {
 	Name      string
 }
 
-func New(servers Servers, categories Categories, channels Repo, standings service.StandingReader, profiles ...ProfileNameReader) *ChannelService {
+func New(servers Servers, categories Categories, channels Repo, standings service.StandingReader, visibility service.ChannelVisibility, profiles ...ProfileNameReader) *ChannelService {
 	var profileReader ProfileNameReader
 	if len(profiles) > 0 {
 		profileReader = profiles[0]
 	}
-	return &ChannelService{servers: servers, categories: categories, channels: channels, standings: standings, profiles: profileReader}
+	return &ChannelService{servers: servers, categories: categories, channels: channels, standings: standings, visibility: visibility, profiles: profileReader}
 }
 
 func (s *ChannelService) AuthorizeVoice(ctx context.Context, channelID uuid.UUID, userID string) (VoiceAccess, error) {
@@ -230,6 +233,10 @@ func (s *ChannelService) UpdateChannel(ctx context.Context, p UpdateChannelParam
 	if err != nil {
 		return model.Channel{}, err
 	}
+	// #57: a channel the actor can't see is reported as not found.
+	if err := service.RequireVisibleChannel(ctx, s.visibility, srv, actor, p.UserID, ch.ID); err != nil {
+		return model.Channel{}, err
+	}
 	if err := service.RequireManageChannels(actor); err != nil {
 		return model.Channel{}, err
 	}
@@ -276,6 +283,10 @@ func (s *ChannelService) DeleteChannel(ctx context.Context, p DeleteChannelParam
 	if err != nil {
 		return err
 	}
+	// #57: a channel the actor can't see is reported as not found.
+	if err := service.RequireVisibleChannel(ctx, s.visibility, srv, actor, p.UserID, ch.ID); err != nil {
+		return err
+	}
 	if err := service.RequireManageChannels(actor); err != nil {
 		return err
 	}
@@ -314,6 +325,10 @@ func (s *ChannelService) MoveChannelToCategory(ctx context.Context, p MoveChanne
 	if err != nil {
 		return model.Channel{}, err
 	}
+	// #57: a channel the actor can't see is reported as not found.
+	if err := service.RequireVisibleChannel(ctx, s.visibility, srv, actor, p.UserID, ch.ID); err != nil {
+		return model.Channel{}, err
+	}
 	if err := service.RequireManageChannels(actor); err != nil {
 		return model.Channel{}, err
 	}
@@ -343,10 +358,12 @@ type ReorderChannelsParams struct {
 	ChannelIDs []uuid.UUID
 }
 
-// ReorderChannels sets the position of every channel in ChannelIDs to match
-// its index in that slice. ChannelIDs must be exactly the current membership
-// of the (ServerID, CategoryID) bucket -- not a subset, not extra ids -- so a
-// client can't silently drop or smuggle in channels via a stale list.
+// ReorderChannels reorders the channels of the (ServerID, CategoryID) bucket.
+// ChannelIDs must be exactly the channels of that bucket the actor can see --
+// not a subset, not extra ids -- so a client can't silently drop or smuggle in
+// channels via a stale list. Channels hidden from the actor (#57) keep their
+// place and the visible ones take the remaining places in the requested
+// order; for an actor who sees everything that is simply ChannelIDs.
 func (s *ChannelService) ReorderChannels(ctx context.Context, p ReorderChannelsParams) error {
 	srv, err := s.servers.GetByID(ctx, p.ServerID)
 	if err != nil {
@@ -364,33 +381,13 @@ func (s *ChannelService) ReorderChannels(ctx context.Context, p ReorderChannelsP
 		return err
 	}
 
-	current, err := s.channels.ListByServerAndCategory(ctx, p.ServerID, p.CategoryID)
+	hidden, err := service.HiddenChannels(ctx, s.visibility, srv, actor, p.UserID)
 	if err != nil {
 		return err
 	}
-	if !sameChannelSet(current, p.ChannelIDs) {
-		return model.ErrChannelReorderInvalid
-	}
-
-	if err := s.channels.ReorderPositions(ctx, p.ChannelIDs); err != nil {
+	if err := s.channels.ReorderPositions(ctx, p.ServerID, p.CategoryID, p.ChannelIDs, hidden); err != nil {
 		return err
 	}
 	// TODO(events): publicar "channels.channels_reordered" en discordia.events cuando exista un consumidor real.
 	return nil
-}
-
-func sameChannelSet(current []model.Channel, ids []uuid.UUID) bool {
-	if len(current) != len(ids) {
-		return false
-	}
-	set := make(map[uuid.UUID]bool, len(current))
-	for _, ch := range current {
-		set[ch.ID] = true
-	}
-	for _, id := range ids {
-		if !set[id] {
-			return false
-		}
-	}
-	return true
 }

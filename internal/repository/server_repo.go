@@ -149,7 +149,7 @@ func (r *ServerRepository) IconURLs(ctx context.Context, id uuid.UUID) (iconURL,
 func (r *ServerRepository) channelsByServerID(ctx context.Context, serverID uuid.UUID) ([]model.Channel, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, server_id, name, kind, position, category_id, topic, created_at
-		  FROM channels WHERE server_id = $1 ORDER BY position`, serverID)
+		  FROM channels WHERE server_id = $1 ORDER BY position, id`, serverID)
 	if err != nil {
 		return nil, fmt.Errorf("list channels: %w", err)
 	}
@@ -205,7 +205,7 @@ func (r *ServerRepository) ListForUser(ctx context.Context, userID string) ([]mo
 		  JOIN server_members m ON m.server_id = s.id
 		  LEFT JOIN channels c ON c.server_id = s.id
 		 WHERE m.user_id = $1
-		 ORDER BY m.joined_at DESC, c.position`, userID)
+		 ORDER BY m.joined_at DESC, c.position, c.id`, userID)
 	if err != nil {
 		return nil, fmt.Errorf("list servers for user: %w", err)
 	}

@@ -103,7 +103,7 @@ type updateChannelRequest struct {
 
 // UpdateChannel godoc
 // @Summary      Edit a channel
-// @Description  Administrators only (the owner, or a member with ADMINISTRATOR). `name`/`topic` omitted leave the field unchanged.
+// @Description  Administrators only (the owner, or a member with ADMINISTRATOR). `name`/`topic` omitted leave the field unchanged. A channel hidden from the caller by a permission override (no VIEW_CHANNELS there) is reported as 404, as if it didn't exist.
 // @Tags         channels
 // @Accept       json
 // @Produce      json
@@ -143,7 +143,7 @@ func (h *Handler) UpdateChannel(c *gin.Context) {
 
 // DeleteChannel godoc
 // @Summary      Delete a channel
-// @Description  Administrators only (the owner, or a member with ADMINISTRATOR).
+// @Description  Administrators only (the owner, or a member with ADMINISTRATOR). A channel hidden from the caller by a permission override (no VIEW_CHANNELS there) is reported as 404, as if it didn't exist.
 // @Tags         channels
 // @Security     BearerAuth
 // @Param        channelId  path  string  true  "Channel ID"
@@ -175,7 +175,7 @@ type moveChannelRequest struct {
 
 // MoveToCategory godoc
 // @Summary      Move a channel to a category
-// @Description  Administrators only (the owner, or a member with ADMINISTRATOR). `category_id` omitted/null moves it to the server's "Sin asignar" fallback category ("no category" is not a valid state).
+// @Description  Administrators only (the owner, or a member with ADMINISTRATOR). `category_id` omitted/null moves it to the server's "Sin asignar" fallback category ("no category" is not a valid state). A channel hidden from the caller by a permission override (no VIEW_CHANNELS there) is reported as 404, as if it didn't exist.
 // @Tags         channels
 // @Accept       json
 // @Produce      json
@@ -224,7 +224,7 @@ type reorderChannelsRequest struct {
 
 // Reorder godoc
 // @Summary      Reorder channels within a category
-// @Description  Administrators only (the owner, or a member with ADMINISTRATOR). `channel_ids` is the full, final order for that category (or for "sin categoria" if `category_id` is omitted/null).
+// @Description  Administrators only (the owner, or a member with ADMINISTRATOR). `channel_ids` is the full, final order of the channels of that category the caller can see (or of "sin categoria" if `category_id` is omitted/null). Channels hidden from the caller by a permission override must not be sent: they keep their place, and the visible ones fill the remaining places in the given order.
 // @Tags         channels
 // @Accept       json
 // @Security     BearerAuth

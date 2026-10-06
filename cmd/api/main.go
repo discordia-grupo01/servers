@@ -16,6 +16,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/repository"
 	"github.com/discordia-grupo01/servers/internal/repository/category_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/channel_repo"
+	"github.com/discordia-grupo01/servers/internal/repository/channelperm_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/member_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/moderation_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/ownership_transfer_repo"
@@ -24,6 +25,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/service"
 	"github.com/discordia-grupo01/servers/internal/service/category_service"
 	"github.com/discordia-grupo01/servers/internal/service/channel_service"
+	"github.com/discordia-grupo01/servers/internal/service/channelperm_service"
 	"github.com/discordia-grupo01/servers/internal/service/invitation"
 	"github.com/discordia-grupo01/servers/internal/service/member_role_service"
 	"github.com/discordia-grupo01/servers/internal/service/membership_service"
@@ -83,8 +85,9 @@ func main() {
 	categoryRepo := category_repo.NewCategoryRepository(pool)
 	channelRepo := channel_repo.NewChannelRepository(pool)
 	moderationRepo := moderation_repo.NewRepository(pool)
+	channelPermRepo := channelperm_repo.NewRepository(pool)
 
-	svc := service.New(serverRepo, icons, memberRepo)
+	svc := service.New(serverRepo, icons, memberRepo, channelPermRepo)
 	roleSvc := role_service.New(serverRepo, roleRepo, memberRepo)
 	memberRoleSvc := member_role_service.New(serverRepo, roleRepo, memberRepo)
 	membershipSvc := membership_service.New(serverRepo, memberRepo)
@@ -98,8 +101,9 @@ func main() {
 	}
 	invSvc := invitation.NewService(repository.NewInvitationRepository(pool), serverRepo, memberRepo)
 	categorySvc := category_service.New(serverRepo, categoryRepo, memberRepo)
-	channelSvc := channel_service.New(serverRepo, categoryRepo, channelRepo, memberRepo, user_profile_repo.NewUserProfileRepository(pool))
+	channelSvc := channel_service.New(serverRepo, categoryRepo, channelRepo, memberRepo, channelPermRepo, user_profile_repo.NewUserProfileRepository(pool))
 	moderationSvc := moderation_service.New(serverRepo, memberRepo, moderationRepo)
+	channelPermSvc := channelperm_service.New(serverRepo, channelRepo, roleRepo, memberRepo, channelPermRepo)
 	mentionSvc := mention_service.New(serverRepo, channelRepo, memberRepo, roleRepo)
 
 	router := handler.NewRouter(handler.Deps{
@@ -113,6 +117,7 @@ func main() {
 		Channels:           channelSvc,
 		Categories:         categorySvc,
 		Moderation:         moderationSvc,
+		ChannelPermissions: channelPermSvc,
 		VoiceAccess:        channelSvc,
 		Mentions:           mentionSvc,
 		Auth:               middleware.AuthConfig{UserIDHeader: cfg.UserIDHeader},

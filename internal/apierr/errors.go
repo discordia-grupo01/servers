@@ -159,6 +159,22 @@ func WriteDomainError(c *gin.Context, err error) {
 			details["permissions"] = pnh.Permissions
 		}
 		RespondError(c, http.StatusForbidden, err.Error(), details)
+	case errors.Is(err, model.ErrPermissionNotOverridable):
+		details := map[string]any{"field": "permissions", "reason": "permission_not_overridable"}
+		var e *model.PermissionNotOverridableError
+		if errors.As(err, &e) {
+			details["permissions"] = e.Permissions
+		}
+		RespondError(c, http.StatusBadRequest, err.Error(), details)
+	case errors.Is(err, model.ErrPermissionConflict):
+		details := map[string]any{"field": "permissions", "reason": "permission_conflict"}
+		var e *model.PermissionConflictError
+		if errors.As(err, &e) {
+			details["permissions"] = e.Permissions
+		}
+		RespondError(c, http.StatusBadRequest, err.Error(), details)
+	case errors.Is(err, model.ErrChannelOverrideNotFound):
+		RespondError(c, http.StatusNotFound, err.Error(), map[string]any{"reason": "channel_override_not_found"})
 	case errors.Is(err, model.ErrForbiddenMissingPermission):
 		RespondError(c, http.StatusForbidden, err.Error(), map[string]any{"reason": "missing_permission"})
 	case errors.Is(err, model.ErrBanTargetRequired):
@@ -167,6 +183,10 @@ func WriteDomainError(c *gin.Context, err error) {
 		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("user_id", "cannot_ban_self"))
 	case errors.Is(err, model.ErrCannotBanOwner):
 		RespondError(c, http.StatusForbidden, err.Error(), map[string]any{"reason": "cannot_ban_owner"})
+	case errors.Is(err, model.ErrCannotKickSelf):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("user_id", "cannot_kick_self"))
+	case errors.Is(err, model.ErrCannotKickOwner):
+		RespondError(c, http.StatusForbidden, err.Error(), map[string]any{"reason": "cannot_kick_owner"})
 	case errors.Is(err, model.ErrTargetOutranksActor):
 		RespondError(c, http.StatusForbidden, err.Error(), map[string]any{"reason": "target_outranks_actor"})
 	case errors.Is(err, model.ErrAlreadyBanned):

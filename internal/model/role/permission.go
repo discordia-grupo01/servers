@@ -36,6 +36,12 @@ const (
 // created before this default existed keep whatever they had.
 const DefaultPermissions = PermViewChannels | PermSendMessages
 
+// ChannelScopedPermissions are the permissions that mean something in a
+// single channel, so a role's value for them can be overridden per channel
+// (#57). The rest act on the whole server. Its value (515) is repeated in the
+// overrides_channel_scoped CHECK of migration 0020: keep them in sync.
+const ChannelScopedPermissions = PermViewChannels | PermSendMessages | PermManageMessages
+
 // AllPermissions is every permission in the catalog. PermMentionEveryone is the
 // last bit, so all bits up to and including it are set.
 const AllPermissions = PermMentionEveryone<<1 - 1

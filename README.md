@@ -223,8 +223,8 @@ interna.
   categorías, `MANAGE_CHANNELS`; la configuración del servidor,
   `MANAGE_SERVER`. Los administradores los tienen implícitos.
 - **Moderar mensajes.** `MANAGE_MESSAGES` permite eliminar mensajes de otros
-  miembros (lo aplica el servicio `messaging`, que consulta los permisos
-  efectivos con `GET /v1/servers/{serverId}/members/{userId}/permissions`).
+  miembros (lo aplica el servicio `messaging`, que tiene que consultar los
+  permisos efectivos **del canal**, ver "Permisos por canal").
   No viene en el conjunto por defecto de un rol nuevo: se asigna con
   `PATCH /v1/roles/{roleId}`. El autor de un mensaje puede eliminar el suyo sin
   este permiso.
@@ -244,14 +244,17 @@ interna.
   `SEND_MESSAGES` (`role.DefaultPermissions`); después se editan con
   `PATCH /v1/roles/{roleId}`. Los roles creados antes de este default no se
   tocaron.
-- **Los permisos solo suman.** Los permisos de un miembro son la **unión** de
-  los de todos sus roles (no hay permisos que "nieguen"). Por eso, quitarle un
-  rol no le saca un permiso que también le da otro rol, y los cambios en un rol
-  se aplican de inmediato a todos los que lo tienen.
+- **A nivel servidor, los permisos solo suman.** Los permisos de un miembro
+  en el servidor son la **unión** de los de todos sus roles (ningún rol
+  "niega" un permiso de otro). Por eso, quitarle un rol no le saca un permiso
+  que también le da otro rol, y los cambios en un rol se aplican de inmediato
+  a todos los que lo tienen.
   `GET /v1/servers/{serverId}/members/{userId}/permissions` devuelve los
-  permisos **efectivos**, con la misma regla que usa el servicio para
-  autorizar: todos para el dueño y los administradores, la unión de sus roles
-  para el resto. El cliente puede decidir qué mostrar con un solo "incluye X".
+  permisos **efectivos en el servidor**, con la misma regla que usa el
+  servicio para autorizar: todos para el dueño y los administradores, la
+  unión de sus roles para el resto. El cliente puede decidir qué mostrar con
+  un solo "incluye X". Dentro de un canal, en cambio, un override puede quitar
+  permisos (ver "Permisos por canal").
 - **Jerarquía.** Cada rol tiene una `position` (1 = el más alto); los roles
   nuevos se crean al final. El rango de un miembro es su rol más alto, y el
   dueño está por encima de todos. Como los permisos solo suman, la jerarquía
@@ -260,13 +263,62 @@ interna.
   - **Reordenar roles** (`PATCH /v1/servers/{serverId}/roles/reorder`, con la
     lista completa de roles, del más alto al más bajo): quien no es el dueño
     solo puede mover los roles que están por debajo de su rol más alto.
-  - **Banear**: solo se puede banear a alguien de rango estrictamente menor.
+  - **Banear y expulsar**: solo se puede banear o expulsar a alguien de rango
+    estrictamente menor.
   - **Gestionar roles**: quien no es el dueño solo puede editar, borrar,
     asignar, quitar o poner como rol por defecto los roles que están
     **estrictamente por debajo** de su rol más alto (`403` con
     `reason: role_above_own`). Así no puede darse (ni sacarle a otro) un rol
     que lo supere para después banear o reordenar por encima de su rango.
-    Tampoco puede editar su propio rol más alto. El dueño puede todo.
+    Tampoco puede editar su propio rol más alto. El dueño puede todo. La misma
+    regla vale para los overrides de un rol en un canal, salvo `@everyone`.
+
+## Permisos por canal
+Un **override** es una excepción de permisos para un rol en un solo canal:
+qué permisos gana el rol ahí (`allow`) y cuáles pierde (`deny`), sin tocar sus
+permisos en el resto del servidor (HU #57). Se guardan en la tabla
+`channel_permission_overrides` (migración 0020), uno por rol y canal.
+
+- **Qué se puede sobrescribir.** Solo los permisos que tienen sentido en un
+  canal: `VIEW_CHANNELS`, `SEND_MESSAGES` y `MANAGE_MESSAGES`
+  (`role.ChannelScopedPermissions`). Cualquier otro da `400`
+  `permission_not_overridable`; el mismo permiso en `allow` y `deny`, `400`
+  `permission_conflict`. Con las dos listas vacías, el override se borra.
+- **Quién.** Hace falta `MANAGE_ROLES`, y el rol tiene que estar por debajo
+  del propio (`role_above_own`). Excepción: el override de `@everyone` lo
+  puede tocar cualquiera con `MANAGE_ROLES`, porque es el caso principal (un
+  canal de solo lectura o privado para todos). Solo se pueden permitir
+  (`allow`) permisos que uno mismo tiene (`permission_not_held`); denegar no
+  tiene restricción.
+- **Cómo se calcula.** Los permisos de un miembro en un canal
+  (`channelperm.Effective`) son: todos para el dueño y los administradores
+  (los overrides no los afectan); para el resto, la unión de sus roles, a la
+  que se le aplica primero el override de `@everyone` (se sacan sus `deny` y
+  se suman sus `allow`) y después, todos juntos, los de sus otros roles (unión
+  de `deny`, unión de `allow`; si un rol permite y otro deniega, gana el
+  permiso). Ejemplos:
+  - `#anuncios` de solo lectura: `@everyone` con `deny: [SEND_MESSAGES]`, y
+    `Moderador` con `allow: [SEND_MESSAGES]` para que ellos sí publiquen.
+  - `#staff` privado: `@everyone` con `deny: [VIEW_CHANNELS]` y `Moderador` con
+    `allow: [VIEW_CHANNELS]`.
+- **Permisos efectivos de un canal.**
+  `GET /v1/channels/{channelId}/members/{userId}/permissions` devuelve los
+  permisos del miembro en ese canal, con la misma forma y los mismos códigos
+  que el endpoint por servidor. Es el que tienen que usar los servicios que
+  autorizan por canal (`messaging` para leer, escribir y moderar; voz).
+- **Canales ocultos.** Quien no tiene `VIEW_CHANNELS` en un canal no lo ve:
+  - `GET /v1/servers` y `GET /v1/servers/{serverId}` no lo incluyen en
+    `channels` (las categorías se devuelven siempre, aunque queden vacías).
+    Quien no es miembro recibe `GET /v1/servers/{serverId}` con
+    `channels: []`.
+  - Editarlo, borrarlo o moverlo de categoría da `404`, aunque se tenga
+    `MANAGE_CHANNELS`, para no revelar que existe.
+  - Al reordenar una categoría se mandan solo los canales visibles: los
+    ocultos conservan su lugar y los visibles ocupan los lugares restantes en
+    el orden pedido. Mandar un canal oculto da `400 reorder_invalid`.
+  - Los canales empatados en `position` (los recién creados quedan en `0`
+    hasta el primer reorder) se ordenan por `id`, igual en los listados y en el
+    reorder.
 
 ## Eliminar un servidor
 `DELETE /v1/servers/{serverId}` con cuerpo `{"confirm_name": "<nombre exacto del servidor>"}`
@@ -306,12 +358,20 @@ interna.
   miembro). Borra el baneo y encola `servers.member_unbanned`. **No** lo vuelve
   a hacer miembro: puede volver a unirse con cualquier invitación válida, y
   entra como miembro nuevo (con el rol por defecto, sin los roles que tenía).
+- **Expulsar** (`POST /v1/servers/{serverId}/kicks`, `user_id`): requiere
+  `KICK_MEMBERS` (los administradores lo tienen implícito) y que el objetivo
+  sea un miembro de rango menor; nunca el dueño ni uno mismo (para irse está
+  `DELETE /v1/servers/{serverId}/members/{userId}`). En una sola transacción
+  se saca al miembro (con sus roles), se cancela una transferencia de
+  propiedad pendiente hacia él y se encolan `servers.member_left` y
+  `servers.member_kicked`. A diferencia del baneo, no queda nada registrado:
+  puede volver a unirse con cualquier invitación válida (HU #59).
 
 Eventos que publica el servicio (exchange `discordia.events`, contratos en
 `github.com/discordia-grupo01/events-contract` y AsyncAPI en `discordia-docs`):
 `servers.member_joined`, `servers.member_left`, `servers.member_banned`,
-`servers.member_unbanned`, `servers.channel_created`, `servers.channel_deleted` y
-`servers.server_deleted`.
+`servers.member_unbanned`, `servers.member_kicked`, `servers.channel_created`,
+`servers.channel_deleted` y `servers.server_deleted`.
 
 ## Menciones
 Los mensajes viven en `messaging`, pero quién puede mencionar a quién depende
@@ -368,8 +428,8 @@ admins lo tienen implícito); ver "Roles, permisos y jerarquía".
 | Metodo | Ruta | Auth | Descripcion |
 |---|---|---|---|
 | POST | `/v1/servers` | si | Crear servidor (multipart: `name`, `icon?`). Sin `icon`, se genera un ícono default de color random. |
-| GET | `/v1/servers` | si | Mis servidores (de los que soy owner o miembro), con sus canales y categorias. |
-| GET | `/v1/servers/{serverId}` | si | Un servidor puntual (nombre, canales, categorias, icon_url, banner_url). Ej.: después de un `join`, para obtener los datos con solo el `server_id`. Cada canal trae su `category_id` (`null` si esta "sin categoria"). |
+| GET | `/v1/servers` | si | Mis servidores (de los que soy owner o miembro), con sus categorias y los canales que puedo ver (sin los ocultos por un override). |
+| GET | `/v1/servers/{serverId}` | si | Un servidor puntual (nombre, canales, categorias, icon_url, banner_url). Ej.: después de un `join`, para obtener los datos con solo el `server_id`. Cada canal trae su `category_id` (`null` si esta "sin categoria"). Solo trae los canales que el caller puede ver; si no es miembro, `channels: []`. |
 | PATCH | `/v1/servers/{serverId}` | si (admin) | Editar nombre, ícono y/o banner (multipart: `name?`, `icon?`, `banner?`, `remove_banner?`). Todos los campos son opcionales; sin permisos da 403, datos invalidos dan 400 sin persistir nada. |
 | DELETE | `/v1/servers/{serverId}` | si (owner) | Eliminar el servidor y todo lo suyo (cuerpo JSON `confirm_name` con el nombre exacto). 204; 400 si falta o no coincide la confirmación; 403 si no es el owner; 404 si no existe. Irreversible. |
 | GET | `/v1/servers/{serverId}/icon` | no (público) | Sirve el archivo del ícono (subido o el default generado). En produccion (Supabase) `icon_url` apunta directo al bucket público; esta ruta queda como fallback para setups sin Supabase. |
@@ -397,16 +457,21 @@ admins lo tienen implícito); ver "Roles, permisos y jerarquía".
 | PUT | `/v1/servers/{serverId}/default-role` | si (admin) | Definir el rol por defecto del server. |
 | DELETE | `/v1/roles/{roleId}` | si (admin) | Eliminar un rol (optativa). Limpia asignaciones; rechaza con 409 si el rol es el default actual del server (hay que asignar otro default primero). |
 | POST | `/v1/servers/{serverId}/channels` | si (admin) | Crear canal de texto o voz (`name`, `kind`, `category_id?`). 400 si el nombre esta vacio o ya existe otro canal con ese nombre en la misma categoria (o en el "sin categoria", segun corresponda). |
-| PATCH | `/v1/channels/{channelId}` | si (admin) | Editar nombre y/o topic de un canal. |
-| DELETE | `/v1/channels/{channelId}` | si (admin) | Eliminar un canal. |
+| PATCH | `/v1/channels/{channelId}` | si (`MANAGE_CHANNELS`) | Editar nombre y/o topic de un canal. 404 si el caller no lo ve. |
+| DELETE | `/v1/channels/{channelId}` | si (`MANAGE_CHANNELS`) | Eliminar un canal. 404 si el caller no lo ve. |
 | POST | `/v1/servers/{serverId}/categories` | si (admin) | Crear categoria (`name`). |
 | PATCH | `/v1/categories/{categoryId}` | si (admin) | Renombrar una categoria (`name`). |
-| PATCH | `/v1/channels/{channelId}/category` | si (admin) | Mover un canal a una categoria (`category_id`), o sacarlo a "sin categoria" (`category_id: null`). |
-| PATCH | `/v1/servers/{serverId}/channels/reorder` | si (admin) | Reordenar los canales de una categoria (`category_id?`, `channel_ids`: el orden completo y exacto de esa categoria). 400 si la lista no coincide exactamente con los canales actuales de esa categoria. |
+| PATCH | `/v1/channels/{channelId}/category` | si (`MANAGE_CHANNELS`) | Mover un canal a una categoria (`category_id`), o sacarlo a "sin categoria" (`category_id: null`). 404 si el caller no lo ve. |
+| PATCH | `/v1/servers/{serverId}/channels/reorder` | si (`MANAGE_CHANNELS`) | Reordenar los canales de una categoria (`category_id?`, `channel_ids`: el orden completo y exacto de los canales de esa categoria que el caller ve). Los ocultos conservan su lugar. 400 si la lista no coincide exactamente. |
 | PATCH | `/v1/servers/{serverId}/categories/reorder` | si (admin) | Reordenar las categorias del server (`category_ids`: el orden completo y exacto). 400 si la lista no coincide exactamente. |
 | POST | `/v1/servers/{serverId}/bans` | si (`BAN_MEMBERS`) | Banear a un miembro de rango menor (`user_id`, `reason?`). 201 con el baneo; 403 si es el dueño o tiene rango igual o mayor; 404 si no es miembro; 409 si ya está baneado. |
 | GET | `/v1/servers/{serverId}/bans` | si (`BAN_MEMBERS`) | Listar los baneos del server (paginado: `limit`, `offset`; más nuevo primero). |
 | DELETE | `/v1/servers/{serverId}/bans/{userId}` | si (`BAN_MEMBERS`) | Revocar un baneo. 204; 404 si el usuario no está baneado. No lo vuelve miembro: tiene que volver a unirse con una invitación. |
+| POST | `/v1/servers/{serverId}/kicks` | si (`KICK_MEMBERS`) | Expulsar a un miembro de rango menor (`user_id`). 204; 400 si es uno mismo; 403 si es el dueño o tiene rango igual o mayor; 404 si no es miembro. Puede volver con una invitación. |
+| PUT | `/v1/channels/{channelId}/permissions/roles/{roleId}` | si (`MANAGE_ROLES`) | Crear o reemplazar el override de un rol en un canal (`allow?`, `deny?`: `VIEW_CHANNELS`, `SEND_MESSAGES`, `MANAGE_MESSAGES`). 200 con el override; 204 si las dos listas vienen vacías (se borra). 400 si el permiso no se puede sobrescribir o está en las dos listas; 403 si el rol no está por debajo del propio (salvo `@everyone`) o se permite algo que el caller no tiene. |
+| DELETE | `/v1/channels/{channelId}/permissions/roles/{roleId}` | si (`MANAGE_ROLES`) | Quitar el override de un rol en un canal. 204; 404 `channel_override_not_found` si no había. |
+| GET | `/v1/channels/{channelId}/permissions` | si (`MANAGE_ROLES`) | Listar los overrides del canal (`@everyone` primero, después por jerarquía). |
+| GET | `/v1/channels/{channelId}/members/{userId}/permissions` | si (miembro) | Permisos efectivos del miembro en ese canal (con los overrides aplicados). Misma forma y códigos que el endpoint por servidor. |
 | POST | `/v1/servers/{serverId}/mentions/resolve` | si (miembro) | Para `messaging`: valida las menciones de un mensaje (`channel_id`, `user_ids`, `role_ids`, `everyone`) y devuelve cuáles valen y a quién notificar (`recipient_ids`). Roles y `@everyone` solo cuentan con `MENTION_EVERYONE`. Ver "Menciones". |
 | GET | `/livez` `/readyz` | no | Health checks. |
 

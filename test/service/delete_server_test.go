@@ -24,7 +24,7 @@ func serverToDelete() model.Server {
 
 func deleteServer(t *testing.T, repo *fakeRepoHelper, icons *fakeIconsHelper, p service.DeleteServerParams) error {
 	t.Helper()
-	return service.New(repo, icons, repo).DeleteServer(context.Background(), p)
+	return service.New(repo, icons, repo, repo).DeleteServer(context.Background(), p)
 }
 
 func TestDeleteServer_OwnerConfirmingTheName_Deletes(t *testing.T) {

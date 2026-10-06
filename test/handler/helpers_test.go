@@ -16,6 +16,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/iconstore"
 	"github.com/discordia-grupo01/servers/internal/middleware"
 	"github.com/discordia-grupo01/servers/internal/model"
+	"github.com/discordia-grupo01/servers/internal/model/channelperm"
 	"github.com/discordia-grupo01/servers/internal/model/role"
 	"github.com/discordia-grupo01/servers/internal/outbox"
 	"github.com/discordia-grupo01/servers/internal/service"
@@ -24,6 +25,8 @@ import (
 const testUser = "user-1"
 
 type fakeRepo struct {
+	standing role.Standing
+
 	err     error
 	calls   int
 	created model.Server
@@ -105,9 +108,21 @@ func (f *fakeRepo) DeleteServer(_ context.Context, _ uuid.UUID, buildEvents func
 }
 
 // MemberStanding makes fakeRepo the server service's StandingReader too:
-// every non-owner caller is a non-member, so only the owner administers.
+// every non-owner caller gets f.standing, whose zero value is a non-member,
+// so by default only the owner administers.
 func (f *fakeRepo) MemberStanding(_ context.Context, _ uuid.UUID, _ string) (role.Standing, error) {
-	return role.Standing{}, nil
+	return f.standing, nil
+}
+
+// MemberStandings and ChannelLayers make fakeRepo the server service's
+// ChannelVisibility: no standings and no overrides, so nothing is hidden from
+// the owner and non-owners are non-members.
+func (f *fakeRepo) MemberStandings(context.Context, string, []uuid.UUID) (map[uuid.UUID]role.Standing, error) {
+	return map[uuid.UUID]role.Standing{}, nil
+}
+
+func (f *fakeRepo) ChannelLayers(context.Context, string, []uuid.UUID) (map[uuid.UUID]channelperm.Layers, error) {
+	return map[uuid.UUID]channelperm.Layers{}, nil
 }
 
 type okPinger struct{}
@@ -146,7 +161,7 @@ func newRouter(t *testing.T, maxIcon int64, repoErr error) (*gin.Engine, *fakeRe
 		t.Fatal(err)
 	}
 	r := handler.NewRouter(handler.Deps{
-		Servers: service.New(repo, icons, repo),
+		Servers: service.New(repo, icons, repo, repo),
 		Icons:   icons,
 		Auth:    middleware.AuthConfig{UserIDHeader: "X-User-Id"},
 		DB:      okPinger{},

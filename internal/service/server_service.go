@@ -16,6 +16,8 @@ import (
 	serverevents "github.com/discordia-grupo01/events-contract/servers"
 	"github.com/discordia-grupo01/servers/internal/iconstore"
 	"github.com/discordia-grupo01/servers/internal/model"
+	"github.com/discordia-grupo01/servers/internal/model/channelperm"
+	"github.com/discordia-grupo01/servers/internal/model/role"
 	"github.com/discordia-grupo01/servers/internal/outbox"
 )
 
@@ -35,13 +37,14 @@ type IconStore interface {
 }
 
 type Service struct {
-	repo      Repo
-	icons     IconStore
-	standings StandingReader
+	repo       Repo
+	icons      IconStore
+	standings  StandingReader
+	visibility ChannelVisibility
 }
 
-func New(repo Repo, icons IconStore, standings StandingReader) *Service {
-	return &Service{repo: repo, icons: icons, standings: standings}
+func New(repo Repo, icons IconStore, standings StandingReader, visibility ChannelVisibility) *Service {
+	return &Service{repo: repo, icons: icons, standings: standings, visibility: visibility}
 }
 
 func validateServerName(raw string) (string, error) {
@@ -168,15 +171,69 @@ func (s *Service) CreateServer(ctx context.Context, p CreateServerParams) (model
 	return srv, nil
 }
 
+// ListMyServers lists the caller's servers, each with only the channels they
+// can see (#57): channels hidden from them by an override are left out. The
+// standings and overrides for every server come in two queries, whatever the
+// number of servers. If they can't be loaded the call fails -- it never falls
+// back to an unfiltered list.
 func (s *Service) ListMyServers(ctx context.Context, userID string) ([]model.Server, error) {
 	if userID == "" {
 		return nil, model.ErrUnauthorized
 	}
-	return s.repo.ListForUser(ctx, userID)
+	servers, err := s.repo.ListForUser(ctx, userID)
+	if err != nil || len(servers) == 0 {
+		return servers, err
+	}
+
+	ids := make([]uuid.UUID, 0, len(servers))
+	for _, srv := range servers {
+		ids = append(ids, srv.ID)
+	}
+	standings, err := s.visibility.MemberStandings(ctx, userID, ids)
+	if err != nil {
+		return nil, err
+	}
+	layers, err := s.visibility.ChannelLayers(ctx, userID, ids)
+	if err != nil {
+		return nil, err
+	}
+	for i, srv := range servers {
+		st := standings[srv.ID]
+		if srv.OwnerID == userID {
+			st = role.Standing{IsMember: true, IsOwner: true}
+		}
+		servers[i].Channels = channelperm.VisibleChannels(st, srv.Channels, layers)
+	}
+	return servers, nil
 }
 
-func (s *Service) GetServer(ctx context.Context, id uuid.UUID) (model.Server, error) {
-	return s.repo.GetByID(ctx, id)
+// GetServer returns a server with only the channels userID can see (#57). A
+// caller who isn't a member gets the server without channels.
+func (s *Service) GetServer(ctx context.Context, id uuid.UUID, userID string) (model.Server, error) {
+	srv, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return model.Server{}, err
+	}
+	actor, err := ResolveStanding(ctx, s.standings, srv, userID)
+	if err != nil {
+		return model.Server{}, err
+	}
+	if !actor.IsMember {
+		srv.Channels = []model.Channel{}
+		return srv, nil
+	}
+	hidden, err := HiddenChannels(ctx, s.visibility, srv, actor, userID)
+	if err != nil {
+		return model.Server{}, err
+	}
+	visible := make([]model.Channel, 0, len(srv.Channels))
+	for _, ch := range srv.Channels {
+		if !hidden[ch.ID] {
+			visible = append(visible, ch)
+		}
+	}
+	srv.Channels = visible
+	return srv, nil
 }
 
 func (s *Service) GetServerImageURLs(ctx context.Context, id uuid.UUID) (iconURL, bannerURL *string, err error) {

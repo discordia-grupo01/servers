@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/discordia-grupo01/servers/internal/model"
+	"github.com/discordia-grupo01/servers/internal/model/role"
 )
 
 func TestGetServer_NoAuth_Returns401(t *testing.T) {
@@ -43,6 +44,7 @@ func TestGetServer_Found_ReturnsNameAndChannels(t *testing.T) {
 		ID: id, Name: "Joined Server", OwnerID: "someone-else",
 		Channels: []model.Channel{{ID: uuid.New(), Name: "general", Kind: model.ChannelText}},
 	}
+	repo.standing = role.Standing{IsMember: true, Permissions: role.PermViewChannels}
 
 	w := getAsUser(t, r, testUser, "/v1/servers/"+id.String())
 	if w.Code != http.StatusOK {
@@ -51,5 +53,23 @@ func TestGetServer_Found_ReturnsNameAndChannels(t *testing.T) {
 	s := decodeServer(t, w)
 	if s.Name != "Joined Server" || len(s.Channels) != 1 {
 		t.Errorf("got = %+v", s)
+	}
+}
+
+// #57: a caller who isn't a member sees the server but none of its channels.
+func TestGetServer_NotAMember_ReturnsNoChannels(t *testing.T) {
+	r, repo := newRouter(t, oneMB, nil)
+	id := uuid.New()
+	repo.getResult = model.Server{
+		ID: id, Name: "Some Server", OwnerID: "someone-else",
+		Channels: []model.Channel{{ID: uuid.New(), Name: "general", Kind: model.ChannelText}},
+	}
+
+	w := getAsUser(t, r, testUser, "/v1/servers/"+id.String())
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", w.Code, w.Body.String())
+	}
+	if s := decodeServer(t, w); s.Name != "Some Server" || s.Channels == nil || len(s.Channels) != 0 {
+		t.Errorf("got = %+v, want the server with channels: []", s)
 	}
 }

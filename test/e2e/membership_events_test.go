@@ -30,6 +30,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/middleware"
 	"github.com/discordia-grupo01/servers/internal/outbox"
 	"github.com/discordia-grupo01/servers/internal/repository"
+	"github.com/discordia-grupo01/servers/internal/repository/channelperm_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/member_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/moderation_repo"
 	"github.com/discordia-grupo01/servers/internal/service"
@@ -114,7 +115,7 @@ func setupE2E(t *testing.T) (*gin.Engine, <-chan amqp.Delivery) {
 
 	gin.SetMode(gin.TestMode)
 	router := handler.NewRouter(handler.Deps{
-		Servers:     service.New(serverRepo, icons, memberRepo),
+		Servers:     service.New(serverRepo, icons, memberRepo, channelperm_repo.NewRepository(pool)),
 		Icons:       icons,
 		Membership:  membership_service.New(serverRepo, memberRepo),
 		Invitations: invitation.NewService(repository.NewInvitationRepository(pool), serverRepo, memberRepo),
@@ -142,7 +143,7 @@ func setupE2E(t *testing.T) (*gin.Engine, <-chan amqp.Delivery) {
 	if err != nil {
 		t.Fatalf("QueueDeclare: %v", err)
 	}
-	for _, key := range []string{membership.RoutingKeyMemberJoined, membership.RoutingKeyMemberLeft, moderationevents.RoutingKeyMemberBanned, moderationevents.RoutingKeyMemberUnbanned} {
+	for _, key := range []string{membership.RoutingKeyMemberJoined, membership.RoutingKeyMemberLeft, moderationevents.RoutingKeyMemberBanned, moderationevents.RoutingKeyMemberUnbanned, moderationevents.RoutingKeyMemberKicked} {
 		if err := ch.QueueBind(q.Name, key, "discordia.events", false, nil); err != nil {
 			t.Fatalf("QueueBind %s: %v", key, err)
 		}

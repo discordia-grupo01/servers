@@ -1,5 +1,5 @@
 // Package moderation_handler exposes the Moderación epic over HTTP: banning
-// members (#25), revoking bans (#26) and listing bans.
+// members (#25), revoking bans (#26), listing bans and kicking members (#59).
 package moderation_handler
 
 import (
@@ -65,6 +65,49 @@ func (h *Handler) Ban(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusCreated, moderation.ToResponse(ban))
+}
+
+type kickRequest struct {
+	UserID string `json:"user_id"`
+}
+
+// Kick godoc
+// @Summary      Kick a member from the server
+// @Description  Requires KICK_MEMBERS (the owner and administrators hold it implicitly). The target must be a current member ranked strictly below the caller in the role hierarchy; the owner and the caller themselves can't be kicked (to leave, use DELETE /v1/servers/{serverId}/members/{userId}). The member is removed (with their roles) and a pending ownership transfer to them is cancelled. Unlike a ban, they can rejoin with any valid invitation.
+// @Tags         moderation
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        serverId  path  string       true  "Server ID"
+// @Param        body      body  kickRequest  true  "Who to kick"
+// @Success      204
+// @Failure      400  {object}  apierr.ErrorResponse  "missing user_id, or kicking yourself"
+// @Failure      401  {object}  apierr.ErrorResponse
+// @Failure      403  {object}  apierr.ErrorResponse  "missing KICK_MEMBERS, target is the owner, or target has an equal or higher role"
+// @Failure      404  {object}  apierr.ErrorResponse  "server not found, or target is not a member"
+// @Router       /v1/servers/{serverId}/kicks [post]
+func (h *Handler) Kick(c *gin.Context) {
+	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
+	if !ok {
+		return
+	}
+
+	var req kickRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		apierr.RespondError(c, http.StatusBadRequest, "invalid request body", map[string]any{"reason": "invalid_json"})
+		return
+	}
+
+	err := h.uc.KickMember(c.Request.Context(), moderation_service.KickParams{
+		ServerID:     serverID,
+		ActorUserID:  middleware.UserID(c),
+		TargetUserID: req.UserID,
+	})
+	if err != nil {
+		apierr.WriteDomainError(c, err)
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
 // Unban godoc

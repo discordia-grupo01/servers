@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/discordia-grupo01/servers/internal/model"
+	"github.com/discordia-grupo01/servers/internal/model/channelperm"
 	"github.com/discordia-grupo01/servers/internal/model/role"
 	"github.com/discordia-grupo01/servers/internal/outbox"
 	"github.com/discordia-grupo01/servers/internal/service"
@@ -42,10 +43,17 @@ type fakeRepoHelper struct {
 	deleteChannels  []uuid.UUID
 	deleteEvents    []outbox.Event
 
-	// standing is what MemberStanding returns for any non-owner caller; the
-	// zero value makes them a non-member (not an administrator).
+	// standing is what MemberStanding (and MemberStandings, for every
+	// server) returns for any non-owner caller; the zero value makes them a
+	// non-member (not an administrator).
 	standing    role.Standing
 	standingErr error
+
+	// layers is what ChannelLayers returns, for any user and servers.
+	layers       map[uuid.UUID]channelperm.Layers
+	layersErr    error
+	layersCalls  int
+	standingsErr error
 }
 
 func (f *fakeRepoHelper) MemberStanding(_ context.Context, _ uuid.UUID, _ string) (role.Standing, error) {
@@ -53,6 +61,22 @@ func (f *fakeRepoHelper) MemberStanding(_ context.Context, _ uuid.UUID, _ string
 		return role.Standing{}, f.standingErr
 	}
 	return f.standing, nil
+}
+
+func (f *fakeRepoHelper) MemberStandings(_ context.Context, _ string, serverIDs []uuid.UUID) (map[uuid.UUID]role.Standing, error) {
+	if f.standingsErr != nil {
+		return nil, f.standingsErr
+	}
+	out := make(map[uuid.UUID]role.Standing, len(serverIDs))
+	for _, id := range serverIDs {
+		out[id] = f.standing
+	}
+	return out, nil
+}
+
+func (f *fakeRepoHelper) ChannelLayers(context.Context, string, []uuid.UUID) (map[uuid.UUID]channelperm.Layers, error) {
+	f.layersCalls++
+	return f.layers, f.layersErr
 }
 
 func (f *fakeRepoHelper) CreateServer(_ context.Context, s model.Server, cats []model.Category, ch []model.Channel, events []outbox.Event) error {
@@ -152,21 +176,21 @@ func (f *fakeIconsHelper) GenerateDefault() ([]byte, error) {
 func create(t *testing.T, p service.CreateServerParams) (model.Server, error, *fakeRepoHelper, *fakeIconsHelper) {
 	t.Helper()
 	repo, icons := &fakeRepoHelper{}, &fakeIconsHelper{}
-	srv, err := service.New(repo, icons, repo).CreateServer(context.Background(), p)
+	srv, err := service.New(repo, icons, repo, repo).CreateServer(context.Background(), p)
 	return srv, err, repo, icons
 }
 
 func createRepoErr(t *testing.T, p service.CreateServerParams, repoErr error) (model.Server, error, *fakeRepoHelper, *fakeIconsHelper) {
 	t.Helper()
 	repo, icons := &fakeRepoHelper{err: repoErr}, &fakeIconsHelper{}
-	srv, err := service.New(repo, icons, repo).CreateServer(context.Background(), p)
+	srv, err := service.New(repo, icons, repo, repo).CreateServer(context.Background(), p)
 	return srv, err, repo, icons
 }
 
 func createIconErr(t *testing.T, p service.CreateServerParams, iconErr error) (model.Server, error, *fakeRepoHelper, *fakeIconsHelper) {
 	t.Helper()
 	repo, icons := &fakeRepoHelper{}, &fakeIconsHelper{err: iconErr}
-	srv, err := service.New(repo, icons, repo).CreateServer(context.Background(), p)
+	srv, err := service.New(repo, icons, repo, repo).CreateServer(context.Background(), p)
 	return srv, err, repo, icons
 }
 

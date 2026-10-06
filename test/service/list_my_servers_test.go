@@ -11,7 +11,7 @@ import (
 
 func TestListMyServers_RequiresIdentity(t *testing.T) {
 	repo, icons := &fakeRepoHelper{}, &fakeIconsHelper{}
-	_, err := service.New(repo, icons, repo).ListMyServers(context.Background(), "")
+	_, err := service.New(repo, icons, repo, repo).ListMyServers(context.Background(), "")
 	if !errors.Is(err, model.ErrUnauthorized) {
 		t.Errorf("err = %v, want ErrUnauthorized", err)
 	}
@@ -24,7 +24,7 @@ func TestListMyServers_ReturnsWhatTheRepoGives(t *testing.T) {
 	want := []model.Server{{Name: "A"}, {Name: "B"}}
 	repo, icons := &fakeRepoHelper{listResult: want}, &fakeIconsHelper{}
 
-	got, err := service.New(repo, icons, repo).ListMyServers(context.Background(), testOwner)
+	got, err := service.New(repo, icons, repo, repo).ListMyServers(context.Background(), testOwner)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -38,7 +38,7 @@ func TestListMyServers_ReturnsWhatTheRepoGives(t *testing.T) {
 
 func TestListMyServers_PropagatesRepositoryError(t *testing.T) {
 	repo, icons := &fakeRepoHelper{listErr: errors.New("db down")}, &fakeIconsHelper{}
-	_, err := service.New(repo, icons, repo).ListMyServers(context.Background(), testOwner)
+	_, err := service.New(repo, icons, repo, repo).ListMyServers(context.Background(), testOwner)
 	if err == nil {
 		t.Fatal("expected the repository error to surface")
 	}

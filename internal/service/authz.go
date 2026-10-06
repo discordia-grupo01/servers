@@ -82,6 +82,22 @@ func RequireRoleBelow(actor role.Standing, rl role.Role) error {
 	return nil
 }
 
+// RequireCanOverride checks whether the actor may change the overrides of rl
+// in a channel (#57): MANAGE_ROLES (CA2), and rl strictly below their own
+// highest role, like editing the role itself. @everyone is the exception: it's
+// below everyone by definition, and making a channel read-only or private for
+// everybody is the main use of overrides. Its server-wide permissions are
+// still only the owner's to change.
+func RequireCanOverride(actor role.Standing, rl role.Role) error {
+	if err := RequireManageRoles(actor); err != nil {
+		return err
+	}
+	if rl.IsEveryone {
+		return nil
+	}
+	return RequireRoleBelow(actor, rl)
+}
+
 // RequireCanGrant checks that the actor holds every permission in p before
 // granting it -- through editing a role's permissions (only the newly added
 // ones) or assigning a role. Removing permissions is never restricted.
