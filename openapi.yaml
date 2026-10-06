@@ -3,7 +3,7 @@ info:
   contact: {}
   description: >-
     Servers service: servers, channels, categories, roles, member roles,
-    membership, invitations, ownership transfer.
+    membership, invitations, ownership transfer, mentions.
 
     All /v1/** routes require identity: the JWT is validated by Kong at the gateway, and this service takes the user id from the X-User-Id header (or from the "sub" claim of the token Kong forwards).
   title: Discordia - Servers
@@ -1636,6 +1636,69 @@ paths:
       summary: Remove a role from a member
       tags:
         - member-roles
+  "/v1/servers/{serverId}/mentions/resolve":
+    post:
+      description: Called by messaging with the author's token before saving a
+        message. Takes the users, roles and @everyone mentioned in it and
+        returns which mentions hold and who gets notified. `user_ids` keeps only
+        members of the server. `role_ids` (never @everyone's own id) and
+        `everyone` count only if the caller holds MENTION_EVERYONE (the owner
+        and administrators hold it implicitly); otherwise they come back
+        empty/false, so the message can still go out with them as plain text.
+        `recipient_ids` are the members reached who can see the channel
+        (VIEW_CHANNELS), without the caller. Duplicates count once; at most 50
+        users and 20 roles.
+      parameters:
+        - description: Server ID
+          in: path
+          name: serverId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/mention_handler.resolveRequest"
+        description: Channel of the message and the mentions found in it
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/mention.ResolutionResponse"
+        "400":
+          description: invalid body, channel_id or role id, channel of another server, or
+            too many mentions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "403":
+          description: caller is not a member
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "404":
+          description: server or channel not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+      security:
+        - BearerAuth: []
+      summary: Resolve the mentions of a message
+      tags:
+        - mentions
   "/v1/servers/{serverId}/ownership-transfers":
     post:
       description: Owner-only. Creates a pending transfer; nothing changes until the
@@ -2198,6 +2261,38 @@ components:
           type: string
         user_id:
           type: string
+      type: object
+    mention.ResolutionResponse:
+      properties:
+        everyone:
+          type: boolean
+        recipient_ids:
+          items:
+            type: string
+          type: array
+        role_ids:
+          items:
+            type: string
+          type: array
+        user_ids:
+          items:
+            type: string
+          type: array
+      type: object
+    mention_handler.resolveRequest:
+      properties:
+        channel_id:
+          type: string
+        everyone:
+          type: boolean
+        role_ids:
+          items:
+            type: string
+          type: array
+        user_ids:
+          items:
+            type: string
+          type: array
       type: object
     model.GenerateInvitationRequest:
       properties:
