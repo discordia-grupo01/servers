@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/discordia-grupo01/servers/internal/model"
+	"github.com/discordia-grupo01/servers/internal/model/channelperm"
 	"github.com/discordia-grupo01/servers/internal/outbox"
 )
 
@@ -120,20 +121,18 @@ func (r *ChannelRepository) MoveToCategory(ctx context.Context, id uuid.UUID, ca
 }
 
 // ListByServerAndCategory lists the channels of serverID currently in
-// categoryID (nil meaning "no category"), ordered by position. Used to
-// validate a reorder request against the actual current membership of that
-// bucket before applying it.
+// categoryID (nil meaning "no category"), ordered by position.
 func (r *ChannelRepository) ListByServerAndCategory(ctx context.Context, serverID uuid.UUID, categoryID *uuid.UUID) ([]model.Channel, error) {
 	var rows pgx.Rows
 	var err error
 	if categoryID == nil {
 		rows, err = r.pool.Query(ctx, `
 			SELECT id, server_id, name, kind, position, category_id, topic, created_at
-			  FROM channels WHERE server_id = $1 AND category_id IS NULL ORDER BY position`, serverID)
+			  FROM channels WHERE server_id = $1 AND category_id IS NULL ORDER BY position, id`, serverID)
 	} else {
 		rows, err = r.pool.Query(ctx, `
 			SELECT id, server_id, name, kind, position, category_id, topic, created_at
-			  FROM channels WHERE server_id = $1 AND category_id = $2 ORDER BY position`, serverID, *categoryID)
+			  FROM channels WHERE server_id = $1 AND category_id = $2 ORDER BY position, id`, serverID, *categoryID)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("list channels by category: %w", err)
@@ -156,12 +155,37 @@ func (r *ChannelRepository) ListByServerAndCategory(ctx context.Context, serverI
 	return channels, nil
 }
 
-// ReorderPositions sets each channel's position to its index in orderedIDs,
-// atomically. Callers must have already validated that orderedIDs is exactly
-// the current membership of the target (server, category) bucket.
-func (r *ChannelRepository) ReorderPositions(ctx context.Context, orderedIDs []uuid.UUID) error {
+// ReorderPositions reorders the channels of serverID in categoryID (nil
+// meaning "no category"). requested is the new order of the bucket's
+// channels that aren't in hidden; hidden channels keep their place (#57, see
+// channelperm.MergeVisibleOrder). Every channel of the bucket ends up with
+// its index as position.
+//
+// The bucket's channels are locked (FOR UPDATE) and validated inside the
+// transaction, so a channel created, moved or deleted concurrently can't
+// leave duplicate positions: if requested isn't exactly the bucket's
+// non-hidden channels right now, it fails with model.ErrChannelReorderInvalid
+// and nothing is written.
+func (r *ChannelRepository) ReorderPositions(ctx context.Context, serverID uuid.UUID, categoryID *uuid.UUID, requested []uuid.UUID, hidden map[uuid.UUID]bool) error {
 	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
-		for i, id := range orderedIDs {
+		rows, err := tx.Query(ctx, `
+			SELECT id FROM channels
+			 WHERE server_id = $1 AND category_id IS NOT DISTINCT FROM $2
+			 ORDER BY position, id
+			 FOR UPDATE`, serverID, categoryID)
+		if err != nil {
+			return fmt.Errorf("lock channels: %w", err)
+		}
+		current, err := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+		if err != nil {
+			return fmt.Errorf("lock channels: %w", err)
+		}
+
+		merged, ok := channelperm.MergeVisibleOrder(current, hidden, requested)
+		if !ok {
+			return model.ErrChannelReorderInvalid
+		}
+		for i, id := range merged {
 			if _, err := tx.Exec(ctx, `UPDATE channels SET position = $1 WHERE id = $2`, i, id); err != nil {
 				return fmt.Errorf("update channel position: %w", err)
 			}

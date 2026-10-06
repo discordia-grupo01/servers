@@ -97,6 +97,7 @@ func TestAuthorizeVoice_UsesReplicatedProfileName(t *testing.T) {
 		&fakeCategories{},
 		&fakeChannels{getByIDChannel: channel},
 		&fakeStandings{standing: role.Standing{IsMember: true, Permissions: role.PermViewChannels}},
+		&fakeVisibility{},
 		&fakeProfileNames{name: "John"},
 	)
 
@@ -117,6 +118,7 @@ func TestAuthorizeVoice_FallsBackToIdentityWithoutReplicatedProfile(t *testing.T
 		&fakeCategories{},
 		&fakeChannels{getByIDChannel: channel},
 		&fakeStandings{standing: role.Standing{IsMember: true, Permissions: role.PermViewChannels}},
+		&fakeVisibility{},
 		&fakeProfileNames{},
 	)
 
@@ -138,6 +140,7 @@ func TestAuthorizeVoice_ProfileLookupErrorIsReturned(t *testing.T) {
 		&fakeCategories{},
 		&fakeChannels{getByIDChannel: channel},
 		&fakeStandings{standing: role.Standing{IsMember: true, Permissions: role.PermViewChannels}},
+		&fakeVisibility{},
 		&fakeProfileNames{err: profileErr},
 	)
 

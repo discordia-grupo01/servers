@@ -29,7 +29,7 @@ const (
 type ServerUseCases interface {
 	CreateServer(ctx context.Context, p service.CreateServerParams) (model.Server, error)
 	ListMyServers(ctx context.Context, userID string) ([]model.Server, error)
-	GetServer(ctx context.Context, id uuid.UUID) (model.Server, error)
+	GetServer(ctx context.Context, id uuid.UUID, userID string) (model.Server, error)
 	UpdateServer(ctx context.Context, p service.UpdateServerParams) (model.Server, error)
 	GetServerImageURLs(ctx context.Context, id uuid.UUID) (iconURL, bannerURL *string, err error)
 	DeleteServer(ctx context.Context, p service.DeleteServerParams) error
@@ -231,7 +231,7 @@ func (h *serverHandler) deleteServer(c *gin.Context) {
 
 // listMyServers godoc
 // @Summary      List my servers
-// @Description  Servers the caller is a member of.
+// @Description  Servers the caller is a member of, each with only the channels the caller can see (channels where an override takes VIEW_CHANNELS away from them are left out; the owner and administrators see all).
 // @Tags         servers
 // @Produce      json
 // @Security     BearerAuth
@@ -254,7 +254,7 @@ func (h *serverHandler) listMyServers(c *gin.Context) {
 
 // getServer godoc
 // @Summary      Get a server
-// @Description  Full detail of one server, including its channels and categories.
+// @Description  Full detail of one server, including its categories and the channels the caller can see: channels where an override takes VIEW_CHANNELS away from them are left out (the owner and administrators see all). A caller who isn't a member gets the server with no channels.
 // @Tags         servers
 // @Produce      json
 // @Security     BearerAuth
@@ -268,7 +268,7 @@ func (h *serverHandler) getServer(c *gin.Context) {
 	if !ok {
 		return
 	}
-	srv, err := h.uc.GetServer(c.Request.Context(), serverID)
+	srv, err := h.uc.GetServer(c.Request.Context(), serverID, middleware.UserID(c))
 	if err != nil {
 		apierr.WriteDomainError(c, err)
 		return

@@ -1,11 +1,12 @@
 // Package moderation_repo implements Postgres access for server bans (#25,
-// #26).
+// #26) and kicks (#59).
 package moderation_repo
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -54,15 +55,9 @@ func NewRepository(pool *pgxpool.Pool) *Repository {
 //     written. It is where the permission and the hierarchy are decided.
 func (r *Repository) BanMember(ctx context.Context, ban moderation.Ban, check func(actor, target role.Standing) error, events ...outbox.Event) error {
 	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
-		var ownerID string
-		err := tx.QueryRow(ctx,
-			`SELECT owner_id FROM servers WHERE id = $1 FOR NO KEY UPDATE`, ban.ServerID,
-		).Scan(&ownerID)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return model.ErrServerNotFound
-		}
+		ownerID, err := lockServer(ctx, tx, ban.ServerID)
 		if err != nil {
-			return fmt.Errorf("lock server: %w", err)
+			return err
 		}
 		if ownerID == ban.UserID {
 			return model.ErrCannotBanOwner
@@ -72,15 +67,7 @@ func (r *Repository) BanMember(ctx context.Context, ban moderation.Ban, check fu
 		if ban.BannedBy != nil {
 			actorID = *ban.BannedBy
 		}
-		actor, err := repository.StandingOf(ctx, tx, ban.ServerID, ownerID, actorID)
-		if err != nil {
-			return err
-		}
-		target, err := repository.StandingOf(ctx, tx, ban.ServerID, ownerID, ban.UserID)
-		if err != nil {
-			return err
-		}
-		if err := check(actor, target); err != nil {
+		if err := checkStandings(ctx, tx, ban.ServerID, ownerID, actorID, ban.UserID, check); err != nil {
 			return err
 		}
 
@@ -97,32 +84,109 @@ func (r *Repository) BanMember(ctx context.Context, ban moderation.Ban, check fu
 			return fmt.Errorf("insert ban: %w", err)
 		}
 
-		tag, err := tx.Exec(ctx,
-			`DELETE FROM server_members WHERE server_id = $1 AND user_id = $2`,
-			ban.ServerID, ban.UserID,
-		)
-		if err != nil {
-			return fmt.Errorf("remove member: %w", err)
+		if err := removeMember(ctx, tx, ban.ServerID, ban.UserID, ban.BannedAt); err != nil {
+			return err
 		}
-		if tag.RowsAffected() == 0 {
-			return model.ErrMemberNotFound
-		}
-
-		if _, err := tx.Exec(ctx, `
-			UPDATE ownership_transfers SET status = 'cancelled', resolved_at = $3
-			 WHERE server_id = $1 AND to_user_id = $2 AND status = 'pending'`,
-			ban.ServerID, ban.UserID, ban.BannedAt,
-		); err != nil {
-			return fmt.Errorf("cancel pending transfer: %w", err)
-		}
-
-		for _, evt := range events {
-			if err := outbox.Insert(ctx, tx, evt); err != nil {
-				return err
-			}
-		}
-		return nil
+		return insertEvents(ctx, tx, events)
 	})
+}
+
+// KickMember removes kick.UserID from kick.ServerID in a single transaction
+// (#59), with the same locking and re-check as BanMember but without
+// recording anything that keeps them out: they can rejoin with any valid
+// invitation.
+//
+//   - removes the membership, which cascades to their role assignments
+//     (ErrMemberNotFound, and nothing is written, if they aren't a member --
+//     e.g. a concurrent kick already removed them),
+//   - cancels the pending ownership transfer addressed to them, if any,
+//   - writes events to the outbox.
+//
+// Kicking whoever owns the server at commit time fails with
+// ErrCannotKickOwner; check decides the permission and the hierarchy with
+// both standings read under the server lock.
+func (r *Repository) KickMember(ctx context.Context, kick moderation.Kick, check func(actor, target role.Standing) error, events ...outbox.Event) error {
+	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+		ownerID, err := lockServer(ctx, tx, kick.ServerID)
+		if err != nil {
+			return err
+		}
+		if ownerID == kick.UserID {
+			return model.ErrCannotKickOwner
+		}
+		if err := checkStandings(ctx, tx, kick.ServerID, ownerID, kick.KickedBy, kick.UserID, check); err != nil {
+			return err
+		}
+		if err := removeMember(ctx, tx, kick.ServerID, kick.UserID, kick.KickedAt); err != nil {
+			return err
+		}
+		return insertEvents(ctx, tx, events)
+	})
+}
+
+// lockServer takes the server row FOR NO KEY UPDATE and returns its owner.
+// That serializes bans and kicks with an ownership transfer being accepted
+// (which rewrites servers.owner_id) and with every change to roles or role
+// assignments (see repository.LockServerShared).
+func lockServer(ctx context.Context, tx pgx.Tx, serverID uuid.UUID) (ownerID string, err error) {
+	err = tx.QueryRow(ctx,
+		`SELECT owner_id FROM servers WHERE id = $1 FOR NO KEY UPDATE`, serverID,
+	).Scan(&ownerID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", model.ErrServerNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("lock server: %w", err)
+	}
+	return ownerID, nil
+}
+
+// checkStandings reads the actor's and the target's standing inside tx and
+// hands them to check, returning its error as-is.
+func checkStandings(ctx context.Context, tx pgx.Tx, serverID uuid.UUID, ownerID, actorID, targetID string, check func(actor, target role.Standing) error) error {
+	actor, err := repository.StandingOf(ctx, tx, serverID, ownerID, actorID)
+	if err != nil {
+		return err
+	}
+	target, err := repository.StandingOf(ctx, tx, serverID, ownerID, targetID)
+	if err != nil {
+		return err
+	}
+	return check(actor, target)
+}
+
+// removeMember deletes userID's membership (cascading to their role
+// assignments) and cancels the pending ownership transfer addressed to them,
+// if any. ErrMemberNotFound if they aren't a member.
+func removeMember(ctx context.Context, tx pgx.Tx, serverID uuid.UUID, userID string, at time.Time) error {
+	tag, err := tx.Exec(ctx,
+		`DELETE FROM server_members WHERE server_id = $1 AND user_id = $2`,
+		serverID, userID,
+	)
+	if err != nil {
+		return fmt.Errorf("remove member: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return model.ErrMemberNotFound
+	}
+
+	if _, err := tx.Exec(ctx, `
+		UPDATE ownership_transfers SET status = 'cancelled', resolved_at = $3
+		 WHERE server_id = $1 AND to_user_id = $2 AND status = 'pending'`,
+		serverID, userID, at,
+	); err != nil {
+		return fmt.Errorf("cancel pending transfer: %w", err)
+	}
+	return nil
+}
+
+func insertEvents(ctx context.Context, tx pgx.Tx, events []outbox.Event) error {
+	for _, evt := range events {
+		if err := outbox.Insert(ctx, tx, evt); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // UnbanMember revokes userID's ban on serverID and writes events to the
@@ -141,12 +205,7 @@ func (r *Repository) UnbanMember(ctx context.Context, serverID uuid.UUID, userID
 		if tag.RowsAffected() == 0 {
 			return model.ErrBanNotFound
 		}
-		for _, evt := range events {
-			if err := outbox.Insert(ctx, tx, evt); err != nil {
-				return err
-			}
-		}
-		return nil
+		return insertEvents(ctx, tx, events)
 	})
 }
 

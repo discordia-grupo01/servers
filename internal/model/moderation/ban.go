@@ -1,5 +1,5 @@
 // Package moderation contains the domain types of the Moderación epic (#25,
-// #26): server bans.
+// #26, #59): server bans and kicks.
 package moderation
 
 import (

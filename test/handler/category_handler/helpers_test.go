@@ -30,7 +30,7 @@ func (fakeServerUseCases) ListMyServers(context.Context, string) ([]model.Server
 	return nil, nil
 }
 
-func (fakeServerUseCases) GetServer(context.Context, uuid.UUID) (model.Server, error) {
+func (fakeServerUseCases) GetServer(context.Context, uuid.UUID, string) (model.Server, error) {
 	return model.Server{}, nil
 }
 

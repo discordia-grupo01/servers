@@ -10,6 +10,12 @@ type BanParams struct {
 	Reason *string
 }
 
+type KickParams struct {
+	ServerID     uuid.UUID
+	ActorUserID  string
+	TargetUserID string
+}
+
 type UnbanParams struct {
 	ServerID     uuid.UUID
 	ActorUserID  string

@@ -52,6 +52,10 @@ var (
 	ErrRoleAboveOwn        = errors.New("you can only manage roles below your highest role")
 	ErrPermissionNotHeld   = errors.New("you cannot grant permissions you do not have")
 
+	ErrPermissionNotOverridable = errors.New("permission cannot be overridden per channel")
+	ErrPermissionConflict       = errors.New("a permission cannot be both allowed and denied")
+	ErrChannelOverrideNotFound  = errors.New("this role has no permission override in this channel")
+
 	ErrEveryoneRoleIsAutomatic = errors.New("@everyone is managed automatically: it can't be deleted, renamed, recolored, or assigned/unassigned by hand")
 
 	ErrForbiddenMissingPermission = errors.New("you do not have permission to perform this action")
@@ -61,6 +65,8 @@ var (
 	ErrTargetOutranksActor        = errors.New("target has an equal or higher role")
 	ErrAlreadyBanned              = errors.New("user is already banned from this server")
 	ErrBanNotFound                = errors.New("user is not banned from this server")
+	ErrCannotKickSelf             = errors.New("you cannot kick yourself; leave the server instead")
+	ErrCannotKickOwner            = errors.New("the server owner cannot be kicked")
 
 	ErrMemberNotFound     = errors.New("member not found")
 	ErrMemberRoleNotFound = errors.New("member does not have this role")
@@ -124,4 +130,32 @@ func (e *PermissionNotHeldError) Error() string {
 
 func (e *PermissionNotHeldError) Is(target error) bool {
 	return target == ErrPermissionNotHeld
+}
+
+// PermissionNotOverridableError wraps ErrPermissionNotOverridable with the
+// names of the permissions that only exist at the server level
+type PermissionNotOverridableError struct {
+	Permissions []string
+}
+
+func (e *PermissionNotOverridableError) Error() string {
+	return "permissions cannot be overridden per channel: " + strings.Join(e.Permissions, ", ")
+}
+
+func (e *PermissionNotOverridableError) Is(target error) bool {
+	return target == ErrPermissionNotOverridable
+}
+
+// PermissionConflictError wraps ErrPermissionConflict with the names of the
+// permissions that were both allowed and denied
+type PermissionConflictError struct {
+	Permissions []string
+}
+
+func (e *PermissionConflictError) Error() string {
+	return "permissions both allowed and denied: " + strings.Join(e.Permissions, ", ")
+}
+
+func (e *PermissionConflictError) Is(target error) bool {
+	return target == ErrPermissionConflict
 }

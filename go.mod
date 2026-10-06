@@ -3,7 +3,7 @@ module github.com/discordia-grupo01/servers
 go 1.22
 
 require (
-	github.com/discordia-grupo01/events-contract v0.3.1-0.20261003200833-24fa1781860e
+	github.com/discordia-grupo01/events-contract v0.4.0
 	github.com/gin-gonic/gin v1.10.0
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.6.0

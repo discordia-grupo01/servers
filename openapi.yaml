@@ -83,7 +83,9 @@ paths:
         - categories
   "/v1/channels/{channelId}":
     delete:
-      description: Administrators only (the owner, or a member with ADMINISTRATOR).
+      description: Administrators only (the owner, or a member with ADMINISTRATOR). A
+        channel hidden from the caller by a permission override (no
+        VIEW_CHANNELS there) is reported as 404, as if it didn't exist.
       parameters:
         - description: Channel ID
           in: path
@@ -119,7 +121,9 @@ paths:
         - channels
     patch:
       description: Administrators only (the owner, or a member with ADMINISTRATOR).
-        `name`/`topic` omitted leave the field unchanged.
+        `name`/`topic` omitted leave the field unchanged. A channel hidden from
+        the caller by a permission override (no VIEW_CHANNELS there) is reported
+        as 404, as if it didn't exist.
       parameters:
         - description: Channel ID
           in: path
@@ -174,7 +178,9 @@ paths:
     patch:
       description: Administrators only (the owner, or a member with ADMINISTRATOR).
         `category_id` omitted/null moves it to the server's "Sin asignar"
-        fallback category ("no category" is not a valid state).
+        fallback category ("no category" is not a valid state). A channel hidden
+        from the caller by a permission override (no VIEW_CHANNELS there) is
+        reported as 404, as if it didn't exist.
       parameters:
         - description: Channel ID
           in: path
@@ -225,6 +231,237 @@ paths:
       summary: Move a channel to a category
       tags:
         - channels
+  "/v1/channels/{channelId}/members/{userId}/permissions":
+    get:
+      description: "What the member may actually do in this channel: their server-wide
+        permissions with the channel's overrides for their roles applied
+        (@everyone first, then their other roles, where allow wins over deny).
+        Every permission for the owner and for members with ADMINISTRATOR,
+        whatever the overrides. Same response shape and access rule as GET
+        /v1/servers/{serverId}/members/{userId}/permissions, which ignores
+        overrides: services that authorize per channel (messaging, voice) should
+        use this one."
+      parameters:
+        - description: Channel ID
+          in: path
+          name: channelId
+          required: true
+          schema:
+            type: string
+        - description: Target member's user ID
+          in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/channelperm_handler.effectivePermissionsResponse"
+        "400":
+          description: invalid channel id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "403":
+          description: the caller is not a member of the channel's server
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "404":
+          description: channel not found, or the user is not a member
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+      security:
+        - BearerAuth: []
+      summary: Get a member's effective permissions in a channel
+      tags:
+        - channel-permissions
+  "/v1/channels/{channelId}/permissions":
+    get:
+      description: One entry per role with an override in this channel, @everyone
+        first and then in the order of the role hierarchy. Roles without an
+        override use their server-wide permissions and are not listed. Requires
+        MANAGE_ROLES.
+      parameters:
+        - description: Channel ID
+          in: path
+          name: channelId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/channelperm_handler.OverrideResponse"
+                type: array
+        "400":
+          description: invalid channel id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "403":
+          description: missing MANAGE_ROLES
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "404":
+          description: channel not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+      security:
+        - BearerAuth: []
+      summary: List a channel's permission overrides
+      tags:
+        - channel-permissions
+  "/v1/channels/{channelId}/permissions/roles/{roleId}":
+    delete:
+      description: The role goes back to its server-wide permissions in this channel.
+        Same authorization as setting it, without the grant check.
+      parameters:
+        - description: Channel ID
+          in: path
+          name: channelId
+          required: true
+          schema:
+            type: string
+        - description: Role ID
+          in: path
+          name: roleId
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: invalid id, or role from another server
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "403":
+          description: missing MANAGE_ROLES, or role not below the caller's (role_above_own)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "404":
+          description: channel or role not found, or the role has no override in this
+            channel (channel_override_not_found)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+      security:
+        - BearerAuth: []
+      summary: Remove a role's permission override in a channel
+      tags:
+        - channel-permissions
+    put:
+      description: Creates or replaces what the role gains (allow) and loses (deny) in
+        this channel only; the role's server-wide permissions don't change. Only
+        VIEW_CHANNELS, SEND_MESSAGES and MANAGE_MESSAGES can be overridden. With
+        both lists empty the override is removed (204). Requires MANAGE_ROLES
+        (administrators and the owner hold it implicitly), and the role must be
+        below the caller's highest role -- @everyone excepted. The caller can
+        only allow permissions they hold themselves. Overrides never restrict
+        the owner or administrators.
+      parameters:
+        - description: Channel ID
+          in: path
+          name: channelId
+          required: true
+          schema:
+            type: string
+        - description: Role ID (it may be @everyone)
+          in: path
+          name: roleId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/channelperm_handler.setOverrideRequest"
+        description: Permissions to allow and to deny in this channel
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/channelperm_handler.OverrideResponse"
+        "204":
+          description: "both lists empty: the override was removed"
+        "400":
+          description: invalid id or body, unknown permission, server-level permission
+            (permission_not_overridable), the same permission allowed and denied
+            (permission_conflict), or role from another server
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "403":
+          description: missing MANAGE_ROLES, role not below the caller's (role_above_own),
+            or allowing a permission the caller doesn't hold
+            (permission_not_held)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "404":
+          description: channel or role not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+      security:
+        - BearerAuth: []
+      summary: Set a role's permission override in a channel
+      tags:
+        - channel-permissions
   "/v1/channels/{channelId}/voice-access":
     get:
       description: Confirms that the authenticated user can connect to a voice channel.
@@ -484,7 +721,9 @@ paths:
         - roles
   /v1/servers:
     get:
-      description: Servers the caller is a member of.
+      description: Servers the caller is a member of, each with only the channels the
+        caller can see (channels where an override takes VIEW_CHANNELS away from
+        them are left out; the owner and administrators see all).
       responses:
         "200":
           description: OK
@@ -608,7 +847,10 @@ paths:
       tags:
         - servers
     get:
-      description: Full detail of one server, including its channels and categories.
+      description: "Full detail of one server, including its categories and the
+        channels the caller can see: channels where an override takes
+        VIEW_CHANNELS away from them are left out (the owner and administrators
+        see all). A caller who isn't a member gets the server with no channels."
       parameters:
         - description: Server ID
           in: path
@@ -1087,9 +1329,12 @@ paths:
         - channels
   "/v1/servers/{serverId}/channels/reorder":
     patch:
-      description: Administrators only (the owner, or a member with ADMINISTRATOR).
-        `channel_ids` is the full, final order for that category (or for "sin
-        categoria" if `category_id` is omitted/null).
+      description: 'Administrators only (the owner, or a member with ADMINISTRATOR).
+        `channel_ids` is the full, final order of the channels of that category
+        the caller can see (or of "sin categoria" if `category_id` is
+        omitted/null). Channels hidden from the caller by a permission override
+        must not be sent: they keep their place, and the visible ones fill the
+        remaining places in the given order.'
       parameters:
         - description: Server ID
           in: path
@@ -1318,6 +1563,62 @@ paths:
       summary: Generate an invitation
       tags:
         - invitations
+  "/v1/servers/{serverId}/kicks":
+    post:
+      description: Requires KICK_MEMBERS (the owner and administrators hold it
+        implicitly). The target must be a current member ranked strictly below
+        the caller in the role hierarchy; the owner and the caller themselves
+        can't be kicked (to leave, use DELETE
+        /v1/servers/{serverId}/members/{userId}). The member is removed (with
+        their roles) and a pending ownership transfer to them is cancelled.
+        Unlike a ban, they can rejoin with any valid invitation.
+      parameters:
+        - description: Server ID
+          in: path
+          name: serverId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/moderation_handler.kickRequest"
+        description: Who to kick
+        required: true
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: missing user_id, or kicking yourself
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "403":
+          description: missing KICK_MEMBERS, target is the owner, or target has an equal
+            or higher role
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "404":
+          description: server not found, or target is not a member
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+      security:
+        - BearerAuth: []
+      summary: Kick a member from the server
+      tags:
+        - moderation
   "/v1/servers/{serverId}/members":
     get:
       description: Caller must already be a member. Paginated. Each member carries
@@ -2200,6 +2501,45 @@ components:
         topic:
           type: string
       type: object
+    channelperm_handler.OverrideResponse:
+      properties:
+        allow:
+          items:
+            type: string
+          type: array
+        channel_id:
+          type: string
+        deny:
+          items:
+            type: string
+          type: array
+        role_id:
+          type: string
+        updated_at:
+          type: string
+      type: object
+    channelperm_handler.effectivePermissionsResponse:
+      properties:
+        channel_id:
+          type: string
+        permissions:
+          items:
+            type: string
+          type: array
+        user_id:
+          type: string
+      type: object
+    channelperm_handler.setOverrideRequest:
+      properties:
+        allow:
+          items:
+            type: string
+          type: array
+        deny:
+          items:
+            type: string
+          type: array
+      type: object
     channelview.Response:
       properties:
         category_id:
@@ -2424,6 +2764,11 @@ components:
       properties:
         reason:
           type: string
+        user_id:
+          type: string
+      type: object
+    moderation_handler.kickRequest:
+      properties:
         user_id:
           type: string
       type: object
