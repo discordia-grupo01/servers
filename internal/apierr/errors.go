@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/discordia-grupo01/servers/internal/model"
+	"github.com/discordia-grupo01/servers/internal/model/mention"
 	"github.com/discordia-grupo01/servers/internal/model/moderation"
 )
 
@@ -196,6 +197,10 @@ func WriteDomainError(c *gin.Context, err error) {
 		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("reason", "reason_too_long"))
 	case errors.Is(err, moderation.ErrReasonInvalidChars):
 		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("reason", "reason_invalid_chars"))
+	case errors.Is(err, mention.ErrTooManyUsers):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("user_ids", "too_many"))
+	case errors.Is(err, mention.ErrTooManyRoles):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("role_ids", "too_many"))
 	case errors.Is(err, model.ErrRoleIsServerDefault):
 		RespondError(c, http.StatusConflict, err.Error(), nil)
 	case errors.Is(err, model.ErrEveryoneRoleIsAutomatic):
@@ -217,6 +222,8 @@ func WriteDomainError(c *gin.Context, err error) {
 		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("name", "name_taken"))
 	case errors.Is(err, model.ErrChannelKindInvalid):
 		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("kind", "kind_invalid"))
+	case errors.Is(err, model.ErrVoiceChannelRequired):
+		RespondError(c, http.StatusForbidden, err.Error(), map[string]any{"reason": "voice_channel_required"})
 	case errors.Is(err, model.ErrChannelServerMismatch):
 		RespondError(c, http.StatusBadRequest, err.Error(), nil)
 	case errors.Is(err, model.ErrChannelReorderInvalid):

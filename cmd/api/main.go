@@ -29,6 +29,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/service/invitation"
 	"github.com/discordia-grupo01/servers/internal/service/member_role_service"
 	"github.com/discordia-grupo01/servers/internal/service/membership_service"
+	"github.com/discordia-grupo01/servers/internal/service/mention_service"
 	"github.com/discordia-grupo01/servers/internal/service/moderation_service"
 	"github.com/discordia-grupo01/servers/internal/service/ownership_transfer_service"
 	"github.com/discordia-grupo01/servers/internal/service/role_service"
@@ -36,7 +37,7 @@ import (
 
 // @title        Discordia - Servers
 // @version      1.0.0
-// @description  Servers service: servers, channels, categories, roles, member roles, membership, invitations, ownership transfer.
+// @description  Servers service: servers, channels, categories, roles, member roles, membership, invitations, ownership transfer, mentions.
 // @description  All /v1/** routes require identity: the JWT is validated by Kong at the gateway, and this service takes the user id from the X-User-Id header (or from the "sub" claim of the token Kong forwards).
 // @BasePath     /
 // @securityDefinitions.apikey  BearerAuth
@@ -100,9 +101,10 @@ func main() {
 	}
 	invSvc := invitation.NewService(repository.NewInvitationRepository(pool), serverRepo, memberRepo)
 	categorySvc := category_service.New(serverRepo, categoryRepo, memberRepo)
-	channelSvc := channel_service.New(serverRepo, categoryRepo, channelRepo, memberRepo, channelPermRepo)
+	channelSvc := channel_service.New(serverRepo, categoryRepo, channelRepo, memberRepo, channelPermRepo, user_profile_repo.NewUserProfileRepository(pool))
 	moderationSvc := moderation_service.New(serverRepo, memberRepo, moderationRepo)
 	channelPermSvc := channelperm_service.New(serverRepo, channelRepo, roleRepo, memberRepo, channelPermRepo)
+	mentionSvc := mention_service.New(serverRepo, channelRepo, memberRepo, roleRepo)
 
 	router := handler.NewRouter(handler.Deps{
 		Servers:            svc,
@@ -116,6 +118,8 @@ func main() {
 		Categories:         categorySvc,
 		Moderation:         moderationSvc,
 		ChannelPermissions: channelPermSvc,
+		VoiceAccess:        channelSvc,
+		Mentions:           mentionSvc,
 		Auth:               middleware.AuthConfig{UserIDHeader: cfg.UserIDHeader},
 		DB:                 pool,
 	})
