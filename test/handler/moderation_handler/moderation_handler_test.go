@@ -37,6 +37,14 @@ type fakeModeration struct {
 	unbanCalled bool
 	gotUnban    moderation_service.UnbanParams
 
+	muteErr    error
+	muteCalled bool
+	gotMute    moderation_service.MuteParams
+
+	unmuteErr    error
+	unmuteCalled bool
+	gotUnmute    moderation_service.UnmuteParams
+
 	listErr    error
 	listCalled bool
 	gotList    moderation_service.ListBansParams
@@ -56,6 +64,16 @@ func (f *fakeModeration) KickMember(_ context.Context, p moderation_service.Kick
 func (f *fakeModeration) UnbanMember(_ context.Context, p moderation_service.UnbanParams) error {
 	f.unbanCalled, f.gotUnban = true, p
 	return f.unbanErr
+}
+
+func (f *fakeModeration) MuteMember(_ context.Context, p moderation_service.MuteParams) error {
+	f.muteCalled, f.gotMute = true, p
+	return f.muteErr
+}
+
+func (f *fakeModeration) UnmuteMember(_ context.Context, p moderation_service.UnmuteParams) error {
+	f.unmuteCalled, f.gotUnmute = true, p
+	return f.unmuteErr
 }
 
 func (f *fakeModeration) ListBans(_ context.Context, p moderation_service.ListBansParams) (moderation.BanPage, error) {
