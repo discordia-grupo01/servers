@@ -46,6 +46,10 @@ type ProfileNameReader interface {
 	GetName(ctx context.Context, userID string) (string, error)
 }
 
+type MuteReader interface {
+	IsMuted(ctx context.Context, serverID uuid.UUID, userID string, at time.Time) (bool, error)
+}
+
 type ChannelService struct {
 	servers    Servers
 	categories Categories
@@ -53,20 +57,22 @@ type ChannelService struct {
 	standings  service.StandingReader
 	visibility service.ChannelVisibility
 	profiles   ProfileNameReader
+	mutes      MuteReader
 }
 
 type VoiceAccess struct {
 	ChannelID uuid.UUID
 	ServerID  uuid.UUID
 	Name      string
+	Muted     bool
 }
 
-func New(servers Servers, categories Categories, channels Repo, standings service.StandingReader, visibility service.ChannelVisibility, profiles ...ProfileNameReader) *ChannelService {
+func New(servers Servers, categories Categories, channels Repo, standings service.StandingReader, visibility service.ChannelVisibility, muteReader MuteReader, profiles ...ProfileNameReader) *ChannelService {
 	var profileReader ProfileNameReader
 	if len(profiles) > 0 {
 		profileReader = profiles[0]
 	}
-	return &ChannelService{servers: servers, categories: categories, channels: channels, standings: standings, visibility: visibility, profiles: profileReader}
+	return &ChannelService{servers: servers, categories: categories, channels: channels, standings: standings, visibility: visibility, profiles: profileReader, mutes: muteReader}
 }
 
 func (s *ChannelService) AuthorizeVoice(ctx context.Context, channelID uuid.UUID, userID string) (VoiceAccess, error) {
@@ -101,7 +107,15 @@ func (s *ChannelService) AuthorizeVoice(ctx context.Context, channelID uuid.UUID
 		}
 	}
 
-	return VoiceAccess{ChannelID: ch.ID, ServerID: ch.ServerID, Name: name}, nil
+	muted := false
+	if s.mutes != nil {
+		muted, err = s.mutes.IsMuted(ctx, ch.ServerID, userID, time.Now().UTC())
+		if err != nil {
+			return VoiceAccess{}, err
+		}
+	}
+
+	return VoiceAccess{ChannelID: ch.ID, ServerID: ch.ServerID, Name: name, Muted: muted}, nil
 }
 
 // resolveCategory fetches the category (if any) and confirms it belongs to serverID.

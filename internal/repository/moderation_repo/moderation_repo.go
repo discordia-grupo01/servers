@@ -13,6 +13,8 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/discordia-grupo01/events-contract/envelope"
+	moderationevents "github.com/discordia-grupo01/events-contract/moderation"
 	"github.com/discordia-grupo01/servers/internal/model"
 	"github.com/discordia-grupo01/servers/internal/model/moderation"
 	"github.com/discordia-grupo01/servers/internal/model/role"
@@ -24,6 +26,7 @@ import (
 const (
 	pgUniqueViolation = "23505"
 	pkServerBans      = "server_bans_pkey"
+	pkServerMutes     = "server_mutes_pkey"
 )
 
 type Repository struct {
@@ -86,6 +89,37 @@ func (r *Repository) BanMember(ctx context.Context, ban moderation.Ban, check fu
 
 		if err := removeMember(ctx, tx, ban.ServerID, ban.UserID, ban.BannedAt); err != nil {
 			return err
+		}
+		return insertEvents(ctx, tx, events)
+	})
+}
+
+// MuteMember records a temporary mute and publishes its events atomically.
+// Unlike a ban or kick, it preserves membership, roles, and active sessions.
+func (r *Repository) MuteMember(ctx context.Context, mute moderation.Mute, check func(actor, target role.Standing) error, events ...outbox.Event) error {
+	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+		ownerID, err := lockServer(ctx, tx, mute.ServerID)
+		if err != nil {
+			return err
+		}
+		if ownerID == mute.UserID {
+			return model.ErrCannotKickOwner
+		}
+		if err := checkStandings(ctx, tx, mute.ServerID, ownerID, mute.MutedBy, mute.UserID, check); err != nil {
+			return err
+		}
+
+		_, err = tx.Exec(ctx, `
+			INSERT INTO server_mutes (server_id, user_id, muted_by, muted_at, until_at, reason)
+			VALUES ($1, $2, $3, $4, $5, $6)`,
+			mute.ServerID, mute.UserID, mute.MutedBy, mute.MutedAt, mute.UntilAt, mute.Reason,
+		)
+		if err != nil {
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) && pgErr.Code == pgUniqueViolation && pgErr.ConstraintName == pkServerMutes {
+				return model.ErrAlreadyMuted
+			}
+			return fmt.Errorf("insert mute: %w", err)
 		}
 		return insertEvents(ctx, tx, events)
 	})
@@ -207,6 +241,93 @@ func (r *Repository) UnbanMember(ctx context.Context, serverID uuid.UUID, userID
 		}
 		return insertEvents(ctx, tx, events)
 	})
+}
+
+// UnmuteMember removes an active mute and writes the unmute event atomically.
+func (r *Repository) UnmuteMember(ctx context.Context, serverID uuid.UUID, userID string, events ...outbox.Event) error {
+	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx,
+			`DELETE FROM server_mutes WHERE server_id = $1 AND user_id = $2`,
+			serverID, userID,
+		)
+		if err != nil {
+			return fmt.Errorf("delete mute: %w", err)
+		}
+		if tag.RowsAffected() == 0 {
+			return model.ErrMuteNotFound
+		}
+		return insertEvents(ctx, tx, events)
+	})
+}
+
+func (r *Repository) IsMuted(ctx context.Context, serverID uuid.UUID, userID string, at time.Time) (bool, error) {
+	var exists bool
+	err := r.pool.QueryRow(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM server_mutes
+			 WHERE server_id = $1 AND user_id = $2 AND until_at > $3
+		)`, serverID, userID, at).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("check mute: %w", err)
+	}
+	return exists, nil
+}
+
+// ExpireMutes removes every mute whose deadline has passed and publishes one
+// unmute event per removed row in the same transaction.
+func (r *Repository) ExpireMutes(ctx context.Context, at time.Time) (int, error) {
+	type expiredMute struct {
+		serverID uuid.UUID
+		userID   string
+	}
+
+	var expired []expiredMute
+	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, `
+			SELECT server_id, user_id
+			  FROM server_mutes
+			 WHERE until_at <= $1
+			 FOR UPDATE SKIP LOCKED`, at)
+		if err != nil {
+			return fmt.Errorf("select expired mutes: %w", err)
+		}
+		for rows.Next() {
+			var item expiredMute
+			if err := rows.Scan(&item.serverID, &item.userID); err != nil {
+				rows.Close()
+				return fmt.Errorf("scan expired mute: %w", err)
+			}
+			expired = append(expired, item)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return fmt.Errorf("read expired mutes: %w", err)
+		}
+		rows.Close()
+
+		for _, item := range expired {
+			if _, err := tx.Exec(ctx,
+				`DELETE FROM server_mutes WHERE server_id = $1 AND user_id = $2`, item.serverID, item.userID,
+			); err != nil {
+				return fmt.Errorf("delete expired mute: %w", err)
+			}
+			event, err := outbox.New(moderationevents.RoutingKeyMemberUnmuted, moderationevents.MemberUnmuted{
+				Meta: envelope.Meta{EventID: uuid.NewString(), OccurredAt: at}, ServerID: item.serverID.String(), UserID: item.userID,
+				UnmutedBy: "system", Reason: "expired",
+			})
+			if err != nil {
+				return err
+			}
+			if err := insertEvents(ctx, tx, []outbox.Event{event}); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return len(expired), nil
 }
 
 // ListBans returns a page of serverID's bans, newest first, and the total

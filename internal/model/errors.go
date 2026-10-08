@@ -65,6 +65,13 @@ var (
 	ErrTargetOutranksActor        = errors.New("target has an equal or higher role")
 	ErrAlreadyBanned              = errors.New("user is already banned from this server")
 	ErrBanNotFound                = errors.New("user is not banned from this server")
+	ErrAlreadyMuted               = errors.New("user is already muted in this server")
+	ErrMuteNotFound               = errors.New("user is not muted in this server")
+	ErrMuteUntilInvalid           = errors.New("mute expiration must be after the current time")
+	ErrMuteTargetRequired         = errors.New("user_id must be provided to mute a member")
+	ErrUnmuteTargetRequired       = errors.New("user_id must be provided to unmute a member")
+	ErrCannotMuteSelf             = errors.New("you cannot mute yourself")
+	ErrCannotMuteOwner            = errors.New("the server owner cannot be muted")
 	ErrCannotKickSelf             = errors.New("you cannot kick yourself; leave the server instead")
 	ErrCannotKickOwner            = errors.New("the server owner cannot be kicked")
 

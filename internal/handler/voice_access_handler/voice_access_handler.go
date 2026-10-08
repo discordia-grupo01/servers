@@ -28,6 +28,7 @@ type response struct {
 	ChannelID string `json:"channel_id"`
 	ServerID  string `json:"server_id"`
 	Allowed   bool   `json:"allowed"`
+	Muted     bool   `json:"muted"`
 	Name      string `json:"name"`
 }
 
@@ -60,6 +61,7 @@ func (h *Handler) AuthorizeVoice(c *gin.Context) {
 		ChannelID: access.ChannelID.String(),
 		ServerID:  access.ServerID.String(),
 		Allowed:   true,
+		Muted:     access.Muted,
 		Name:      access.Name,
 	})
 }

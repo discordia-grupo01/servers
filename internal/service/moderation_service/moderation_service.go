@@ -23,14 +23,20 @@ type Service struct {
 	servers   Servers
 	standings Standings
 	repo      Repository
+	muteRepo  MuteRepository
 	now       func() time.Time
 }
 
-func New(servers Servers, standings Standings, repo Repository) *Service {
+func New(servers Servers, standings Standings, repo Repository, muteRepos ...MuteRepository) *Service {
+	var muteRepo MuteRepository
+	if len(muteRepos) > 0 {
+		muteRepo = muteRepos[0]
+	}
 	return &Service{
 		servers:   servers,
 		standings: standings,
 		repo:      repo,
+		muteRepo:  muteRepo,
 		now:       func() time.Time { return time.Now().UTC() },
 	}
 }
@@ -198,6 +204,122 @@ func (s *Service) KickMember(ctx context.Context, p KickParams) error {
 	}
 	kick := moderation.Kick{ServerID: p.ServerID, UserID: target, KickedBy: p.ActorUserID, KickedAt: now}
 	return s.repo.KickMember(ctx, kick, recheck, memberLeft, memberKicked)
+}
+
+// MuteMember temporarily prevents a current member from sending messages and
+// publishing voice. Membership and existing sessions remain intact.
+func (s *Service) MuteMember(ctx context.Context, p MuteParams) error {
+	if s.muteRepo == nil {
+		return model.ErrMuteNotFound
+	}
+	if p.ActorUserID == "" {
+		return model.ErrUnauthorized
+	}
+	target := strings.TrimSpace(p.TargetUserID)
+	if target == "" {
+		return model.ErrMuteTargetRequired
+	}
+	now := s.now()
+	if !p.UntilAt.After(now) {
+		return model.ErrMuteUntilInvalid
+	}
+	reason, err := moderation.NormalizeReason(p.Reason)
+	if err != nil {
+		return err
+	}
+	reasonValue := ""
+	if reason != nil {
+		reasonValue = *reason
+	}
+
+	srv, err := s.servers.GetByID(ctx, p.ServerID)
+	if err != nil {
+		return err
+	}
+	actor, err := service.ResolveStanding(ctx, s.standings, srv, p.ActorUserID)
+	if err != nil {
+		return err
+	}
+	if err := service.RequirePermission(actor, role.PermManageMessages); err != nil {
+		return err
+	}
+	if target == p.ActorUserID {
+		return model.ErrCannotMuteSelf
+	}
+	if target == srv.OwnerID {
+		return model.ErrCannotMuteOwner
+	}
+	targetStanding, err := service.ResolveStanding(ctx, s.standings, srv, target)
+	if err != nil {
+		return err
+	}
+	if err := service.RequireOutranks(actor, targetStanding); err != nil {
+		return err
+	}
+
+	mute := moderation.Mute{
+		ServerID: p.ServerID,
+		UserID:   target,
+		MutedBy:  p.ActorUserID,
+		MutedAt:  now,
+		UntilAt:  p.UntilAt,
+		Reason:   reasonValue,
+	}
+	event, err := outbox.New(moderationevents.RoutingKeyMemberMuted, moderationevents.MemberMuted{
+		Meta:     envelope.Meta{EventID: uuid.NewString(), OccurredAt: now},
+		ServerID: p.ServerID.String(),
+		UserID:   target,
+		MutedBy:  p.ActorUserID,
+		UntilAt:  p.UntilAt,
+		Reason:   reasonValue,
+	})
+	if err != nil {
+		return err
+	}
+	recheck := func(actor, target role.Standing) error {
+		if err := service.RequirePermission(actor, role.PermManageMessages); err != nil {
+			return err
+		}
+		return service.RequireOutranks(actor, target)
+	}
+	return s.muteRepo.MuteMember(ctx, mute, recheck, event)
+}
+
+// UnmuteMember manually restores a member's ability to send and publish.
+func (s *Service) UnmuteMember(ctx context.Context, p UnmuteParams) error {
+	if s.muteRepo == nil {
+		return model.ErrMuteNotFound
+	}
+	if p.ActorUserID == "" {
+		return model.ErrUnauthorized
+	}
+	target := strings.TrimSpace(p.TargetUserID)
+	if target == "" {
+		return model.ErrUnmuteTargetRequired
+	}
+
+	srv, err := s.servers.GetByID(ctx, p.ServerID)
+	if err != nil {
+		return err
+	}
+	actor, err := service.ResolveStanding(ctx, s.standings, srv, p.ActorUserID)
+	if err != nil {
+		return err
+	}
+	if err := service.RequirePermission(actor, role.PermManageMessages); err != nil {
+		return err
+	}
+	event, err := outbox.New(moderationevents.RoutingKeyMemberUnmuted, moderationevents.MemberUnmuted{
+		Meta:      envelope.Meta{EventID: uuid.NewString(), OccurredAt: s.now()},
+		ServerID:  p.ServerID.String(),
+		UserID:    target,
+		UnmutedBy: p.ActorUserID,
+		Reason:    "manual",
+	})
+	if err != nil {
+		return err
+	}
+	return s.muteRepo.UnmuteMember(ctx, p.ServerID, target, event)
 }
 
 // UnbanMember revokes a ban (#26). Like banning, it needs BAN_MEMBERS (CA2),
