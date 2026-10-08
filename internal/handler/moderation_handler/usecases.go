@@ -11,5 +11,7 @@ type UseCases interface {
 	BanMember(ctx context.Context, p moderation_service.BanParams) (moderation.Ban, error)
 	KickMember(ctx context.Context, p moderation_service.KickParams) error
 	UnbanMember(ctx context.Context, p moderation_service.UnbanParams) error
+	MuteMember(ctx context.Context, p moderation_service.MuteParams) error
+	UnmuteMember(ctx context.Context, p moderation_service.UnmuteParams) error
 	ListBans(ctx context.Context, p moderation_service.ListBansParams) (moderation.BanPage, error)
 }

@@ -4,6 +4,7 @@ package moderation_handler
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -69,6 +70,64 @@ func (h *Handler) Ban(c *gin.Context) {
 
 type kickRequest struct {
 	UserID string `json:"user_id"`
+}
+
+type muteRequest struct {
+	UserID  string    `json:"user_id"`
+	UntilAt time.Time `json:"until_at"`
+	Reason  *string   `json:"reason"`
+}
+
+// Mute godoc
+// @Summary      Temporarily mute a member
+// @Description  Requires MANAGE_MESSAGES. The member remains in the server and connected sessions stay open, but message sends and voice publishing are denied until until_at.
+// @Tags         moderation
+// @Accept       json
+// @Security     BearerAuth
+// @Param        serverId path string true "Server ID"
+// @Param        body body muteRequest true "Mute details"
+// @Success      204
+// @Router       /v1/servers/{serverId}/mutes [post]
+func (h *Handler) Mute(c *gin.Context) {
+	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
+	if !ok {
+		return
+	}
+	var req muteRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		apierr.RespondError(c, http.StatusBadRequest, "invalid request body", map[string]any{"reason": "invalid_json"})
+		return
+	}
+	if err := h.uc.MuteMember(c.Request.Context(), moderation_service.MuteParams{
+		ServerID: serverID, ActorUserID: middleware.UserID(c), TargetUserID: req.UserID,
+		UntilAt: req.UntilAt, Reason: req.Reason,
+	}); err != nil {
+		apierr.WriteDomainError(c, err)
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
+// Unmute godoc
+// @Summary      Remove a member mute
+// @Tags         moderation
+// @Security     BearerAuth
+// @Param        serverId path string true "Server ID"
+// @Param        userId path string true "Muted user ID"
+// @Success      204
+// @Router       /v1/servers/{serverId}/mutes/{userId} [delete]
+func (h *Handler) Unmute(c *gin.Context) {
+	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
+	if !ok {
+		return
+	}
+	if err := h.uc.UnmuteMember(c.Request.Context(), moderation_service.UnmuteParams{
+		ServerID: serverID, ActorUserID: middleware.UserID(c), TargetUserID: c.Param("userId"),
+	}); err != nil {
+		apierr.WriteDomainError(c, err)
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
 // Kick godoc

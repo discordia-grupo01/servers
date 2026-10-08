@@ -101,8 +101,9 @@ func main() {
 	}
 	invSvc := invitation.NewService(repository.NewInvitationRepository(pool), serverRepo, memberRepo)
 	categorySvc := category_service.New(serverRepo, categoryRepo, memberRepo)
-	channelSvc := channel_service.New(serverRepo, categoryRepo, channelRepo, memberRepo, channelPermRepo, user_profile_repo.NewUserProfileRepository(pool))
-	moderationSvc := moderation_service.New(serverRepo, memberRepo, moderationRepo)
+	channelSvc := channel_service.New(serverRepo, categoryRepo, channelRepo, memberRepo, channelPermRepo, moderationRepo, user_profile_repo.NewUserProfileRepository(pool))
+	moderationSvc := moderation_service.New(serverRepo, memberRepo, moderationRepo, moderationRepo)
+	go moderation_service.NewMuteExpirer(moderationRepo).Start(ctx)
 	channelPermSvc := channelperm_service.New(serverRepo, channelRepo, roleRepo, memberRepo, channelPermRepo)
 	mentionSvc := mention_service.New(serverRepo, channelRepo, memberRepo, roleRepo)
 
