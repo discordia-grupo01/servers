@@ -49,7 +49,8 @@ func env(k, def string) string {
 // setupE2E wires the real router (server creation, invites, membership)
 // against a real Postgres and a real RabbitMQ, and returns a channel
 // delivering every message published to discordia.events under
-// servers.member_joined / servers.member_left / servers.member_banned. Skipped unless both
+// servers.member_joined / servers.member_left / servers.member_banned / servers.member_muted.
+// Skipped unless both
 // DATABASE_HOST and RABBITMQ_URL are set, same gate style as the rest of
 // this repo's integration tests.
 func setupE2E(t *testing.T) (*gin.Engine, <-chan amqp.Delivery) {
@@ -77,7 +78,7 @@ func setupE2E(t *testing.T) (*gin.Engine, <-chan amqp.Delivery) {
 	t.Cleanup(pool.Close)
 
 	dropTables := func() {
-		_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS user_profiles, outbox_events, member_roles, roles, ownership_transfers, categories, server_bans, invitations, server_members, channels, servers CASCADE`)
+		_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS user_profiles, outbox_events, member_roles, roles, server_mutes, ownership_transfers, categories, server_bans, invitations, server_members, channels, servers CASCADE`)
 	}
 	t.Cleanup(dropTables)
 	dropTables()
@@ -92,7 +93,7 @@ func setupE2E(t *testing.T) (*gin.Engine, <-chan amqp.Delivery) {
 		"0013_unassigned_category.up.sql",
 		"0014_drop_default_kind.up.sql",
 		"0015_role_positions.up.sql", "0016_server_bans_banned_by.up.sql",
-		"0017_user_profiles.up.sql", "0019_everyone_role.up.sql",
+		"0017_user_profiles.up.sql", "0019_everyone_role.up.sql", "0021_server_mutes.up.sql",
 	} {
 		schema, err := os.ReadFile("../../migrations/" + f)
 		if err != nil {
@@ -106,6 +107,7 @@ func setupE2E(t *testing.T) (*gin.Engine, <-chan amqp.Delivery) {
 	publisher := events.NewAMQPPublisher(rmqURL)
 	serverRepo := repository.NewServerRepository(pool)
 	memberRepo := member_repo.NewMemberRepository(pool)
+	moderationRepo := moderation_repo.NewRepository(pool)
 	go outbox.NewPoller(pool, publisher).Start(ctx)
 
 	icons, err := iconstore.NewLocalStore(t.TempDir(), 1<<20)
@@ -119,7 +121,7 @@ func setupE2E(t *testing.T) (*gin.Engine, <-chan amqp.Delivery) {
 		Icons:       icons,
 		Membership:  membership_service.New(serverRepo, memberRepo),
 		Invitations: invitation.NewService(repository.NewInvitationRepository(pool), serverRepo, memberRepo),
-		Moderation:  moderation_service.New(serverRepo, memberRepo, moderation_repo.NewRepository(pool)),
+		Moderation:  moderation_service.New(serverRepo, memberRepo, moderationRepo, moderationRepo),
 		Auth:        middleware.AuthConfig{UserIDHeader: "X-User-Id"},
 		DB:          pool,
 	})
@@ -143,7 +145,7 @@ func setupE2E(t *testing.T) (*gin.Engine, <-chan amqp.Delivery) {
 	if err != nil {
 		t.Fatalf("QueueDeclare: %v", err)
 	}
-	for _, key := range []string{membership.RoutingKeyMemberJoined, membership.RoutingKeyMemberLeft, moderationevents.RoutingKeyMemberBanned, moderationevents.RoutingKeyMemberUnbanned, moderationevents.RoutingKeyMemberKicked} {
+	for _, key := range []string{membership.RoutingKeyMemberJoined, membership.RoutingKeyMemberLeft, moderationevents.RoutingKeyMemberBanned, moderationevents.RoutingKeyMemberUnbanned, moderationevents.RoutingKeyMemberKicked, moderationevents.RoutingKeyMemberMuted, moderationevents.RoutingKeyMemberUnmuted} {
 		if err := ch.QueueBind(q.Name, key, "discordia.events", false, nil); err != nil {
 			t.Fatalf("QueueBind %s: %v", key, err)
 		}
