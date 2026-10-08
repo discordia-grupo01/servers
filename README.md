@@ -313,6 +313,10 @@ permisos en el resto del servidor (HU #57). Se guardan en la tabla
     `channels: []`.
   - Editarlo, borrarlo o moverlo de categoría da `404`, aunque se tenga
     `MANAGE_CHANNELS`, para no revelar que existe.
+  - Si es de voz, `GET /v1/channels/{channelId}/voice-access` da `404`: no
+    se puede entrar a la llamada. Al revés, un override que le da
+    `VIEW_CHANNELS` a un rol que no lo tiene en el servidor alcanza para
+    entrar. Quien no es miembro sigue recibiendo `403`.
   - Al reordenar una categoría se mandan solo los canales visibles: los
     ocultos conservan su lugar y los visibles ocupan los lugares restantes en
     el orden pedido. Mandar un canal oculto da `400 reorder_invalid`.
