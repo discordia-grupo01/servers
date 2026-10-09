@@ -78,7 +78,7 @@ func setupE2E(t *testing.T) (*gin.Engine, <-chan amqp.Delivery) {
 	t.Cleanup(pool.Close)
 
 	dropTables := func() {
-		_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS user_profiles, outbox_events, member_roles, roles, server_mutes, ownership_transfers, categories, server_bans, invitations, server_members, channels, servers CASCADE`)
+		_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS channel_permission_overrides, user_profiles, outbox_events, member_roles, roles, server_mutes, ownership_transfers, categories, server_bans, invitations, server_members, channels, servers CASCADE`)
 	}
 	t.Cleanup(dropTables)
 	dropTables()
@@ -93,7 +93,8 @@ func setupE2E(t *testing.T) (*gin.Engine, <-chan amqp.Delivery) {
 		"0013_unassigned_category.up.sql",
 		"0014_drop_default_kind.up.sql",
 		"0015_role_positions.up.sql", "0016_server_bans_banned_by.up.sql",
-		"0017_user_profiles.up.sql", "0019_everyone_role.up.sql", "0021_server_mutes.up.sql",
+		"0017_user_profiles.up.sql", "0019_everyone_role.up.sql",
+		"0020_channel_permission_overrides.up.sql", "0021_server_mutes.up.sql",
 	} {
 		schema, err := os.ReadFile("../../migrations/" + f)
 		if err != nil {

@@ -54,10 +54,12 @@ func newRepo(t *testing.T) (*member_repo.MemberRepository, *repository.ServerRep
 		"../../../migrations/0003_roles.up.sql",
 		"../../../migrations/0004_member_roles.up.sql",
 		"../../../migrations/0005_default_role.up.sql",
+		"../../../migrations/0007_categories.up.sql",
 		"../../../migrations/0011_outbox_events.up.sql",
 		"../../../migrations/0015_role_positions.up.sql",
 		"../../../migrations/0017_user_profiles.up.sql",
 		"../../../migrations/0019_everyone_role.up.sql",
+		"../../../migrations/0020_channel_permission_overrides.up.sql",
 	} {
 		schema, err := os.ReadFile(file)
 		if err != nil {
@@ -394,7 +396,7 @@ func TestMemberRepo_ListMembers_ReportsOwnerFlag(t *testing.T) {
 // packages might have created, so a test run leaves the database exactly as
 // clean as it found it -- both before it starts and after it finishes.
 func dropAllTestTables(ctx context.Context, pool *pgxpool.Pool) {
-	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS user_profiles, outbox_events, member_roles, roles, server_bans, invitations, server_members, channels, servers CASCADE`)
+	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS channel_permission_overrides, categories, user_profiles, outbox_events, member_roles, roles, server_bans, invitations, server_members, channels, servers CASCADE`)
 }
 
 func env(k, def string) string {

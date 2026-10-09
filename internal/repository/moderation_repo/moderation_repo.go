@@ -44,7 +44,8 @@ func NewRepository(pool *pgxpool.Pool) *Repository {
 //     (ErrMemberNotFound, and nothing is kept, if they aren't a member),
 //   - cancels the pending ownership transfer addressed to them, if any,
 //   - writes events to the outbox, so they are published only if the ban
-//     commits.
+//     commits, plus a servers.channel_access_revoked for every channel they
+//     could see (repository.TrackChannelAccess).
 //
 // The server row is locked first. That serializes the ban with an ownership
 // transfer being accepted (which rewrites servers.owner_id) and with every
@@ -87,7 +88,9 @@ func (r *Repository) BanMember(ctx context.Context, ban moderation.Ban, check fu
 			return fmt.Errorf("insert ban: %w", err)
 		}
 
-		if err := removeMember(ctx, tx, ban.ServerID, ban.UserID, ban.BannedAt); err != nil {
+		if err := repository.TrackChannelAccess(ctx, tx, ban.ServerID, repository.AccessScope{UserID: ban.UserID}, func() error {
+			return removeMember(ctx, tx, ban.ServerID, ban.UserID, ban.BannedAt)
+		}); err != nil {
 			return err
 		}
 		return insertEvents(ctx, tx, events)
@@ -134,7 +137,8 @@ func (r *Repository) MuteMember(ctx context.Context, mute moderation.Mute, check
 //     (ErrMemberNotFound, and nothing is written, if they aren't a member --
 //     e.g. a concurrent kick already removed them),
 //   - cancels the pending ownership transfer addressed to them, if any,
-//   - writes events to the outbox.
+//   - writes events to the outbox, plus a servers.channel_access_revoked for
+//     every channel they could see (repository.TrackChannelAccess).
 //
 // Kicking whoever owns the server at commit time fails with
 // ErrCannotKickOwner; check decides the permission and the hierarchy with
@@ -151,7 +155,9 @@ func (r *Repository) KickMember(ctx context.Context, kick moderation.Kick, check
 		if err := checkStandings(ctx, tx, kick.ServerID, ownerID, kick.KickedBy, kick.UserID, check); err != nil {
 			return err
 		}
-		if err := removeMember(ctx, tx, kick.ServerID, kick.UserID, kick.KickedAt); err != nil {
+		if err := repository.TrackChannelAccess(ctx, tx, kick.ServerID, repository.AccessScope{UserID: kick.UserID}, func() error {
+			return removeMember(ctx, tx, kick.ServerID, kick.UserID, kick.KickedAt)
+		}); err != nil {
 			return err
 		}
 		return insertEvents(ctx, tx, events)

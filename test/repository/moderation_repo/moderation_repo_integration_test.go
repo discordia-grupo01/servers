@@ -48,12 +48,14 @@ func newRepo(t *testing.T) (*moderation_repo.Repository, *pgxpool.Pool) {
 		"../../../migrations/0003_roles.up.sql",
 		"../../../migrations/0004_member_roles.up.sql",
 		"../../../migrations/0006_ownership_transfers.up.sql",
+		"../../../migrations/0007_categories.up.sql",
 		"../../../migrations/0008_ownership_transfer_cancelled_status.up.sql",
 		"../../../migrations/0011_outbox_events.up.sql",
 		"../../../migrations/0015_role_positions.up.sql",
 		"../../../migrations/0016_server_bans_banned_by.up.sql",
 		"../../../migrations/0017_user_profiles.up.sql",
 		"../../../migrations/0019_everyone_role.up.sql",
+		"../../../migrations/0020_channel_permission_overrides.up.sql",
 		"../../../migrations/0021_server_mutes.up.sql",
 	} {
 		schema, err := os.ReadFile(file)
@@ -68,7 +70,7 @@ func newRepo(t *testing.T) (*moderation_repo.Repository, *pgxpool.Pool) {
 }
 
 func dropAllTestTables(ctx context.Context, pool *pgxpool.Pool) {
-	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS user_profiles, outbox_events, ownership_transfers, member_roles, roles, server_mutes, server_bans, invitations, server_members, channels, servers CASCADE`)
+	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS channel_permission_overrides, categories, user_profiles, outbox_events, ownership_transfers, member_roles, roles, server_mutes, server_bans, invitations, server_members, channels, servers CASCADE`)
 }
 
 func env(k, def string) string {

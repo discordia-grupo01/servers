@@ -464,7 +464,10 @@ paths:
         - channel-permissions
   "/v1/channels/{channelId}/voice-access":
     get:
-      description: Confirms that the authenticated user can connect to a voice channel.
+      description: "Confirms that the authenticated user can connect to a voice
+        channel: they must see it with its per-role overrides applied (#57). 403
+        for a non-member, 404 if the channel does not exist or is hidden from
+        them."
       parameters:
         - description: Voice channel ID
           in: path
