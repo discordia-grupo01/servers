@@ -2045,6 +2045,12 @@ paths:
       responses:
         "204":
           description: No Content
+        "404":
+          description: user is not muted in this server
+          content:
+            "*/*":
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
       security:
         - BearerAuth: []
       summary: Remove a member mute
