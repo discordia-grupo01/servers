@@ -464,7 +464,10 @@ paths:
         - channel-permissions
   "/v1/channels/{channelId}/voice-access":
     get:
-      description: Confirms that the authenticated user can connect to a voice channel.
+      description: "Confirms that the authenticated user can connect to a voice
+        channel: they must see it with its per-role overrides applied (#57). 403
+        for a non-member, 404 if the channel does not exist or is hidden from
+        them."
       parameters:
         - description: Voice channel ID
           in: path
@@ -2000,6 +2003,56 @@ paths:
       summary: Resolve the mentions of a message
       tags:
         - mentions
+  "/v1/servers/{serverId}/mutes":
+    post:
+      description: Requires MANAGE_MESSAGES. The member remains in the server and
+        connected sessions stay open, but message sends and voice publishing are
+        denied until until_at.
+      parameters:
+        - description: Server ID
+          in: path
+          name: serverId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/moderation_handler.muteRequest"
+        description: Mute details
+        required: true
+      responses:
+        "204":
+          description: No Content
+      security:
+        - BearerAuth: []
+      summary: Temporarily mute a member
+      tags:
+        - moderation
+  "/v1/servers/{serverId}/mutes/{userId}":
+    delete:
+      parameters:
+        - description: Server ID
+          in: path
+          name: serverId
+          required: true
+          schema:
+            type: string
+        - description: Muted user ID
+          in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: No Content
+      security:
+        - BearerAuth: []
+      summary: Remove a member mute
+      tags:
+        - moderation
   "/v1/servers/{serverId}/ownership-transfers":
     post:
       description: Owner-only. Creates a pending transfer; nothing changes until the
@@ -2772,6 +2825,15 @@ components:
         user_id:
           type: string
       type: object
+    moderation_handler.muteRequest:
+      properties:
+        reason:
+          type: string
+        until_at:
+          type: string
+        user_id:
+          type: string
+      type: object
     role_handler.createRoleRequest:
       properties:
         color:
@@ -2831,6 +2893,8 @@ components:
           type: boolean
         channel_id:
           type: string
+        muted:
+          type: boolean
         name:
           type: string
         server_id:

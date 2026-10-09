@@ -2,6 +2,7 @@ package moderation_service_test
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -71,6 +72,22 @@ type fakeRepo struct {
 	listErr   error
 	gotLimit  int
 	gotOffset int
+
+	muteErr    error
+	muteCalls  int
+	muted      moderation.Mute
+	muteEvents []outbox.Event
+
+	unmuteMuteErr  error
+	unmuteCalls    int
+	unmuteServerID uuid.UUID
+	unmuteUserID   string
+	unmuteEvents   []outbox.Event
+
+	isMuted     bool
+	isMutedErr  error
+	expireCount int
+	expireErr   error
 }
 
 func (f *fakeRepo) BanMember(_ context.Context, ban moderation.Ban, check func(actor, target role.Standing) error, events ...outbox.Event) error {
@@ -129,6 +146,44 @@ func (f *fakeRepo) ListBans(_ context.Context, _ uuid.UUID, limit, offset int) (
 	return f.listBans, f.listTotal, f.listErr
 }
 
+func (f *fakeRepo) MuteMember(_ context.Context, mute moderation.Mute, check func(actor, target role.Standing) error, events ...outbox.Event) error {
+	f.muteCalls++
+	if f.muteErr != nil {
+		return f.muteErr
+	}
+	if f.standings != nil {
+		actor, target := f.standingOf(mute.MutedBy), f.standingOf(mute.UserID)
+		if f.txActor != nil {
+			actor = *f.txActor
+		}
+		if f.txTarget != nil {
+			target = *f.txTarget
+		}
+		if err := check(actor, target); err != nil {
+			return err
+		}
+	}
+	f.muted, f.muteEvents = mute, events
+	return nil
+}
+
+func (f *fakeRepo) UnmuteMember(_ context.Context, serverID uuid.UUID, userID string, events ...outbox.Event) error {
+	f.unmuteCalls++
+	if f.unmuteMuteErr != nil {
+		return f.unmuteMuteErr
+	}
+	f.unmuteServerID, f.unmuteUserID, f.unmuteEvents = serverID, userID, events
+	return nil
+}
+
+func (f *fakeRepo) IsMuted(context.Context, uuid.UUID, string, time.Time) (bool, error) {
+	return f.isMuted, f.isMutedErr
+}
+
+func (f *fakeRepo) ExpireMutes(context.Context, time.Time) (int, error) {
+	return f.expireCount, f.expireErr
+}
+
 func (f *fakeRepo) standingOf(userID string) role.Standing {
 	if userID == f.ownerID {
 		return role.Standing{IsMember: true, IsOwner: true}
@@ -163,7 +218,7 @@ func newFixture() *fixture {
 		server:    srv,
 		standings: st,
 		repo:      repo,
-		svc:       moderation_service.New(&fakeServers{server: srv}, st, repo),
+		svc:       moderation_service.New(&fakeServers{server: srv}, st, repo, repo),
 	}
 }
 

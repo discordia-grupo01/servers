@@ -98,6 +98,7 @@ func TestAuthorizeVoice_UsesReplicatedProfileName(t *testing.T) {
 		&fakeChannels{getByIDChannel: channel},
 		&fakeStandings{standing: role.Standing{IsMember: true, Permissions: role.PermViewChannels}},
 		&fakeVisibility{},
+		&fakeMutes{},
 		&fakeProfileNames{name: "John"},
 	)
 
@@ -119,6 +120,7 @@ func TestAuthorizeVoice_FallsBackToIdentityWithoutReplicatedProfile(t *testing.T
 		&fakeChannels{getByIDChannel: channel},
 		&fakeStandings{standing: role.Standing{IsMember: true, Permissions: role.PermViewChannels}},
 		&fakeVisibility{},
+		&fakeMutes{},
 		&fakeProfileNames{},
 	)
 
@@ -141,12 +143,57 @@ func TestAuthorizeVoice_ProfileLookupErrorIsReturned(t *testing.T) {
 		&fakeChannels{getByIDChannel: channel},
 		&fakeStandings{standing: role.Standing{IsMember: true, Permissions: role.PermViewChannels}},
 		&fakeVisibility{},
+		&fakeMutes{},
 		&fakeProfileNames{err: profileErr},
 	)
 
 	_, err := svc.AuthorizeVoice(context.Background(), channel.ID, "member-1")
 	if !errors.Is(err, profileErr) {
 		t.Errorf("err = %v, want profile lookup error", err)
+	}
+}
+
+func TestAuthorizeVoice_MutedMemberRemainsAllowedAndIsMarkedMuted(t *testing.T) {
+	srv := ownerServer()
+	channel := model.Channel{ID: uuid.New(), ServerID: srv.ID, Kind: model.ChannelVoice}
+	mutes := &fakeMutes{muted: true}
+	svc := channel_service.New(
+		&fakeServers{server: srv},
+		&fakeCategories{},
+		&fakeChannels{getByIDChannel: channel},
+		&fakeStandings{standing: role.Standing{IsMember: true, Permissions: role.PermViewChannels}},
+		&fakeVisibility{},
+		mutes,
+	)
+
+	access, err := svc.AuthorizeVoice(context.Background(), channel.ID, "member-1")
+	if err != nil {
+		t.Fatalf("AuthorizeVoice: %v", err)
+	}
+	if !access.Muted {
+		t.Error("Muted = false, want true")
+	}
+	if mutes.calls != 1 {
+		t.Errorf("IsMuted calls = %d, want 1", mutes.calls)
+	}
+}
+
+func TestAuthorizeVoice_MuteLookupErrorIsReturned(t *testing.T) {
+	srv := ownerServer()
+	channel := model.Channel{ID: uuid.New(), ServerID: srv.ID, Kind: model.ChannelVoice}
+	muteErr := errors.New("mute store unavailable")
+	svc := channel_service.New(
+		&fakeServers{server: srv},
+		&fakeCategories{},
+		&fakeChannels{getByIDChannel: channel},
+		&fakeStandings{standing: role.Standing{IsMember: true, Permissions: role.PermViewChannels}},
+		&fakeVisibility{},
+		&fakeMutes{err: muteErr},
+	)
+
+	_, err := svc.AuthorizeVoice(context.Background(), channel.ID, "member-1")
+	if !errors.Is(err, muteErr) {
+		t.Errorf("err = %v, want mute lookup error", err)
 	}
 }
 

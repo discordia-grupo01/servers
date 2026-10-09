@@ -223,6 +223,71 @@ func TestModerationEvents_KickEndToEnd(t *testing.T) {
 	}
 }
 
+// HU "Silenciar temporalmente a un miembro", CA1 and CA3: real HTTP requests
+// persist the moderation action and publish the corresponding events through
+// the outbox and RabbitMQ exchange.
+func TestModerationEvents_MuteAndUnmuteEndToEnd(t *testing.T) {
+	router, deliveries := setupE2E(t)
+
+	owner := "owner-" + uuid.NewString()
+	target := "target-" + uuid.NewString()
+
+	w := postCreateServer(t, router, owner, "E2E Mute Server")
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create server: code=%d body=%s", w.Code, w.Body.String())
+	}
+	var srv struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &srv); err != nil {
+		t.Fatalf("decode server: %v", err)
+	}
+	waitForEvent(t, deliveries, membership.RoutingKeyMemberJoined)
+
+	w = doAsUser(t, router, http.MethodPost, "/v1/servers/"+srv.ID+"/invites", owner)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create invite: code=%d body=%s", w.Code, w.Body.String())
+	}
+	var invite struct {
+		Code string `json:"code"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &invite); err != nil {
+		t.Fatalf("decode invite: %v", err)
+	}
+	if w = doAsUser(t, router, http.MethodPost, "/v1/invites/"+invite.Code+"/join", target); w.Code != http.StatusCreated {
+		t.Fatalf("join: code=%d body=%s", w.Code, w.Body.String())
+	}
+	waitForEvent(t, deliveries, membership.RoutingKeyMemberJoined)
+
+	until := time.Now().UTC().Add(time.Hour).Format(time.RFC3339Nano)
+	w = doJSONAsUser(t, router, http.MethodPost, "/v1/servers/"+srv.ID+"/mutes", owner,
+		`{"user_id":"`+target+`","until_at":"`+until+`","reason":"spam"}`)
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("mute: code=%d body=%s", w.Code, w.Body.String())
+	}
+
+	muted := nextDeliveries(t, deliveries, 1)[moderationevents.RoutingKeyMemberMuted]
+	var mutedEvent moderationevents.MemberMuted
+	if err := json.Unmarshal(muted.Body, &mutedEvent); err != nil {
+		t.Fatal(err)
+	}
+	if mutedEvent.ServerID != srv.ID || mutedEvent.UserID != target || mutedEvent.MutedBy != owner || mutedEvent.Reason != "spam" || mutedEvent.UntilAt.IsZero() || mutedEvent.EventID == "" {
+		t.Errorf("member_muted = %+v", mutedEvent)
+	}
+
+	if w = doAsUser(t, router, http.MethodDelete, "/v1/servers/"+srv.ID+"/mutes/"+target, owner); w.Code != http.StatusNoContent {
+		t.Fatalf("unmute: code=%d body=%s", w.Code, w.Body.String())
+	}
+	unmuted := nextDeliveries(t, deliveries, 1)[moderationevents.RoutingKeyMemberUnmuted]
+	var unmutedEvent moderationevents.MemberUnmuted
+	if err := json.Unmarshal(unmuted.Body, &unmutedEvent); err != nil {
+		t.Fatal(err)
+	}
+	if unmutedEvent.ServerID != srv.ID || unmutedEvent.UserID != target || unmutedEvent.UnmutedBy != owner || unmutedEvent.Reason != "manual" || unmutedEvent.EventID == "" {
+		t.Errorf("member_unmuted = %+v", unmutedEvent)
+	}
+}
+
 func keys(m map[string]amqp.Delivery) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {

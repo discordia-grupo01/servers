@@ -61,21 +61,25 @@ func (r *MemberRepository) HasRole(ctx context.Context, serverID uuid.UUID, user
 // AssignRole is idempotent: assigning a role the member already has is a no-op.
 // AssignRole gives userID the role, idempotently. It holds the server row
 // FOR SHARE (repository.LockServerShared) so it serializes with the writes
-// that check the hierarchy, like a ban.
+// that check the hierarchy, like a ban. A role can also hide channels (an
+// override denying VIEW_CHANNELS): that's published as
+// servers.channel_access_revoked (repository.TrackChannelAccess).
 func (r *MemberRepository) AssignRole(ctx context.Context, serverID uuid.UUID, userID string, roleID uuid.UUID) error {
 	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
 		if err := repository.LockServerShared(ctx, tx, serverID); err != nil {
 			return err
 		}
-		if _, err := tx.Exec(ctx, `
-			INSERT INTO member_roles (server_id, user_id, role_id, assigned_at)
-			VALUES ($1, $2, $3, now())
-			ON CONFLICT (server_id, user_id, role_id) DO NOTHING`,
-			serverID, userID, roleID,
-		); err != nil {
-			return fmt.Errorf("assign role: %w", err)
-		}
-		return nil
+		return repository.TrackChannelAccess(ctx, tx, serverID, repository.AccessScope{UserID: userID}, func() error {
+			if _, err := tx.Exec(ctx, `
+				INSERT INTO member_roles (server_id, user_id, role_id, assigned_at)
+				VALUES ($1, $2, $3, now())
+				ON CONFLICT (server_id, user_id, role_id) DO NOTHING`,
+				serverID, userID, roleID,
+			); err != nil {
+				return fmt.Errorf("assign role: %w", err)
+			}
+			return nil
+		})
 	})
 }
 
@@ -133,19 +137,26 @@ func (r *MemberRepository) ListMembers(ctx context.Context, serverID uuid.UUID, 
 	return members, total, nil
 }
 
+// RemoveMember takes userID out of serverID (leave) and publishes
+// memberLeftEvent, plus a servers.channel_access_revoked for every channel
+// they could see (repository.TrackChannelAccess). If they weren't a member it
+// returns false and publishes nothing.
 func (r *MemberRepository) RemoveMember(ctx context.Context, serverID uuid.UUID, userID string, memberLeftEvent outbox.Event) (bool, error) {
 	var removed bool
 	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
-		tag, err := tx.Exec(ctx,
-			`DELETE FROM server_members WHERE server_id = $1 AND user_id = $2`,
-			serverID, userID,
-		)
-		if err != nil {
-			return fmt.Errorf("remove member: %w", err)
-		}
-		removed = tag.RowsAffected() > 0
-		if !removed {
+		err := repository.TrackChannelAccess(ctx, tx, serverID, repository.AccessScope{UserID: userID}, func() error {
+			tag, err := tx.Exec(ctx,
+				`DELETE FROM server_members WHERE server_id = $1 AND user_id = $2`,
+				serverID, userID,
+			)
+			if err != nil {
+				return fmt.Errorf("remove member: %w", err)
+			}
+			removed = tag.RowsAffected() > 0
 			return nil
+		})
+		if err != nil || !removed {
+			return err
 		}
 		return outbox.Insert(ctx, tx, memberLeftEvent)
 	})
@@ -156,23 +167,25 @@ func (r *MemberRepository) RemoveMember(ctx context.Context, serverID uuid.UUID,
 }
 
 // RemoveRole takes the role away from userID (ErrMemberRoleNotFound if they
-// don't hold it). Same server lock as AssignRole.
+// don't hold it). Same server lock and channel_access_revoked as AssignRole.
 func (r *MemberRepository) RemoveRole(ctx context.Context, serverID uuid.UUID, userID string, roleID uuid.UUID) error {
 	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
 		if err := repository.LockServerShared(ctx, tx, serverID); err != nil {
 			return err
 		}
-		tag, err := tx.Exec(ctx,
-			`DELETE FROM member_roles WHERE server_id = $1 AND user_id = $2 AND role_id = $3`,
-			serverID, userID, roleID,
-		)
-		if err != nil {
-			return fmt.Errorf("remove role: %w", err)
-		}
-		if tag.RowsAffected() == 0 {
-			return model.ErrMemberRoleNotFound
-		}
-		return nil
+		return repository.TrackChannelAccess(ctx, tx, serverID, repository.AccessScope{UserID: userID}, func() error {
+			tag, err := tx.Exec(ctx,
+				`DELETE FROM member_roles WHERE server_id = $1 AND user_id = $2 AND role_id = $3`,
+				serverID, userID, roleID,
+			)
+			if err != nil {
+				return fmt.Errorf("remove role: %w", err)
+			}
+			if tag.RowsAffected() == 0 {
+				return model.ErrMemberRoleNotFound
+			}
+			return nil
+		})
 	})
 }
 

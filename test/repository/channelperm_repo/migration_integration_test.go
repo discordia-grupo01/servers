@@ -39,6 +39,7 @@ func newPool(t *testing.T) *pgxpool.Pool {
 		"../../../migrations/0003_roles.up.sql",
 		"../../../migrations/0004_member_roles.up.sql",
 		"../../../migrations/0007_categories.up.sql",
+		"../../../migrations/0011_outbox_events.up.sql",
 		"../../../migrations/0015_role_positions.up.sql",
 		"../../../migrations/0019_everyone_role.up.sql",
 		"../../../migrations/0020_channel_permission_overrides.up.sql",
@@ -55,7 +56,7 @@ func newPool(t *testing.T) *pgxpool.Pool {
 }
 
 func dropAllTestTables(ctx context.Context, pool *pgxpool.Pool) {
-	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS channel_permission_overrides, member_roles, roles, categories, server_members, channels, servers CASCADE`)
+	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS outbox_events, channel_permission_overrides, member_roles, roles, categories, server_members, channels, servers CASCADE`)
 }
 
 func env(k, def string) string {

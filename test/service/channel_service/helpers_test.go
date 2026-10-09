@@ -3,6 +3,7 @@ package channel_service_test
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -144,7 +145,18 @@ func newServiceWithStandings(servers *fakeServers, categories *fakeCategories, c
 }
 
 func newServiceWithVisibility(servers *fakeServers, categories *fakeCategories, channels *fakeChannels, standings *fakeStandings, visibility *fakeVisibility) *channel_service.ChannelService {
-	return channel_service.New(servers, categories, channels, standings, visibility)
+	return channel_service.New(servers, categories, channels, standings, visibility, &fakeMutes{})
+}
+
+type fakeMutes struct {
+	muted bool
+	err   error
+	calls int
+}
+
+func (f *fakeMutes) IsMuted(_ context.Context, _ uuid.UUID, _ string, _ time.Time) (bool, error) {
+	f.calls++
+	return f.muted, f.err
 }
 
 // fakeVisibility returns the same channel overrides for every user; the zero

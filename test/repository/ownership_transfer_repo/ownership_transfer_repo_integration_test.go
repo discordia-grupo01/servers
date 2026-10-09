@@ -52,9 +52,11 @@ func newRepo(t *testing.T) (*ownership_transfer_repo.Repository, *repository.Ser
 		"../../../migrations/0005_default_role.up.sql",
 		"../../../migrations/0006_ownership_transfers.up.sql",
 		"../../../migrations/0008_ownership_transfer_cancelled_status.up.sql",
+		"../../../migrations/0007_categories.up.sql",
 		"../../../migrations/0011_outbox_events.up.sql",
 		"../../../migrations/0015_role_positions.up.sql",
 		"../../../migrations/0019_everyone_role.up.sql",
+		"../../../migrations/0020_channel_permission_overrides.up.sql",
 	} {
 		schema, err := os.ReadFile(file)
 		if err != nil {
@@ -481,7 +483,7 @@ func TestOwnershipTransferRepo_ExpireStalePending_IgnoresFreshOnes(t *testing.T)
 }
 
 func dropAllTestTables(ctx context.Context, pool *pgxpool.Pool) {
-	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS outbox_events, ownership_transfers, member_roles, roles, server_bans, invitations, server_members, channels, servers CASCADE`)
+	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS channel_permission_overrides, categories, outbox_events, ownership_transfers, member_roles, roles, server_bans, invitations, server_members, channels, servers CASCADE`)
 }
 
 func env(k, def string) string {

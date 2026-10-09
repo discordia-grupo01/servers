@@ -2,6 +2,7 @@ package moderation_service
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -21,4 +22,11 @@ type Repository interface {
 	KickMember(ctx context.Context, kick moderation.Kick, check func(actor, target role.Standing) error, events ...outbox.Event) error
 	UnbanMember(ctx context.Context, serverID uuid.UUID, userID string, events ...outbox.Event) error
 	ListBans(ctx context.Context, serverID uuid.UUID, limit, offset int) ([]moderation.Ban, int, error)
+}
+
+type MuteRepository interface {
+	MuteMember(ctx context.Context, mute moderation.Mute, check func(actor, target role.Standing) error, events ...outbox.Event) error
+	UnmuteMember(ctx context.Context, serverID uuid.UUID, userID string, events ...outbox.Event) error
+	IsMuted(ctx context.Context, serverID uuid.UUID, userID string, at time.Time) (bool, error)
+	ExpireMutes(ctx context.Context, at time.Time) (int, error)
 }

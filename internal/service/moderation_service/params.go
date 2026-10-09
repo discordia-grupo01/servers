@@ -1,6 +1,10 @@
 package moderation_service
 
-import "github.com/google/uuid"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 type BanParams struct {
 	ServerID     uuid.UUID
@@ -17,6 +21,20 @@ type KickParams struct {
 }
 
 type UnbanParams struct {
+	ServerID     uuid.UUID
+	ActorUserID  string
+	TargetUserID string
+}
+
+type MuteParams struct {
+	ServerID     uuid.UUID
+	ActorUserID  string
+	TargetUserID string
+	UntilAt      time.Time
+	Reason       *string
+}
+
+type UnmuteParams struct {
 	ServerID     uuid.UUID
 	ActorUserID  string
 	TargetUserID string

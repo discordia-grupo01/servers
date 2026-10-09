@@ -162,24 +162,28 @@ func listByServer(ctx context.Context, q querier, serverID uuid.UUID) ([]role.Ro
 // Update saves rl's name, color and permissions. It holds the server row FOR
 // SHARE (repository.LockServerShared): a permission change can grant or take
 // away BAN_MEMBERS or ADMINISTRATOR, so it serializes with the writes that
-// check them, like a ban.
+// check them, like a ban. Taking away VIEW_CHANNELS (or ADMINISTRATOR) can
+// hide channels from its members: that's published as
+// servers.channel_access_revoked (repository.TrackChannelAccess).
 func (r *RoleRepository) Update(ctx context.Context, rl role.Role) error {
 	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
 		if err := repository.LockServerShared(ctx, tx, rl.ServerID); err != nil {
 			return err
 		}
-		tag, err := tx.Exec(ctx, `
-			UPDATE roles SET name = $1, color = $2, permissions = $3, updated_at = $4
-			 WHERE id = $5`,
-			rl.Name, rl.Color, rl.Permissions, rl.UpdatedAt, rl.ID,
-		)
-		if err != nil {
-			return fmt.Errorf("update role: %w", err)
-		}
-		if tag.RowsAffected() == 0 {
-			return model.ErrRoleNotFound
-		}
-		return nil
+		return repository.TrackChannelAccess(ctx, tx, rl.ServerID, repository.AccessScope{}, func() error {
+			tag, err := tx.Exec(ctx, `
+				UPDATE roles SET name = $1, color = $2, permissions = $3, updated_at = $4
+				 WHERE id = $5`,
+				rl.Name, rl.Color, rl.Permissions, rl.UpdatedAt, rl.ID,
+			)
+			if err != nil {
+				return fmt.Errorf("update role: %w", err)
+			}
+			if tag.RowsAffected() == 0 {
+				return model.ErrRoleNotFound
+			}
+			return nil
+		})
 	})
 }
 
@@ -187,7 +191,8 @@ func (r *RoleRepository) Update(ctx context.Context, rl role.Role) error {
 // (checked atomically in the same statement, so a concurrent
 // SetDefaultRole cannot race it into deleting the default anyway). Like
 // Update, it holds the server row FOR SHARE: deleting a role changes the rank
-// of everyone who held it.
+// of everyone who held it, and can hide channels from them (published as
+// servers.channel_access_revoked, see repository.TrackChannelAccess).
 func (r *RoleRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
 		return deleteRole(ctx, tx, id)
@@ -212,15 +217,23 @@ func deleteRole(ctx context.Context, tx pgx.Tx, id uuid.UUID) error {
 		return err
 	}
 
-	tag, err := tx.Exec(ctx, `
-		DELETE FROM roles
-		 WHERE id = $1
-		   AND NOT EXISTS (SELECT 1 FROM servers WHERE servers.default_role_id = roles.id)`,
-		id)
+	var deleted bool
+	err = repository.TrackChannelAccess(ctx, tx, serverID, repository.AccessScope{}, func() error {
+		tag, err := tx.Exec(ctx, `
+			DELETE FROM roles
+			 WHERE id = $1
+			   AND NOT EXISTS (SELECT 1 FROM servers WHERE servers.default_role_id = roles.id)`,
+			id)
+		if err != nil {
+			return fmt.Errorf("delete role: %w", err)
+		}
+		deleted = tag.RowsAffected() > 0
+		return nil
+	})
 	if err != nil {
-		return fmt.Errorf("delete role: %w", err)
+		return err
 	}
-	if tag.RowsAffected() > 0 {
+	if deleted {
 		return nil
 	}
 

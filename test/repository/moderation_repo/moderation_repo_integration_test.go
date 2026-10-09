@@ -48,12 +48,15 @@ func newRepo(t *testing.T) (*moderation_repo.Repository, *pgxpool.Pool) {
 		"../../../migrations/0003_roles.up.sql",
 		"../../../migrations/0004_member_roles.up.sql",
 		"../../../migrations/0006_ownership_transfers.up.sql",
+		"../../../migrations/0007_categories.up.sql",
 		"../../../migrations/0008_ownership_transfer_cancelled_status.up.sql",
 		"../../../migrations/0011_outbox_events.up.sql",
 		"../../../migrations/0015_role_positions.up.sql",
 		"../../../migrations/0016_server_bans_banned_by.up.sql",
 		"../../../migrations/0017_user_profiles.up.sql",
 		"../../../migrations/0019_everyone_role.up.sql",
+		"../../../migrations/0020_channel_permission_overrides.up.sql",
+		"../../../migrations/0021_server_mutes.up.sql",
 	} {
 		schema, err := os.ReadFile(file)
 		if err != nil {
@@ -67,7 +70,7 @@ func newRepo(t *testing.T) (*moderation_repo.Repository, *pgxpool.Pool) {
 }
 
 func dropAllTestTables(ctx context.Context, pool *pgxpool.Pool) {
-	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS user_profiles, outbox_events, ownership_transfers, member_roles, roles, server_bans, invitations, server_members, channels, servers CASCADE`)
+	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS channel_permission_overrides, categories, user_profiles, outbox_events, ownership_transfers, member_roles, roles, server_mutes, server_bans, invitations, server_members, channels, servers CASCADE`)
 }
 
 func env(k, def string) string {
@@ -121,6 +124,98 @@ func allowAll(_, _ role.Standing) error { return nil }
 func newBan(serverID uuid.UUID, userID string) moderation.Ban {
 	reason, by := "spam", "mod-1"
 	return moderation.Ban{ServerID: serverID, UserID: userID, Reason: &reason, BannedBy: &by, BannedAt: time.Now().UTC().Truncate(time.Millisecond)}
+}
+
+func muteEvent(routingKey string) outbox.Event {
+	return outbox.Event{RoutingKey: routingKey, Payload: []byte(`{"event_id":"mute-event"}`)}
+}
+
+func newMute(serverID uuid.UUID, userID string, mutedAt, untilAt time.Time) moderation.Mute {
+	return moderation.Mute{
+		ServerID: serverID,
+		UserID:   userID,
+		MutedBy:  "mod-1",
+		MutedAt:  mutedAt,
+		UntilAt:  untilAt,
+		Reason:   "spam",
+	}
+}
+
+func TestMuteMember_PersistsMuteAndEventAtomically(t *testing.T) {
+	repo, pool := newRepo(t)
+	ctx := context.Background()
+	serverID := seedServer(ctx, t, pool, "target")
+	now := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
+	mute := newMute(serverID, "target", now, now.Add(time.Hour))
+
+	if err := repo.MuteMember(ctx, mute, allowAll, muteEvent("servers.member_muted")); err != nil {
+		t.Fatalf("MuteMember: %v", err)
+	}
+
+	var got moderation.Mute
+	if err := pool.QueryRow(ctx, `
+		SELECT server_id, user_id, muted_by, muted_at, until_at, reason
+		FROM server_mutes WHERE server_id = $1 AND user_id = $2`, serverID, "target").
+		Scan(&got.ServerID, &got.UserID, &got.MutedBy, &got.MutedAt, &got.UntilAt, &got.Reason); err != nil {
+		t.Fatalf("mute row: %v", err)
+	}
+	if got.ServerID != mute.ServerID || got.UserID != mute.UserID || got.MutedBy != mute.MutedBy ||
+		!got.MutedAt.Equal(mute.MutedAt) || !got.UntilAt.Equal(mute.UntilAt) || got.Reason != mute.Reason {
+		t.Errorf("mute row = %+v, want %+v", got, mute)
+	}
+	if n := count(ctx, t, pool, `SELECT COUNT(*) FROM outbox_events WHERE routing_key = 'servers.member_muted'`); n != 1 {
+		t.Errorf("mute events = %d, want 1", n)
+	}
+}
+
+func TestUnmuteMember_DeletesMuteAndWritesEventAtomically(t *testing.T) {
+	repo, pool := newRepo(t)
+	ctx := context.Background()
+	serverID := seedServer(ctx, t, pool, "target")
+	now := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
+	exec(ctx, t, pool, `
+		INSERT INTO server_mutes (server_id, user_id, muted_by, muted_at, until_at, reason)
+		VALUES ($1, 'target', 'mod-1', $2, $3, 'spam')`, serverID, now, now.Add(time.Hour))
+
+	if err := repo.UnmuteMember(ctx, serverID, "target", muteEvent("servers.member_unmuted")); err != nil {
+		t.Fatalf("UnmuteMember: %v", err)
+	}
+	if n := count(ctx, t, pool, `SELECT COUNT(*) FROM server_mutes WHERE server_id = $1`, serverID); n != 0 {
+		t.Errorf("mute rows = %d, want 0", n)
+	}
+	if n := count(ctx, t, pool, `SELECT COUNT(*) FROM outbox_events WHERE routing_key = 'servers.member_unmuted'`); n != 1 {
+		t.Errorf("unmute events = %d, want 1", n)
+	}
+}
+
+func TestExpireMutes_RemovesOnlyExpiredMutesAndPublishesEvents(t *testing.T) {
+	repo, pool := newRepo(t)
+	ctx := context.Background()
+	serverID := seedServer(ctx, t, pool, "expired", "active")
+	now := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
+	exec(ctx, t, pool, `
+		INSERT INTO server_mutes (server_id, user_id, muted_by, muted_at, until_at, reason)
+		VALUES
+			($1, 'expired', 'mod-1', $2, $3, 'expired'),
+			($1, 'active', 'mod-1', $2, $4, 'active')`,
+		serverID, now.Add(-time.Hour), now.Add(-time.Minute), now.Add(time.Hour))
+
+	countExpired, err := repo.ExpireMutes(ctx, now)
+	if err != nil {
+		t.Fatalf("ExpireMutes: %v", err)
+	}
+	if countExpired != 1 {
+		t.Fatalf("expired count = %d, want 1", countExpired)
+	}
+	if n := count(ctx, t, pool, `SELECT COUNT(*) FROM server_mutes WHERE server_id = $1 AND user_id = 'expired'`, serverID); n != 0 {
+		t.Error("expired mute remains")
+	}
+	if n := count(ctx, t, pool, `SELECT COUNT(*) FROM server_mutes WHERE server_id = $1 AND user_id = 'active'`, serverID); n != 1 {
+		t.Error("active mute was removed")
+	}
+	if n := count(ctx, t, pool, `SELECT COUNT(*) FROM outbox_events WHERE routing_key = 'servers.member_unmuted'`); n != 1 {
+		t.Errorf("expiry events = %d, want 1", n)
+	}
 }
 
 // CA1: the member is removed with their roles, the ban is recorded, a pending
