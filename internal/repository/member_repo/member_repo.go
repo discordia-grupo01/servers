@@ -137,19 +137,26 @@ func (r *MemberRepository) ListMembers(ctx context.Context, serverID uuid.UUID, 
 	return members, total, nil
 }
 
+// RemoveMember takes userID out of serverID (leave) and publishes
+// memberLeftEvent, plus a servers.channel_access_revoked for every channel
+// they could see (repository.TrackChannelAccess). If they weren't a member it
+// returns false and publishes nothing.
 func (r *MemberRepository) RemoveMember(ctx context.Context, serverID uuid.UUID, userID string, memberLeftEvent outbox.Event) (bool, error) {
 	var removed bool
 	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
-		tag, err := tx.Exec(ctx,
-			`DELETE FROM server_members WHERE server_id = $1 AND user_id = $2`,
-			serverID, userID,
-		)
-		if err != nil {
-			return fmt.Errorf("remove member: %w", err)
-		}
-		removed = tag.RowsAffected() > 0
-		if !removed {
+		err := repository.TrackChannelAccess(ctx, tx, serverID, repository.AccessScope{UserID: userID}, func() error {
+			tag, err := tx.Exec(ctx,
+				`DELETE FROM server_members WHERE server_id = $1 AND user_id = $2`,
+				serverID, userID,
+			)
+			if err != nil {
+				return fmt.Errorf("remove member: %w", err)
+			}
+			removed = tag.RowsAffected() > 0
 			return nil
+		})
+		if err != nil || !removed {
+			return err
 		}
 		return outbox.Insert(ctx, tx, memberLeftEvent)
 	})

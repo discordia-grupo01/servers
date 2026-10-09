@@ -323,6 +323,20 @@ permisos en el resto del servidor (HU #57). Se guardan en la tabla
   - Los canales empatados en `position` (los recién creados quedan en `0`
     hasta el primer reorder) se ordenan por `id`, igual en los listados y en el
     reorder.
+- **Perder acceso en vivo.** Cuando un cambio le saca `VIEW_CHANNELS` a
+  alguien en un canal, se publica `servers.channel_access_revoked`
+  (`server_id`, `channel_id`, `user_ids`): uno por canal afectado, solo con
+  quienes **perdieron** el acceso (ganarlo no publica nada; el cliente lo ve al
+  refrescar la lista de canales). Lo disparan crear, editar o borrar un
+  override; editar o borrar un rol; asignar o quitar un rol; aceptar una
+  transferencia de propiedad (el dueño anterior deja de verlo todo); y
+  expulsar, banear o abandonar el servidor (el miembro aparece en un evento por
+  cada canal que veía, además del `servers.member_left`). Se calcula quién ve
+  cada canal antes y después de la escritura, dentro de la misma transacción,
+  y se encola en el outbox, así que se publica solo si el cambio se aplica.
+  `messaging` cierra el socket de esos usuarios en ese canal y `voice-sfu` los
+  saca de la sala de voz; al reconectar, el `join` y `voice-access` vuelven a
+  chequear el estado actual.
 
 ## Eliminar un servidor
 `DELETE /v1/servers/{serverId}` con cuerpo `{"confirm_name": "<nombre exacto del servidor>"}`
@@ -375,7 +389,8 @@ Eventos que publica el servicio (exchange `discordia.events`, contratos en
 `github.com/discordia-grupo01/events-contract` y AsyncAPI en `discordia-docs`):
 `servers.member_joined`, `servers.member_left`, `servers.member_banned`,
 `servers.member_unbanned`, `servers.member_kicked`, `servers.channel_created`,
-`servers.channel_deleted` y `servers.server_deleted`.
+`servers.channel_deleted`, `servers.channel_access_revoked` y
+`servers.server_deleted`.
 
 ## Menciones
 Los mensajes viven en `messaging`, pero quién puede mencionar a quién depende
