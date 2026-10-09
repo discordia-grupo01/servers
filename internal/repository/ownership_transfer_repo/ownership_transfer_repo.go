@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/discordia-grupo01/servers/internal/model"
+	"github.com/discordia-grupo01/servers/internal/repository"
 )
 
 const (
@@ -129,6 +130,10 @@ func (r *Repository) Cancel(ctx context.Context, id uuid.UUID, resolvedAt time.T
 	return t, nil
 }
 
+// Accept resolves a pending transfer and makes its target the owner. The
+// previous owner keeps their roles but stops being an implicit administrator,
+// which can hide channels from them: that's published as
+// servers.channel_access_revoked (repository.TrackChannelAccess).
 func (r *Repository) Accept(ctx context.Context, id uuid.UUID, resolvedAt time.Time) (model.OwnershipTransfer, error) {
 	var t model.OwnershipTransfer
 	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
@@ -157,25 +162,34 @@ func (r *Repository) Accept(ctx context.Context, id uuid.UUID, resolvedAt time.T
 			return model.ErrTransferTargetNotMember
 		}
 
+		// The server row is rewritten below anyway; locking it first keeps
+		// role changes out while who sees what is compared.
 		if _, err := tx.Exec(ctx,
-			`UPDATE server_members SET is_owner = FALSE WHERE server_id = $1 AND is_owner = TRUE`,
-			t.ServerID,
+			`SELECT 1 FROM servers WHERE id = $1 FOR NO KEY UPDATE`, t.ServerID,
 		); err != nil {
-			return fmt.Errorf("demote previous owner: %w", err)
+			return fmt.Errorf("lock server: %w", err)
 		}
-		if _, err := tx.Exec(ctx,
-			`UPDATE server_members SET is_owner = TRUE WHERE server_id = $1 AND user_id = $2`,
-			t.ServerID, t.ToUserID,
-		); err != nil {
-			return fmt.Errorf("promote new owner membership: %w", err)
-		}
-		if _, err := tx.Exec(ctx,
-			`UPDATE servers SET owner_id = $2 WHERE id = $1`,
-			t.ServerID, t.ToUserID,
-		); err != nil {
-			return fmt.Errorf("update server owner: %w", err)
-		}
-		return nil
+		return repository.TrackChannelAccess(ctx, tx, t.ServerID, repository.AccessScope{}, func() error {
+			if _, err := tx.Exec(ctx,
+				`UPDATE server_members SET is_owner = FALSE WHERE server_id = $1 AND is_owner = TRUE`,
+				t.ServerID,
+			); err != nil {
+				return fmt.Errorf("demote previous owner: %w", err)
+			}
+			if _, err := tx.Exec(ctx,
+				`UPDATE server_members SET is_owner = TRUE WHERE server_id = $1 AND user_id = $2`,
+				t.ServerID, t.ToUserID,
+			); err != nil {
+				return fmt.Errorf("promote new owner membership: %w", err)
+			}
+			if _, err := tx.Exec(ctx,
+				`UPDATE servers SET owner_id = $2 WHERE id = $1`,
+				t.ServerID, t.ToUserID,
+			); err != nil {
+				return fmt.Errorf("update server owner: %w", err)
+			}
+			return nil
+		})
 	})
 	if err != nil {
 		return model.OwnershipTransfer{}, err

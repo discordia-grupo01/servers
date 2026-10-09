@@ -40,45 +40,51 @@ func NewRepository(pool *pgxpool.Pool) *Repository {
 // returns it as stored. o must not be empty (the table rejects it: use
 // Delete). Like editing a role, it holds the server row FOR SHARE, so it
 // can't race a role reorder, and runs check with the actor's standing and the
-// role re-read under that lock.
+// role re-read under that lock. Members who stop seeing the channel are
+// published as servers.channel_access_revoked (repository.TrackChannelAccess).
 func (r *Repository) Upsert(ctx context.Context, serverID uuid.UUID, actorID string, o channelperm.Override, check func(actor role.Standing, rl role.Role) error) (channelperm.Override, error) {
 	var saved channelperm.Override
 	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
 		if err := lockAndCheck(ctx, tx, serverID, actorID, o.ChannelID, o.RoleID, check); err != nil {
 			return err
 		}
-		err := tx.QueryRow(ctx, `
-			INSERT INTO channel_permission_overrides (channel_id, role_id, allow, deny, updated_at)
-			VALUES ($1, $2, $3, $4, $5)
-			ON CONFLICT (channel_id, role_id)
-			DO UPDATE SET allow = EXCLUDED.allow, deny = EXCLUDED.deny, updated_at = EXCLUDED.updated_at
-			RETURNING channel_id, role_id, allow, deny, updated_at`,
-			o.ChannelID, o.RoleID, o.Allow, o.Deny, o.UpdatedAt,
-		).Scan(&saved.ChannelID, &saved.RoleID, &saved.Allow, &saved.Deny, &saved.UpdatedAt)
-		if err != nil {
-			return mapFKError(err, "upsert override")
-		}
-		return nil
+		return repository.TrackChannelAccess(ctx, tx, serverID, repository.AccessScope{ChannelID: &o.ChannelID}, func() error {
+			err := tx.QueryRow(ctx, `
+				INSERT INTO channel_permission_overrides (channel_id, role_id, allow, deny, updated_at)
+				VALUES ($1, $2, $3, $4, $5)
+				ON CONFLICT (channel_id, role_id)
+				DO UPDATE SET allow = EXCLUDED.allow, deny = EXCLUDED.deny, updated_at = EXCLUDED.updated_at
+				RETURNING channel_id, role_id, allow, deny, updated_at`,
+				o.ChannelID, o.RoleID, o.Allow, o.Deny, o.UpdatedAt,
+			).Scan(&saved.ChannelID, &saved.RoleID, &saved.Allow, &saved.Deny, &saved.UpdatedAt)
+			if err != nil {
+				return mapFKError(err, "upsert override")
+			}
+			return nil
+		})
 	})
 	return saved, err
 }
 
 // Delete removes the override of roleID in channelID, with the same locking
-// and check as Upsert. deleted is false (and err nil) if there was none.
+// and check as Upsert (and the same channel_access_revoked: removing an allow
+// can hide the channel). deleted is false (and err nil) if there was none.
 func (r *Repository) Delete(ctx context.Context, serverID uuid.UUID, actorID string, channelID, roleID uuid.UUID, check func(actor role.Standing, rl role.Role) error) (deleted bool, err error) {
 	err = pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
 		if err := lockAndCheck(ctx, tx, serverID, actorID, channelID, roleID, check); err != nil {
 			return err
 		}
-		tag, err := tx.Exec(ctx,
-			`DELETE FROM channel_permission_overrides WHERE channel_id = $1 AND role_id = $2`,
-			channelID, roleID,
-		)
-		if err != nil {
-			return fmt.Errorf("delete override: %w", err)
-		}
-		deleted = tag.RowsAffected() > 0
-		return nil
+		return repository.TrackChannelAccess(ctx, tx, serverID, repository.AccessScope{ChannelID: &channelID}, func() error {
+			tag, err := tx.Exec(ctx,
+				`DELETE FROM channel_permission_overrides WHERE channel_id = $1 AND role_id = $2`,
+				channelID, roleID,
+			)
+			if err != nil {
+				return fmt.Errorf("delete override: %w", err)
+			}
+			deleted = tag.RowsAffected() > 0
+			return nil
+		})
 	})
 	return deleted, err
 }

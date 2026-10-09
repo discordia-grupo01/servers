@@ -61,21 +61,25 @@ func (r *MemberRepository) HasRole(ctx context.Context, serverID uuid.UUID, user
 // AssignRole is idempotent: assigning a role the member already has is a no-op.
 // AssignRole gives userID the role, idempotently. It holds the server row
 // FOR SHARE (repository.LockServerShared) so it serializes with the writes
-// that check the hierarchy, like a ban.
+// that check the hierarchy, like a ban. A role can also hide channels (an
+// override denying VIEW_CHANNELS): that's published as
+// servers.channel_access_revoked (repository.TrackChannelAccess).
 func (r *MemberRepository) AssignRole(ctx context.Context, serverID uuid.UUID, userID string, roleID uuid.UUID) error {
 	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
 		if err := repository.LockServerShared(ctx, tx, serverID); err != nil {
 			return err
 		}
-		if _, err := tx.Exec(ctx, `
-			INSERT INTO member_roles (server_id, user_id, role_id, assigned_at)
-			VALUES ($1, $2, $3, now())
-			ON CONFLICT (server_id, user_id, role_id) DO NOTHING`,
-			serverID, userID, roleID,
-		); err != nil {
-			return fmt.Errorf("assign role: %w", err)
-		}
-		return nil
+		return repository.TrackChannelAccess(ctx, tx, serverID, repository.AccessScope{UserID: userID}, func() error {
+			if _, err := tx.Exec(ctx, `
+				INSERT INTO member_roles (server_id, user_id, role_id, assigned_at)
+				VALUES ($1, $2, $3, now())
+				ON CONFLICT (server_id, user_id, role_id) DO NOTHING`,
+				serverID, userID, roleID,
+			); err != nil {
+				return fmt.Errorf("assign role: %w", err)
+			}
+			return nil
+		})
 	})
 }
 
@@ -156,23 +160,25 @@ func (r *MemberRepository) RemoveMember(ctx context.Context, serverID uuid.UUID,
 }
 
 // RemoveRole takes the role away from userID (ErrMemberRoleNotFound if they
-// don't hold it). Same server lock as AssignRole.
+// don't hold it). Same server lock and channel_access_revoked as AssignRole.
 func (r *MemberRepository) RemoveRole(ctx context.Context, serverID uuid.UUID, userID string, roleID uuid.UUID) error {
 	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
 		if err := repository.LockServerShared(ctx, tx, serverID); err != nil {
 			return err
 		}
-		tag, err := tx.Exec(ctx,
-			`DELETE FROM member_roles WHERE server_id = $1 AND user_id = $2 AND role_id = $3`,
-			serverID, userID, roleID,
-		)
-		if err != nil {
-			return fmt.Errorf("remove role: %w", err)
-		}
-		if tag.RowsAffected() == 0 {
-			return model.ErrMemberRoleNotFound
-		}
-		return nil
+		return repository.TrackChannelAccess(ctx, tx, serverID, repository.AccessScope{UserID: userID}, func() error {
+			tag, err := tx.Exec(ctx,
+				`DELETE FROM member_roles WHERE server_id = $1 AND user_id = $2 AND role_id = $3`,
+				serverID, userID, roleID,
+			)
+			if err != nil {
+				return fmt.Errorf("remove role: %w", err)
+			}
+			if tag.RowsAffected() == 0 {
+				return model.ErrMemberRoleNotFound
+			}
+			return nil
+		})
 	})
 }
 
