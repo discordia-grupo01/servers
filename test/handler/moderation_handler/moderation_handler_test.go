@@ -125,6 +125,23 @@ func decodeError(t *testing.T, w *httptest.ResponseRecorder) errJSON {
 
 func bansPath(serverID uuid.UUID) string { return "/v1/servers/" + serverID.String() + "/bans" }
 
+func mutesPath(serverID uuid.UUID, userID string) string {
+	return "/v1/servers/" + serverID.String() + "/mutes/" + userID
+}
+
+func TestUnmute_NotMuted_Returns404(t *testing.T) {
+	f := &fakeModeration{unmuteErr: model.ErrMuteNotFound}
+
+	w := do(t, newRouter(f), http.MethodDelete, mutesPath(uuid.New(), "member-1"), testUser, "")
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
+	}
+	e := decodeError(t, w)
+	if e.Error.Details["reason"] != "mute_not_found" {
+		t.Fatalf("details = %v", e.Error.Details)
+	}
+}
+
 func TestBan_Returns201WithTheBan(t *testing.T) {
 	serverID := uuid.New()
 	reason, by := "spam", testUser

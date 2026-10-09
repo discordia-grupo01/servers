@@ -115,6 +115,7 @@ func (h *Handler) Mute(c *gin.Context) {
 // @Param        serverId path string true "Server ID"
 // @Param        userId path string true "Muted user ID"
 // @Success      204
+// @Failure      404  {object} apierr.ErrorResponse  "user is not muted in this server"
 // @Router       /v1/servers/{serverId}/mutes/{userId} [delete]
 func (h *Handler) Unmute(c *gin.Context) {
 	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
