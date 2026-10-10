@@ -208,8 +208,8 @@ borrar nada en el mismo deploy en que se deja de usar.
 Cada rol tiene un conjunto de permisos del catálogo cerrado
 (`internal/model/role/permission.go`): `VIEW_CHANNELS`, `SEND_MESSAGES`,
 `MANAGE_CHANNELS`, `MANAGE_ROLES`, `KICK_MEMBERS`, `BAN_MEMBERS`,
-`MANAGE_SERVER`, `ADMINISTRATOR`, `CREATE_INVITE`, `MANAGE_MESSAGES` y
-`MENTION_EVERYONE`. La API siempre usa los nombres; la máscara de bits es
+`MANAGE_SERVER`, `ADMINISTRATOR`, `CREATE_INVITE`, `MANAGE_MESSAGES`,
+`MENTION_EVERYONE` y `ADD_REACTIONS`. La API siempre usa los nombres; la máscara de bits es
 interna.
 
 - **Administradores.** Son el dueño del servidor y los miembros con algún rol
@@ -234,14 +234,19 @@ interna.
   (CA4). Mencionar a un usuario puntual no pide ningún permiso (CA1). Como
   `MANAGE_MESSAGES`, no viene en el conjunto por defecto de un rol nuevo y los
   administradores lo tienen implícito. Ver [Menciones](#menciones).
+- **Reaccionar.** `ADD_REACTIONS` permite reaccionar a mensajes con emojis
+  (historia #48, lo aplica `messaging`). Viene en el conjunto por defecto de un
+  rol nuevo y se puede sobrescribir por canal. La migración 0023 se lo dio a
+  todo rol que ya tenía `SEND_MESSAGES` (y lo copió en los overrides de
+  `SEND_MESSAGES`), así nadie perdió la posibilidad de reaccionar.
 - **No se puede dar lo que no se tiene.** Quien no es administrador no puede
   agregarle a un rol un permiso que él mismo no tiene, ni asignar un rol que
   traiga alguno (`403` con `reason: permission_not_held`). Si no, alguien con
   `MANAGE_ROLES` podría darle `ADMINISTRATOR` a un rol por debajo del suyo y
   asignárselo. Los permisos que el rol ya tenía se pueden conservar o quitar
   igual, y quitar un rol nunca está restringido por esto.
-- **Permisos de un rol nuevo.** Todo rol se crea con `VIEW_CHANNELS` y
-  `SEND_MESSAGES` (`role.DefaultPermissions`); después se editan con
+- **Permisos de un rol nuevo.** Todo rol se crea con `VIEW_CHANNELS`,
+  `SEND_MESSAGES` y `ADD_REACTIONS` (`role.DefaultPermissions`); después se editan con
   `PATCH /v1/roles/{roleId}`. Los roles creados antes de este default no se
   tocaron.
 - **A nivel servidor, los permisos solo suman.** Los permisos de un miembro
@@ -280,7 +285,7 @@ permisos en el resto del servidor (HU #57). Se guardan en la tabla
 `channel_permission_overrides` (migración 0020), uno por rol y canal.
 
 - **Qué se puede sobrescribir.** Solo los permisos que tienen sentido en un
-  canal: `VIEW_CHANNELS`, `SEND_MESSAGES` y `MANAGE_MESSAGES`
+  canal: `VIEW_CHANNELS`, `SEND_MESSAGES`, `MANAGE_MESSAGES` y `ADD_REACTIONS`
   (`role.ChannelScopedPermissions`). Cualquier otro da `400`
   `permission_not_overridable`; el mismo permiso en `allow` y `deny`, `400`
   `permission_conflict`. Con las dos listas vacías, el override se borra.
@@ -384,13 +389,25 @@ permisos en el resto del servidor (HU #57). Se guardan en la tabla
   propiedad pendiente hacia él y se encolan `servers.member_left` y
   `servers.member_kicked`. A diferencia del baneo, no queda nada registrado:
   puede volver a unirse con cualquier invitación válida (HU #59).
+- **Palabras prohibidas** (`GET` y `PUT /v1/servers/{serverId}/banned-words`,
+  `{"words": [...]}`): requiere `MANAGE_MESSAGES` a nivel servidor (sin mirar
+  overrides de canal, porque la lista es de todo el servidor; los
+  administradores lo tienen implícito). El `PUT` manda la lista **entera** y
+  reemplaza la anterior; vacía, saca el filtro. Cada entrada es una palabra o
+  frase de hasta 50 caracteres, hasta 100 entradas; se guardan en minúsculas,
+  sin espacios de más y sin repetidas. Cada cambio encola
+  `servers.word_filter_updated` con la lista completa, y `messaging` rechaza
+  desde ese momento los mensajes que contengan alguna (sin distinguir
+  mayúsculas ni tildes, solo palabras completas). Nadie queda exento, y los
+  mensajes ya enviados no se tocan (HU de filtro automático).
 
 Eventos que publica el servicio (exchange `discordia.events`, contratos en
 `github.com/discordia-grupo01/events-contract` y AsyncAPI en `discordia-docs`):
 `servers.member_joined`, `servers.member_left`, `servers.member_banned`,
 `servers.member_unbanned`, `servers.member_kicked`, `servers.channel_created`,
 `servers.channel_deleted`, `servers.channel_access_revoked`,
-`servers.server_deleted`, `servers.member_muted` y `servers.member_unmuted`,
+`servers.server_deleted`, `servers.member_muted`, `servers.member_unmuted` y
+`servers.word_filter_updated`,
 más cinco **fotos completas** con las que `messaging` arma su réplica de
 permisos y decide sin llamar acá (ADR 0003):
 
@@ -503,6 +520,8 @@ admins lo tienen implícito); ver "Roles, permisos y jerarquía".
 | GET | `/v1/servers/{serverId}/bans` | si (`BAN_MEMBERS`) | Listar los baneos del server (paginado: `limit`, `offset`; más nuevo primero). |
 | DELETE | `/v1/servers/{serverId}/bans/{userId}` | si (`BAN_MEMBERS`) | Revocar un baneo. 204; 404 si el usuario no está baneado. No lo vuelve miembro: tiene que volver a unirse con una invitación. |
 | POST | `/v1/servers/{serverId}/kicks` | si (`KICK_MEMBERS`) | Expulsar a un miembro de rango menor (`user_id`). 204; 400 si es uno mismo; 403 si es el dueño o tiene rango igual o mayor; 404 si no es miembro. Puede volver con una invitación. |
+| GET | `/v1/servers/{serverId}/banned-words` | si (`MANAGE_MESSAGES`) | Lista de palabras prohibidas del server, en el orden en que se guardaron. |
+| PUT | `/v1/servers/{serverId}/banned-words` | si (`MANAGE_MESSAGES`) | Reemplazar la lista entera (`words`: hasta 100, de hasta 50 caracteres; vacía saca el filtro). 200 con la lista como quedó guardada; 400 si alguna está vacía, es muy larga o son más de 100. Ver "Moderación". |
 | PUT | `/v1/channels/{channelId}/permissions/roles/{roleId}` | si (`MANAGE_ROLES`) | Crear o reemplazar el override de un rol en un canal (`allow?`, `deny?`: `VIEW_CHANNELS`, `SEND_MESSAGES`, `MANAGE_MESSAGES`). 200 con el override; 204 si las dos listas vienen vacías (se borra). 400 si el permiso no se puede sobrescribir o está en las dos listas; 403 si el rol no está por debajo del propio (salvo `@everyone`) o se permite algo que el caller no tiene. |
 | DELETE | `/v1/channels/{channelId}/permissions/roles/{roleId}` | si (`MANAGE_ROLES`) | Quitar el override de un rol en un canal. 204; 404 `channel_override_not_found` si no había. |
 | GET | `/v1/channels/{channelId}/permissions` | si (`MANAGE_ROLES`) | Listar los overrides del canal (`@everyone` primero, después por jerarquía). |

@@ -96,13 +96,29 @@ func TestStanding_ManageMessages_ImplicitForOwnerAndAdministratorsOnly(t *testin
 }
 
 // #57: the permissions that can be overridden per channel. The number is
-// repeated in the overrides_channel_scoped CHECK of migration 0020, so this
+// repeated in the overrides_channel_scoped CHECK of migration 0023, so this
 // test fails if one changes without the other.
 func TestChannelScopedPermissions_MatchesTheMigrationCheck(t *testing.T) {
-	want := role.PermViewChannels | role.PermSendMessages | role.PermManageMessages
-	if role.ChannelScopedPermissions != want || role.ChannelScopedPermissions != 515 {
-		t.Errorf("ChannelScopedPermissions = %d (%v), want 515 (VIEW_CHANNELS, SEND_MESSAGES, MANAGE_MESSAGES)",
+	want := role.PermViewChannels | role.PermSendMessages | role.PermManageMessages | role.PermAddReactions
+	if role.ChannelScopedPermissions != want || role.ChannelScopedPermissions != 2563 {
+		t.Errorf("ChannelScopedPermissions = %d (%v), want 2563 (VIEW_CHANNELS, SEND_MESSAGES, MANAGE_MESSAGES, ADD_REACTIONS)",
 			role.ChannelScopedPermissions, role.PermissionNames(role.ChannelScopedPermissions))
+	}
+}
+
+func TestAddReactions_IsInTheCatalogWithoutShiftingExistingBits(t *testing.T) {
+	mask, invalid, ok := role.ParsePermissions([]string{"ADD_REACTIONS"})
+	if !ok {
+		t.Fatalf("ADD_REACTIONS should be in the catalog, invalid=%q", invalid)
+	}
+	if mask != role.PermAddReactions || role.PermAddReactions != 2048 {
+		t.Errorf("mask = %d, PermAddReactions = %d, want 2048", mask, role.PermAddReactions)
+	}
+	if role.PermMentionEveryone != 1024 {
+		t.Errorf("bits shifted: MENTION_EVERYONE=%d, want 1024", role.PermMentionEveryone)
+	}
+	if role.DefaultPermissions&role.PermAddReactions == 0 {
+		t.Error("a new role must start with ADD_REACTIONS")
 	}
 }
 
