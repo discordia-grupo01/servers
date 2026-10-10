@@ -17,6 +17,7 @@ import (
 	"github.com/discordia-grupo01/events-contract/channels"
 	"github.com/discordia-grupo01/events-contract/membership"
 	moderationevents "github.com/discordia-grupo01/events-contract/moderation"
+	"github.com/discordia-grupo01/events-contract/permissions"
 	"github.com/discordia-grupo01/servers/internal/model"
 	"github.com/discordia-grupo01/servers/internal/model/channelperm"
 	"github.com/discordia-grupo01/servers/internal/model/moderation"
@@ -96,7 +97,14 @@ func (w world) makeStaffPrivate(ctx context.Context, t *testing.T) {
 // the routing keys in also (the events a kick, ban or leave publishes anyway).
 func (w world) revoked(ctx context.Context, t *testing.T, also ...string) map[uuid.UUID][]string {
 	t.Helper()
-	rows, err := w.pool.Query(ctx, `SELECT routing_key, payload FROM outbox_events WHERE NOT routing_key = ANY($1)`, append([]string{}, also...))
+	ignored := append([]string{
+		permissions.RoutingKeyRoleUpdated,
+		permissions.RoutingKeyRoleDeleted,
+		permissions.RoutingKeyMemberRolesUpdated,
+		permissions.RoutingKeyChannelOverridesUpdated,
+		permissions.RoutingKeyOwnerUpdated,
+	}, also...)
+	rows, err := w.pool.Query(ctx, `SELECT routing_key, payload FROM outbox_events WHERE NOT routing_key = ANY($1)`, ignored)
 	if err != nil {
 		t.Fatalf("read outbox: %v", err)
 	}

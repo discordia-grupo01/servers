@@ -389,15 +389,31 @@ Eventos que publica el servicio (exchange `discordia.events`, contratos en
 `github.com/discordia-grupo01/events-contract` y AsyncAPI en `discordia-docs`):
 `servers.member_joined`, `servers.member_left`, `servers.member_banned`,
 `servers.member_unbanned`, `servers.member_kicked`, `servers.channel_created`,
-`servers.channel_deleted`, `servers.channel_access_revoked` y
-`servers.server_deleted`.
+`servers.channel_deleted`, `servers.channel_access_revoked`,
+`servers.server_deleted`, `servers.member_muted` y `servers.member_unmuted`,
+más cinco **fotos completas** con las que `messaging` arma su réplica de
+permisos y decide sin llamar acá (ADR 0003):
+
+| Evento | Se publica cuando |
+|---|---|
+| `servers.owner_updated` | se crea el servidor y se acepta una transferencia de propiedad |
+| `servers.role_updated` | se crea un rol o cambian sus permisos, nombre o color (viajan los permisos por nombre y `is_everyone`) |
+| `servers.role_deleted` | se borra un rol (el consumidor lo saca de miembros y overrides) |
+| `servers.member_roles_updated` | alguien se une (creando el servidor o por invitación) o se le asigna o quita un rol: todos sus roles, `@everyone` incluido |
+| `servers.channel_overrides_updated` | se crea, edita o borra un override: todos los overrides del canal (lista vacía si no queda ninguno) |
+
+Cada foto se escribe en el outbox en la **misma transacción** que el cambio
+(`repository/access_events.go`) y lleva el estado ya escrito, así que un
+consumidor puede descartar la que llegue más vieja que la que tiene. La
+migración `0022_backfill_access_events` re-publica todo lo existente: hay que
+correrla con la cola del consumidor ya creada, o repetirla después.
 
 ## Menciones
 Los mensajes viven en `messaging`, pero quién puede mencionar a quién depende
-de los miembros, roles y permisos, que viven acá. Antes de guardar un mensaje
-con menciones, `messaging` llama (con el JWT del autor) a
-`POST /v1/servers/{serverId}/mentions/resolve` con el canal y lo que encontró
-en el texto:
+de los miembros, roles y permisos, que viven acá. `messaging` ya no llama a este
+endpoint (resuelve las menciones con su réplica local, con las mismas reglas
+que se describen abajo); `POST /v1/servers/{serverId}/mentions/resolve` sigue
+disponible y recibe el canal y lo que se encontró en el texto:
 
 ```json
 { "channel_id": "...", "user_ids": ["..."], "role_ids": ["..."], "everyone": true }

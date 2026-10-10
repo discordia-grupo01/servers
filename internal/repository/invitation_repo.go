@@ -203,7 +203,10 @@ func (r *InvitationRepository) RedeemInvitation(ctx context.Context, code, userI
 		if err != nil {
 			return fmt.Errorf("build member joined event: %w", err)
 		}
-		return outbox.Insert(ctx, tx, evt)
+		if err := outbox.Insert(ctx, tx, evt); err != nil {
+			return err
+		}
+		return PublishMemberRoles(ctx, tx, serverID, userID)
 	})
 	if err != nil {
 		return uuid.Nil, err
