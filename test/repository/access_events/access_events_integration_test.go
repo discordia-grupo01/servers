@@ -404,7 +404,7 @@ func TestCreateServer_PublishesOwnerEveryoneRoleAndOwnerRoles(t *testing.T) {
 				t.Errorf("owner_id = %v", evt["owner_id"])
 			}
 		case permissions.RoutingKeyRoleUpdated:
-			if evt["is_everyone"] != true || !reflect.DeepEqual(evt["permissions"], []any{"CREATE_INVITE", "SEND_MESSAGES", "VIEW_CHANNELS"}) {
+			if evt["is_everyone"] != true || !reflect.DeepEqual(evt["permissions"], []any{"ADD_REACTIONS", "CREATE_INVITE", "SEND_MESSAGES", "VIEW_CHANNELS"}) {
 				t.Errorf("role = %v", evt)
 			}
 		case permissions.RoutingKeyMemberRolesUpdated:
