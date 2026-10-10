@@ -53,6 +53,9 @@ func (r *RoleRepository) Create(ctx context.Context, rl role.Role) (role.Role, e
 	if err != nil {
 		return role.Role{}, fmt.Errorf("insert role: %w", err)
 	}
+	if err := repository.PublishRoleUpdated(ctx, tx, rl.ID); err != nil {
+		return role.Role{}, err
+	}
 
 	if err := tx.Commit(ctx); err != nil {
 		return role.Role{}, fmt.Errorf("commit: %w", err)
@@ -170,7 +173,7 @@ func (r *RoleRepository) Update(ctx context.Context, rl role.Role) error {
 		if err := repository.LockServerShared(ctx, tx, rl.ServerID); err != nil {
 			return err
 		}
-		return repository.TrackChannelAccess(ctx, tx, rl.ServerID, repository.AccessScope{}, func() error {
+		err := repository.TrackChannelAccess(ctx, tx, rl.ServerID, repository.AccessScope{}, func() error {
 			tag, err := tx.Exec(ctx, `
 				UPDATE roles SET name = $1, color = $2, permissions = $3, updated_at = $4
 				 WHERE id = $5`,
@@ -184,6 +187,10 @@ func (r *RoleRepository) Update(ctx context.Context, rl role.Role) error {
 			}
 			return nil
 		})
+		if err != nil {
+			return err
+		}
+		return repository.PublishRoleUpdated(ctx, tx, rl.ID)
 	})
 }
 
@@ -234,7 +241,7 @@ func deleteRole(ctx context.Context, tx pgx.Tx, id uuid.UUID) error {
 		return err
 	}
 	if deleted {
-		return nil
+		return repository.PublishRoleDeleted(ctx, tx, serverID, id)
 	}
 
 	var isDefault bool

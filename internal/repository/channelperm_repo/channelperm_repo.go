@@ -48,7 +48,7 @@ func (r *Repository) Upsert(ctx context.Context, serverID uuid.UUID, actorID str
 		if err := lockAndCheck(ctx, tx, serverID, actorID, o.ChannelID, o.RoleID, check); err != nil {
 			return err
 		}
-		return repository.TrackChannelAccess(ctx, tx, serverID, repository.AccessScope{ChannelID: &o.ChannelID}, func() error {
+		err := repository.TrackChannelAccess(ctx, tx, serverID, repository.AccessScope{ChannelID: &o.ChannelID}, func() error {
 			err := tx.QueryRow(ctx, `
 				INSERT INTO channel_permission_overrides (channel_id, role_id, allow, deny, updated_at)
 				VALUES ($1, $2, $3, $4, $5)
@@ -62,6 +62,10 @@ func (r *Repository) Upsert(ctx context.Context, serverID uuid.UUID, actorID str
 			}
 			return nil
 		})
+		if err != nil {
+			return err
+		}
+		return repository.PublishChannelOverrides(ctx, tx, serverID, o.ChannelID)
 	})
 	return saved, err
 }
@@ -74,7 +78,7 @@ func (r *Repository) Delete(ctx context.Context, serverID uuid.UUID, actorID str
 		if err := lockAndCheck(ctx, tx, serverID, actorID, channelID, roleID, check); err != nil {
 			return err
 		}
-		return repository.TrackChannelAccess(ctx, tx, serverID, repository.AccessScope{ChannelID: &channelID}, func() error {
+		err := repository.TrackChannelAccess(ctx, tx, serverID, repository.AccessScope{ChannelID: &channelID}, func() error {
 			tag, err := tx.Exec(ctx,
 				`DELETE FROM channel_permission_overrides WHERE channel_id = $1 AND role_id = $2`,
 				channelID, roleID,
@@ -85,6 +89,10 @@ func (r *Repository) Delete(ctx context.Context, serverID uuid.UUID, actorID str
 			deleted = tag.RowsAffected() > 0
 			return nil
 		})
+		if err != nil || !deleted {
+			return err
+		}
+		return repository.PublishChannelOverrides(ctx, tx, serverID, channelID)
 	})
 	return deleted, err
 }

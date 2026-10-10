@@ -92,6 +92,15 @@ func (r *ServerRepository) CreateServer(ctx context.Context, srv model.Server, c
 		); err != nil {
 			return fmt.Errorf("assign everyone role to owner: %w", err)
 		}
+		if err := PublishOwner(ctx, tx, srv.ID, srv.OwnerID); err != nil {
+			return err
+		}
+		if err := PublishRoleUpdated(ctx, tx, everyoneRoleID); err != nil {
+			return err
+		}
+		if err := PublishMemberRoles(ctx, tx, srv.ID, srv.OwnerID); err != nil {
+			return err
+		}
 
 		for _, evt := range outboxEvents {
 			if err := outbox.Insert(ctx, tx, evt); err != nil {

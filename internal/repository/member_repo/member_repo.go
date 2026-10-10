@@ -69,7 +69,7 @@ func (r *MemberRepository) AssignRole(ctx context.Context, serverID uuid.UUID, u
 		if err := repository.LockServerShared(ctx, tx, serverID); err != nil {
 			return err
 		}
-		return repository.TrackChannelAccess(ctx, tx, serverID, repository.AccessScope{UserID: userID}, func() error {
+		err := repository.TrackChannelAccess(ctx, tx, serverID, repository.AccessScope{UserID: userID}, func() error {
 			if _, err := tx.Exec(ctx, `
 				INSERT INTO member_roles (server_id, user_id, role_id, assigned_at)
 				VALUES ($1, $2, $3, now())
@@ -80,6 +80,10 @@ func (r *MemberRepository) AssignRole(ctx context.Context, serverID uuid.UUID, u
 			}
 			return nil
 		})
+		if err != nil {
+			return err
+		}
+		return repository.PublishMemberRoles(ctx, tx, serverID, userID)
 	})
 }
 
@@ -173,7 +177,7 @@ func (r *MemberRepository) RemoveRole(ctx context.Context, serverID uuid.UUID, u
 		if err := repository.LockServerShared(ctx, tx, serverID); err != nil {
 			return err
 		}
-		return repository.TrackChannelAccess(ctx, tx, serverID, repository.AccessScope{UserID: userID}, func() error {
+		err := repository.TrackChannelAccess(ctx, tx, serverID, repository.AccessScope{UserID: userID}, func() error {
 			tag, err := tx.Exec(ctx,
 				`DELETE FROM member_roles WHERE server_id = $1 AND user_id = $2 AND role_id = $3`,
 				serverID, userID, roleID,
@@ -186,6 +190,10 @@ func (r *MemberRepository) RemoveRole(ctx context.Context, serverID uuid.UUID, u
 			}
 			return nil
 		})
+		if err != nil {
+			return err
+		}
+		return repository.PublishMemberRoles(ctx, tx, serverID, userID)
 	})
 }
 
