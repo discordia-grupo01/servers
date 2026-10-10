@@ -958,6 +958,105 @@ paths:
       summary: Edit a server
       tags:
         - servers
+  "/v1/servers/{serverId}/banned-words":
+    get:
+      description: Requires MANAGE_MESSAGES (the owner and administrators hold it
+        implicitly). Words come lowercased, in the order they were saved.
+      parameters:
+        - description: Server ID
+          in: path
+          name: serverId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/word_filter_handler.BannedWordsResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "403":
+          description: missing MANAGE_MESSAGES
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "404":
+          description: server not found or not a member
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+      security:
+        - BearerAuth: []
+      summary: List the server's banned words
+      tags:
+        - moderation
+    put:
+      description: "Requires MANAGE_MESSAGES (the owner and administrators hold it
+        implicitly). Sends the whole list: it replaces the previous one, and an
+        empty list removes the filter. Each entry is a word or a phrase, at most
+        50 characters, up to 100 entries; they are trimmed, lowercased and
+        deduplicated. Messages that contain one are rejected by messaging from
+        then on (matching ignores case and accents and only takes whole words);
+        messages already sent are not touched."
+      parameters:
+        - description: Server ID
+          in: path
+          name: serverId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/word_filter_handler.BannedWordsRequest"
+        description: The whole list
+        required: true
+      responses:
+        "200":
+          description: the list as saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/word_filter_handler.BannedWordsResponse"
+        "400":
+          description: empty, too long or invalid word, or more than 100
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "403":
+          description: missing MANAGE_MESSAGES
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "404":
+          description: server not found or not a member
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+      security:
+        - BearerAuth: []
+      summary: Replace the server's banned words
+      tags:
+        - moderation
   "/v1/servers/{serverId}/banner":
     get:
       description: Public (no JWT required) -- binary image, so a plain `<img src>`
@@ -2905,4 +3004,18 @@ components:
           type: string
         server_id:
           type: string
+      type: object
+    word_filter_handler.BannedWordsRequest:
+      properties:
+        words:
+          items:
+            type: string
+          type: array
+      type: object
+    word_filter_handler.BannedWordsResponse:
+      properties:
+        words:
+          items:
+            type: string
+          type: array
       type: object

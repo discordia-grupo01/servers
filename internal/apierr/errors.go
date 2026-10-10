@@ -195,6 +195,14 @@ func WriteDomainError(c *gin.Context, err error) {
 		RespondError(c, http.StatusNotFound, err.Error(), map[string]any{"reason": "ban_not_found"})
 	case errors.Is(err, model.ErrMuteNotFound):
 		RespondError(c, http.StatusNotFound, err.Error(), map[string]any{"reason": "mute_not_found"})
+	case errors.Is(err, moderation.ErrBannedWordEmpty):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("words", "word_empty"))
+	case errors.Is(err, moderation.ErrBannedWordTooLong):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("words", "word_too_long"))
+	case errors.Is(err, moderation.ErrBannedWordInvalidChars):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("words", "word_invalid_chars"))
+	case errors.Is(err, moderation.ErrTooManyBannedWords):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("words", "too_many_words"))
 	case errors.Is(err, moderation.ErrReasonTooLong):
 		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("reason", "reason_too_long"))
 	case errors.Is(err, moderation.ErrReasonInvalidChars):
