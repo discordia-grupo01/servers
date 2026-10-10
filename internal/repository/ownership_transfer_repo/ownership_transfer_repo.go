@@ -169,7 +169,7 @@ func (r *Repository) Accept(ctx context.Context, id uuid.UUID, resolvedAt time.T
 		); err != nil {
 			return fmt.Errorf("lock server: %w", err)
 		}
-		return repository.TrackChannelAccess(ctx, tx, t.ServerID, repository.AccessScope{}, func() error {
+		err := repository.TrackChannelAccess(ctx, tx, t.ServerID, repository.AccessScope{}, func() error {
 			if _, err := tx.Exec(ctx,
 				`UPDATE server_members SET is_owner = FALSE WHERE server_id = $1 AND is_owner = TRUE`,
 				t.ServerID,
@@ -190,6 +190,10 @@ func (r *Repository) Accept(ctx context.Context, id uuid.UUID, resolvedAt time.T
 			}
 			return nil
 		})
+		if err != nil {
+			return err
+		}
+		return repository.PublishOwner(ctx, tx, t.ServerID, t.ToUserID)
 	})
 	if err != nil {
 		return model.OwnershipTransfer{}, err
