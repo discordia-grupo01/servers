@@ -22,6 +22,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/repository/ownership_transfer_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/role_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/user_profile_repo"
+	"github.com/discordia-grupo01/servers/internal/repository/word_filter_repo"
 	"github.com/discordia-grupo01/servers/internal/service"
 	"github.com/discordia-grupo01/servers/internal/service/category_service"
 	"github.com/discordia-grupo01/servers/internal/service/channel_service"
@@ -33,6 +34,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/service/moderation_service"
 	"github.com/discordia-grupo01/servers/internal/service/ownership_transfer_service"
 	"github.com/discordia-grupo01/servers/internal/service/role_service"
+	"github.com/discordia-grupo01/servers/internal/service/word_filter_service"
 )
 
 // @title        Discordia - Servers
@@ -104,6 +106,7 @@ func main() {
 	channelSvc := channel_service.New(serverRepo, categoryRepo, channelRepo, memberRepo, channelPermRepo, moderationRepo, user_profile_repo.NewUserProfileRepository(pool))
 	moderationSvc := moderation_service.New(serverRepo, memberRepo, moderationRepo, moderationRepo)
 	go moderation_service.NewMuteExpirer(moderationRepo).Start(ctx)
+	wordFilterSvc := word_filter_service.New(serverRepo, memberRepo, word_filter_repo.NewRepository(pool))
 	channelPermSvc := channelperm_service.New(serverRepo, channelRepo, roleRepo, memberRepo, channelPermRepo)
 	mentionSvc := mention_service.New(serverRepo, channelRepo, memberRepo, roleRepo)
 
@@ -118,6 +121,7 @@ func main() {
 		Channels:           channelSvc,
 		Categories:         categorySvc,
 		Moderation:         moderationSvc,
+		WordFilter:         wordFilterSvc,
 		ChannelPermissions: channelPermSvc,
 		VoiceAccess:        channelSvc,
 		Mentions:           mentionSvc,
