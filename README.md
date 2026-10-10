@@ -208,8 +208,8 @@ borrar nada en el mismo deploy en que se deja de usar.
 Cada rol tiene un conjunto de permisos del catálogo cerrado
 (`internal/model/role/permission.go`): `VIEW_CHANNELS`, `SEND_MESSAGES`,
 `MANAGE_CHANNELS`, `MANAGE_ROLES`, `KICK_MEMBERS`, `BAN_MEMBERS`,
-`MANAGE_SERVER`, `ADMINISTRATOR`, `CREATE_INVITE`, `MANAGE_MESSAGES` y
-`MENTION_EVERYONE`. La API siempre usa los nombres; la máscara de bits es
+`MANAGE_SERVER`, `ADMINISTRATOR`, `CREATE_INVITE`, `MANAGE_MESSAGES`,
+`MENTION_EVERYONE` y `ADD_REACTIONS`. La API siempre usa los nombres; la máscara de bits es
 interna.
 
 - **Administradores.** Son el dueño del servidor y los miembros con algún rol
@@ -234,14 +234,19 @@ interna.
   (CA4). Mencionar a un usuario puntual no pide ningún permiso (CA1). Como
   `MANAGE_MESSAGES`, no viene en el conjunto por defecto de un rol nuevo y los
   administradores lo tienen implícito. Ver [Menciones](#menciones).
+- **Reaccionar.** `ADD_REACTIONS` permite reaccionar a mensajes con emojis
+  (historia #48, lo aplica `messaging`). Viene en el conjunto por defecto de un
+  rol nuevo y se puede sobrescribir por canal. La migración 0023 se lo dio a
+  todo rol que ya tenía `SEND_MESSAGES` (y lo copió en los overrides de
+  `SEND_MESSAGES`), así nadie perdió la posibilidad de reaccionar.
 - **No se puede dar lo que no se tiene.** Quien no es administrador no puede
   agregarle a un rol un permiso que él mismo no tiene, ni asignar un rol que
   traiga alguno (`403` con `reason: permission_not_held`). Si no, alguien con
   `MANAGE_ROLES` podría darle `ADMINISTRATOR` a un rol por debajo del suyo y
   asignárselo. Los permisos que el rol ya tenía se pueden conservar o quitar
   igual, y quitar un rol nunca está restringido por esto.
-- **Permisos de un rol nuevo.** Todo rol se crea con `VIEW_CHANNELS` y
-  `SEND_MESSAGES` (`role.DefaultPermissions`); después se editan con
+- **Permisos de un rol nuevo.** Todo rol se crea con `VIEW_CHANNELS`,
+  `SEND_MESSAGES` y `ADD_REACTIONS` (`role.DefaultPermissions`); después se editan con
   `PATCH /v1/roles/{roleId}`. Los roles creados antes de este default no se
   tocaron.
 - **A nivel servidor, los permisos solo suman.** Los permisos de un miembro
@@ -280,7 +285,7 @@ permisos en el resto del servidor (HU #57). Se guardan en la tabla
 `channel_permission_overrides` (migración 0020), uno por rol y canal.
 
 - **Qué se puede sobrescribir.** Solo los permisos que tienen sentido en un
-  canal: `VIEW_CHANNELS`, `SEND_MESSAGES` y `MANAGE_MESSAGES`
+  canal: `VIEW_CHANNELS`, `SEND_MESSAGES`, `MANAGE_MESSAGES` y `ADD_REACTIONS`
   (`role.ChannelScopedPermissions`). Cualquier otro da `400`
   `permission_not_overridable`; el mismo permiso en `allow` y `deny`, `400`
   `permission_conflict`. Con las dos listas vacías, el override se borra.

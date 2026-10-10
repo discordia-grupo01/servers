@@ -55,7 +55,7 @@ type effectivePermissionsResponse struct {
 
 // SetOverride godoc
 // @Summary      Set a role's permission override in a channel
-// @Description  Creates or replaces what the role gains (allow) and loses (deny) in this channel only; the role's server-wide permissions don't change. Only VIEW_CHANNELS, SEND_MESSAGES and MANAGE_MESSAGES can be overridden. With both lists empty the override is removed (204). Requires MANAGE_ROLES (administrators and the owner hold it implicitly), and the role must be below the caller's highest role -- @everyone excepted. The caller can only allow permissions they hold themselves. Overrides never restrict the owner or administrators.
+// @Description  Creates or replaces what the role gains (allow) and loses (deny) in this channel only; the role's server-wide permissions don't change. Only VIEW_CHANNELS, SEND_MESSAGES, MANAGE_MESSAGES and ADD_REACTIONS can be overridden. With both lists empty the override is removed (204). Requires MANAGE_ROLES (administrators and the owner hold it implicitly), and the role must be below the caller's highest role -- @everyone excepted. The caller can only allow permissions they hold themselves. Overrides never restrict the owner or administrators.
 // @Tags         channel-permissions
 // @Accept       json
 // @Produce      json
