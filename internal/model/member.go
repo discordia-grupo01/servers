@@ -62,3 +62,23 @@ type MemberListResponse struct {
 	Limit   int              `json:"limit"`
 	Offset  int              `json:"offset"`
 }
+
+// NewMemberResponse is the API shape of m.
+func NewMemberResponse(m Member) MemberResponse {
+	return MemberResponse{
+		UserID: m.UserID, IsOwner: m.IsOwner, JoinedAt: m.JoinedAt,
+		Profile:    NewMemberProfileResponse(m.Profile),
+		MutedUntil: m.MutedUntil,
+	}
+}
+
+// ClampMemberPage applies the member list's default and maximum page size.
+func ClampMemberPage(limit, offset int) (int, int) {
+	switch {
+	case limit <= 0:
+		limit = MemberListDefaultLimit
+	case limit > MemberListMaxLimit:
+		limit = MemberListMaxLimit
+	}
+	return limit, max(offset, 0)
+}

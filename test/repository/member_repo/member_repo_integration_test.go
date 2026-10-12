@@ -491,3 +491,42 @@ func TestMemberRepo_ListMembers_ReportsOnlyActiveMutes(t *testing.T) {
 		t.Errorf("a member never muted shows as muted until %v", got)
 	}
 }
+
+func TestMemberRepo_ListRoleMembers_OnlyWhoHoldsIt(t *testing.T) {
+	members, servers, roles, pool := newRepo(t)
+	ctx := context.Background()
+	srv, holder := seedServerWithMember(ctx, t, servers, pool)
+	other := "other-" + uuid.NewString()
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO server_members (server_id, user_id, is_owner, joined_at) VALUES ($1, $2, FALSE, now())`,
+		srv.ID, other,
+	); err != nil {
+		t.Fatal(err)
+	}
+	mod := seedRole(ctx, t, roles, srv.ID, "Mod")
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO member_roles (server_id, user_id, role_id) VALUES ($1, $2, $3)`,
+		srv.ID, holder, mod.ID,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	got, total, err := members.ListRoleMembers(ctx, srv.ID, mod.ID, 50, 0)
+	if err != nil {
+		t.Fatalf("ListRoleMembers: %v", err)
+	}
+	if total != 1 || len(got) != 1 || got[0].UserID != holder {
+		t.Errorf("got %+v (total %d), want only %s", got, total, holder)
+	}
+
+	empty := seedRole(ctx, t, roles, srv.ID, "Nadie")
+	got, total, err = members.ListRoleMembers(ctx, srv.ID, empty.ID, 50, 0)
+	if err != nil || total != 0 || len(got) != 0 {
+		t.Errorf("a role nobody holds: %+v, %d, %v", got, total, err)
+	}
+
+	all, allTotal, _ := members.ListMembers(ctx, srv.ID, 50, 0)
+	if allTotal != len(all) || allTotal < 3 {
+		t.Errorf("the unfiltered list changed: %d members, total %d", len(all), allTotal)
+	}
+}

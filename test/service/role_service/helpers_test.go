@@ -145,6 +145,21 @@ type fakeMembers struct {
 	hasRole      bool
 	hasRoleErr   error
 	hasRoleCalls int
+
+	roleMembers      []model.Member
+	roleMembersTotal int
+	gotRoleMembers   struct {
+		serverID, roleID uuid.UUID
+		limit, offset    int
+	}
+	roleMembersCalls int
+}
+
+func (f *fakeMembers) ListRoleMembers(_ context.Context, serverID, roleID uuid.UUID, limit, offset int) ([]model.Member, int, error) {
+	f.roleMembersCalls++
+	f.gotRoleMembers.serverID, f.gotRoleMembers.roleID = serverID, roleID
+	f.gotRoleMembers.limit, f.gotRoleMembers.offset = limit, offset
+	return f.roleMembers, f.roleMembersTotal, nil
 }
 
 func (f *fakeMembers) MemberStanding(_ context.Context, _ uuid.UUID, _ string) (role.Standing, error) {

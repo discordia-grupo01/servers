@@ -98,11 +98,7 @@ func (h *Handler) ListMembers(c *gin.Context) {
 		Offset:  offset,
 	}
 	for i, m := range members {
-		resp.Members[i] = model.MemberResponse{
-			UserID: m.UserID, IsOwner: m.IsOwner, JoinedAt: m.JoinedAt,
-			Profile:    model.NewMemberProfileResponse(m.Profile),
-			MutedUntil: m.MutedUntil,
-		}
+		resp.Members[i] = model.NewMemberResponse(m)
 	}
 	c.JSON(http.StatusOK, resp)
 }

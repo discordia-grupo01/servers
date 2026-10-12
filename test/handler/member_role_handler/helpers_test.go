@@ -68,6 +68,10 @@ func (fakeRoleUseCases) ReorderRoles(context.Context, role_service.ReorderRolesP
 	return nil, nil
 }
 
+func (fakeRoleUseCases) ListRoleMembers(context.Context, role_service.ListRoleMembersParams) ([]model.Member, int, error) {
+	return nil, 0, nil
+}
+
 type fakeMemberRoleUseCases struct {
 	assignErr    error
 	assignResult role.Role

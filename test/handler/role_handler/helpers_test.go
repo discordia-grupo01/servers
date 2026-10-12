@@ -70,6 +70,16 @@ type fakeRoleUseCases struct {
 	reorderResult []role.Role
 	gotReorder    role_service.ReorderRolesParams
 	reorderCalled bool
+
+	roleMembers      []model.Member
+	roleMembersTotal int
+	roleMembersErr   error
+	gotRoleMembers   role_service.ListRoleMembersParams
+}
+
+func (f *fakeRoleUseCases) ListRoleMembers(_ context.Context, p role_service.ListRoleMembersParams) ([]model.Member, int, error) {
+	f.gotRoleMembers = p
+	return f.roleMembers, f.roleMembersTotal, f.roleMembersErr
 }
 
 func (f *fakeRoleUseCases) CreateRole(_ context.Context, p role_service.CreateRoleParams) (role.Role, error) {
