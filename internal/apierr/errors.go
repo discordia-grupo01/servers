@@ -195,6 +195,14 @@ func WriteDomainError(c *gin.Context, err error) {
 		RespondError(c, http.StatusNotFound, err.Error(), map[string]any{"reason": "ban_not_found"})
 	case errors.Is(err, model.ErrMuteNotFound):
 		RespondError(c, http.StatusNotFound, err.Error(), map[string]any{"reason": "mute_not_found"})
+	case errors.Is(err, model.ErrMuteTargetRequired):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("user_id", "required"))
+	case errors.Is(err, model.ErrCannotMuteSelf):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("user_id", "cannot_mute_self"))
+	case errors.Is(err, model.ErrCannotMuteOwner):
+		RespondError(c, http.StatusForbidden, err.Error(), map[string]any{"reason": "cannot_mute_owner"})
+	case errors.Is(err, model.ErrMuteUntilInvalid):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("until_at", "mute_until_invalid"))
 	case errors.Is(err, moderation.ErrBannedWordEmpty):
 		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("words", "word_empty"))
 	case errors.Is(err, moderation.ErrBannedWordTooLong):
