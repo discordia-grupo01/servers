@@ -90,7 +90,8 @@ func (r *MemberRepository) AssignRole(ctx context.Context, serverID uuid.UUID, u
 // ListMembers returns one page of a server's members ordered by join date
 // (oldest first, user_id as a tie-breaker), along with the total member
 // count so the caller can render pagination. Each member carries their
-// replicated public profile, or a nil Profile if it hasn't arrived yet.
+// replicated public profile, or a nil Profile if it hasn't arrived yet, and
+// when their active mute ends, if they have one.
 func (r *MemberRepository) ListMembers(ctx context.Context, serverID uuid.UUID, limit, offset int) ([]model.Member, int, error) {
 	var total int
 	if err := r.pool.QueryRow(ctx,
@@ -100,10 +101,12 @@ func (r *MemberRepository) ListMembers(ctx context.Context, serverID uuid.UUID, 
 	}
 
 	rows, err := r.pool.Query(ctx, `
-		SELECT sm.user_id, sm.is_owner, sm.joined_at,
+		SELECT sm.user_id, sm.is_owner, sm.joined_at, mu.until_at,
 		       p.user_id, p.name, p.avatar_url, p.description, p.status_text, p.status_emoji, p.version
 		  FROM server_members sm
 		  LEFT JOIN user_profiles p ON p.user_id = sm.user_id
+		  LEFT JOIN server_mutes mu
+		    ON mu.server_id = sm.server_id AND mu.user_id = sm.user_id AND mu.until_at > now()
 		 WHERE sm.server_id = $1
 		 ORDER BY sm.joined_at ASC, sm.user_id ASC
 		 LIMIT $2 OFFSET $3`,
@@ -122,7 +125,7 @@ func (r *MemberRepository) ListMembers(ctx context.Context, serverID uuid.UUID, 
 			name, avatarURL, description, statusText, statusEmoji *string
 			version                                               *int64
 		)
-		if err := rows.Scan(&m.UserID, &m.IsOwner, &m.JoinedAt,
+		if err := rows.Scan(&m.UserID, &m.IsOwner, &m.JoinedAt, &m.MutedUntil,
 			&profileUserID, &name, &avatarURL, &description, &statusText, &statusEmoji, &version,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scan member: %w", err)

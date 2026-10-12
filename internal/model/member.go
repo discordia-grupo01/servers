@@ -18,6 +18,8 @@ type Member struct {
 	// Profile is the member's replicated public profile, nil until identify's
 	// users.profile_updated event for them has arrived.
 	Profile *userprofile.Profile
+	// MutedUntil is when the member's active mute ends, nil if not muted.
+	MutedUntil *time.Time
 }
 
 type MemberResponse struct {
@@ -27,6 +29,9 @@ type MemberResponse struct {
 	// Profile is null while the member's profile hasn't been replicated from
 	// identify yet; clients can fall back to GET /v1/users/{id} then.
 	Profile *MemberProfileResponse `json:"profile"`
+	// MutedUntil is when the member's mute ends (they can't send messages or
+	// speak until then), null if they aren't muted.
+	MutedUntil *time.Time `json:"muted_until"`
 }
 
 // MemberProfileResponse is the public profile of a member, as last published
