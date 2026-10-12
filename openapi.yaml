@@ -394,8 +394,8 @@ paths:
     put:
       description: Creates or replaces what the role gains (allow) and loses (deny) in
         this channel only; the role's server-wide permissions don't change. Only
-        VIEW_CHANNELS, SEND_MESSAGES, MANAGE_MESSAGES, ADD_REACTIONS and CONNECT
-        can be overridden. With both lists empty the override is removed (204).
+        VIEW_CHANNELS, SEND_MESSAGES, MANAGE_MESSAGES and ADD_REACTIONS can be
+        overridden. With both lists empty the override is removed (204).
         Requires MANAGE_ROLES (administrators and the owner hold it implicitly),
         and the role must be below the caller's highest role -- @everyone
         excepted. The caller can only allow permissions they hold themselves.
