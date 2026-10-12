@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -283,5 +284,28 @@ func TestListMembers_IncludesProfileOrNull(t *testing.T) {
 	}
 	if p, ok := raw.Members[1]["profile"]; !ok || string(p) != "null" {
 		t.Errorf("second member profile = %s (present=%v), want null", p, ok)
+	}
+}
+
+func TestListMembers_ReportsMutedUntil(t *testing.T) {
+	until := time.Date(2026, 10, 12, 18, 0, 0, 0, time.UTC)
+	uc := &fakeMembershipUseCases{
+		listMembers: []model.Member{{UserID: "muted", MutedUntil: &until}, {UserID: "free"}},
+		listTotal:   2,
+	}
+
+	w := doGet(t, newRouter(t, uc), membersPath(uuid.New().String(), ""), testUser)
+
+	var body struct {
+		Members []map[string]json.RawMessage `json:"members"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil || len(body.Members) != 2 {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+	if got := string(body.Members[0]["muted_until"]); got != `"2026-10-12T18:00:00Z"` {
+		t.Errorf("muted member muted_until = %s", got)
+	}
+	if got := string(body.Members[1]["muted_until"]); got != "null" {
+		t.Errorf("free member muted_until = %s, want null", got)
 	}
 }

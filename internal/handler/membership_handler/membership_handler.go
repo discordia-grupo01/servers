@@ -52,7 +52,7 @@ func (h *Handler) LeaveServer(c *gin.Context) {
 
 // ListMembers godoc
 // @Summary      List a server's members
-// @Description  Caller must already be a member. Paginated. Each member carries their public profile (name, avatar, description, status), replicated from identify; profile is null until it has been replicated, and may lag a few seconds behind a profile edit.
+// @Description  Caller must already be a member. Paginated. Each member carries their public profile (name, avatar, description, status), replicated from identify; profile is null until it has been replicated, and may lag a few seconds behind a profile edit. muted_until is when the member's active mute ends, or null if they aren't muted (an expired mute counts as not muted).
 // @Tags         membership
 // @Produce      json
 // @Security     BearerAuth
@@ -100,7 +100,8 @@ func (h *Handler) ListMembers(c *gin.Context) {
 	for i, m := range members {
 		resp.Members[i] = model.MemberResponse{
 			UserID: m.UserID, IsOwner: m.IsOwner, JoinedAt: m.JoinedAt,
-			Profile: model.NewMemberProfileResponse(m.Profile),
+			Profile:    model.NewMemberProfileResponse(m.Profile),
+			MutedUntil: m.MutedUntil,
 		}
 	}
 	c.JSON(http.StatusOK, resp)

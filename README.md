@@ -495,7 +495,7 @@ admins lo tienen implícito); ver "Roles, permisos y jerarquía".
 | DELETE | `/v1/servers/{serverId}` | si (owner) | Eliminar el servidor y todo lo suyo (cuerpo JSON `confirm_name` con el nombre exacto). 204; 400 si falta o no coincide la confirmación; 403 si no es el owner; 404 si no existe. Irreversible. |
 | GET | `/v1/servers/{serverId}/icon` | no (público) | Sirve el archivo del ícono (subido o el default generado). En produccion (Supabase) `icon_url` apunta directo al bucket público; esta ruta queda como fallback para setups sin Supabase. |
 | GET | `/v1/servers/{serverId}/banner` | no (público) | Sirve el archivo del banner. 404 si el server no tiene uno. Mismo esquema de URL que el icono. |
-| GET | `/v1/servers/{serverId}/members` | si (miembro) | Listar los miembros del server (paginado), cada uno con su `profile` (`null` si todavía no se replicó). |
+| GET | `/v1/servers/{serverId}/members` | si (miembro) | Listar los miembros del server (paginado), cada uno con su `profile` (`null` si todavía no se replicó) y `muted_until` (hasta cuándo está silenciado, `null` si no lo está). |
 | POST | `/v1/servers/{serverId}/invites` | si (`CREATE_INVITE`) | Generar invitación (JSON opcional: `max_uses?`; expira a los 7 días). |
 | GET | `/v1/servers/{serverId}/invites` | si (`CREATE_INVITE`) | Listar todas las invitaciones del server (activas, revocadas o vencidas), más nueva primero. Sin filtro por estado del lado del back. |
 | DELETE | `/v1/invites/{code}` | si (admin o quien la creó) | Revocar una invitación (idempotente). |
