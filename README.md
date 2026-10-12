@@ -209,7 +209,7 @@ Cada rol tiene un conjunto de permisos del catálogo cerrado
 (`internal/model/role/permission.go`): `VIEW_CHANNELS`, `SEND_MESSAGES`,
 `MANAGE_CHANNELS`, `MANAGE_ROLES`, `KICK_MEMBERS`, `BAN_MEMBERS`,
 `MANAGE_SERVER`, `ADMINISTRATOR`, `CREATE_INVITE`, `MANAGE_MESSAGES`,
-`MENTION_EVERYONE` y `ADD_REACTIONS`. La API siempre usa los nombres; la máscara de bits es
+`MENTION_EVERYONE`, `ADD_REACTIONS` y `CONNECT`. La API siempre usa los nombres; la máscara de bits es
 interna.
 
 - **Administradores.** Son el dueño del servidor y los miembros con algún rol
@@ -239,6 +239,15 @@ interna.
   rol nuevo y se puede sobrescribir por canal. La migración 0023 se lo dio a
   todo rol que ya tenía `SEND_MESSAGES` (y lo copió en los overrides de
   `SEND_MESSAGES`), así nadie perdió la posibilidad de reaccionar.
+- **Conectarse a voz.** `CONNECT` permite unirse a canales de voz (historia
+  #17, CA2): `GET /v1/channels/{channelId}/voice-access` pide ver el canal y
+  tener `CONNECT` en él, con los overrides aplicados. Quien lo ve pero no lo
+  tiene recibe `403` con `reason: missing_permission` y
+  `permission: CONNECT`. Viene en el conjunto por defecto de un rol nuevo (y
+  en `@everyone`) y se puede sobrescribir por canal, para dejar a un rol
+  afuera de un solo canal de voz. La migración 0025 se lo dio a todo rol que
+  ya tenía `VIEW_CHANNELS` (y lo copió en los overrides que permiten
+  `VIEW_CHANNELS`), así nadie perdió el acceso a la voz.
 - **No se puede dar lo que no se tiene.** Quien no es administrador no puede
   agregarle a un rol un permiso que él mismo no tiene, ni asignar un rol que
   traiga alguno (`403` con `reason: permission_not_held`). Si no, alguien con
@@ -246,7 +255,7 @@ interna.
   asignárselo. Los permisos que el rol ya tenía se pueden conservar o quitar
   igual, y quitar un rol nunca está restringido por esto.
 - **Permisos de un rol nuevo.** Todo rol se crea con `VIEW_CHANNELS`,
-  `SEND_MESSAGES` y `ADD_REACTIONS` (`role.DefaultPermissions`); después se editan con
+  `SEND_MESSAGES`, `ADD_REACTIONS` y `CONNECT` (`role.DefaultPermissions`); después se editan con
   `PATCH /v1/roles/{roleId}`. Los roles creados antes de este default no se
   tocaron.
 - **A nivel servidor, los permisos solo suman.** Los permisos de un miembro
@@ -285,8 +294,8 @@ permisos en el resto del servidor (HU #57). Se guardan en la tabla
 `channel_permission_overrides` (migración 0020), uno por rol y canal.
 
 - **Qué se puede sobrescribir.** Solo los permisos que tienen sentido en un
-  canal: `VIEW_CHANNELS`, `SEND_MESSAGES`, `MANAGE_MESSAGES` y `ADD_REACTIONS`
-  (`role.ChannelScopedPermissions`). Cualquier otro da `400`
+  canal: `VIEW_CHANNELS`, `SEND_MESSAGES`, `MANAGE_MESSAGES`, `ADD_REACTIONS` y
+  `CONNECT` (`role.ChannelScopedPermissions`). Cualquier otro da `400`
   `permission_not_overridable`; el mismo permiso en `allow` y `deny`, `400`
   `permission_conflict`. Con las dos listas vacías, el override se borra.
 - **Quién.** Hace falta `MANAGE_ROLES`, y el rol tiene que estar por debajo
@@ -522,7 +531,7 @@ admins lo tienen implícito); ver "Roles, permisos y jerarquía".
 | POST | `/v1/servers/{serverId}/kicks` | si (`KICK_MEMBERS`) | Expulsar a un miembro de rango menor (`user_id`). 204; 400 si es uno mismo; 403 si es el dueño o tiene rango igual o mayor; 404 si no es miembro. Puede volver con una invitación. |
 | GET | `/v1/servers/{serverId}/banned-words` | si (`MANAGE_MESSAGES`) | Lista de palabras prohibidas del server, en el orden en que se guardaron. |
 | PUT | `/v1/servers/{serverId}/banned-words` | si (`MANAGE_MESSAGES`) | Reemplazar la lista entera (`words`: hasta 100, de hasta 50 caracteres; vacía saca el filtro). 200 con la lista como quedó guardada; 400 si alguna está vacía, es muy larga o son más de 100. Ver "Moderación". |
-| PUT | `/v1/channels/{channelId}/permissions/roles/{roleId}` | si (`MANAGE_ROLES`) | Crear o reemplazar el override de un rol en un canal (`allow?`, `deny?`: `VIEW_CHANNELS`, `SEND_MESSAGES`, `MANAGE_MESSAGES`). 200 con el override; 204 si las dos listas vienen vacías (se borra). 400 si el permiso no se puede sobrescribir o está en las dos listas; 403 si el rol no está por debajo del propio (salvo `@everyone`) o se permite algo que el caller no tiene. |
+| PUT | `/v1/channels/{channelId}/permissions/roles/{roleId}` | si (`MANAGE_ROLES`) | Crear o reemplazar el override de un rol en un canal (`allow?`, `deny?`: `VIEW_CHANNELS`, `SEND_MESSAGES`, `MANAGE_MESSAGES`, `ADD_REACTIONS`, `CONNECT`). 200 con el override; 204 si las dos listas vienen vacías (se borra). 400 si el permiso no se puede sobrescribir o está en las dos listas; 403 si el rol no está por debajo del propio (salvo `@everyone`) o se permite algo que el caller no tiene. |
 | DELETE | `/v1/channels/{channelId}/permissions/roles/{roleId}` | si (`MANAGE_ROLES`) | Quitar el override de un rol en un canal. 204; 404 `channel_override_not_found` si no había. |
 | GET | `/v1/channels/{channelId}/permissions` | si (`MANAGE_ROLES`) | Listar los overrides del canal (`@everyone` primero, después por jerarquía). |
 | GET | `/v1/channels/{channelId}/members/{userId}/permissions` | si (miembro) | Permisos efectivos del miembro en ese canal (con los overrides aplicados). Misma forma y códigos que el endpoint por servidor. |
