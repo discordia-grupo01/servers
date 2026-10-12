@@ -2187,6 +2187,32 @@ paths:
       responses:
         "204":
           description: No Content
+        "400":
+          description: missing user_id, muting yourself, until_at not in the future, or
+            invalid reason
+          content:
+            "*/*":
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            "*/*":
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "403":
+          description: missing MANAGE_MESSAGES, target is the owner, or target has an
+            equal or higher role
+          content:
+            "*/*":
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "404":
+          description: server not found, or target is not a member
+          content:
+            "*/*":
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
       security:
         - BearerAuth: []
       summary: Temporarily mute a member

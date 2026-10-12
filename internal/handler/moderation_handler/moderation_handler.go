@@ -87,6 +87,10 @@ type muteRequest struct {
 // @Param        serverId path string true "Server ID"
 // @Param        body body muteRequest true "Mute details"
 // @Success      204
+// @Failure      400  {object}  apierr.ErrorResponse  "missing user_id, muting yourself, until_at not in the future, or invalid reason"
+// @Failure      401  {object}  apierr.ErrorResponse
+// @Failure      403  {object}  apierr.ErrorResponse  "missing MANAGE_MESSAGES, target is the owner, or target has an equal or higher role"
+// @Failure      404  {object}  apierr.ErrorResponse  "server not found, or target is not a member"
 // @Router       /v1/servers/{serverId}/mutes [post]
 func (h *Handler) Mute(c *gin.Context) {
 	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
