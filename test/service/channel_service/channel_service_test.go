@@ -74,14 +74,14 @@ func TestAuthorizeVoice_NonMemberWithoutViewPermission_IsRejected(t *testing.T) 
 	}
 }
 
-func TestAuthorizeVoice_MemberWithViewPermission_IsAllowed(t *testing.T) {
+func TestAuthorizeVoice_MemberWithViewAndConnect_IsAllowed(t *testing.T) {
 	srv := ownerServer()
 	channel := model.Channel{ID: uuid.New(), ServerID: srv.ID, Kind: model.ChannelVoice}
 	svc := newServiceWithStandings(
 		&fakeServers{server: srv},
 		&fakeCategories{},
 		&fakeChannels{getByIDChannel: channel},
-		&fakeStandings{standing: role.Standing{IsMember: true, Permissions: role.PermViewChannels}},
+		&fakeStandings{standing: role.Standing{IsMember: true, Permissions: role.PermViewChannels | role.PermConnect}},
 	)
 
 	if _, err := svc.AuthorizeVoice(context.Background(), channel.ID, "member-1"); err != nil {
@@ -96,7 +96,7 @@ func TestAuthorizeVoice_UsesReplicatedProfileName(t *testing.T) {
 		&fakeServers{server: srv},
 		&fakeCategories{},
 		&fakeChannels{getByIDChannel: channel},
-		&fakeStandings{standing: role.Standing{IsMember: true, Permissions: role.PermViewChannels}},
+		&fakeStandings{standing: role.Standing{IsMember: true, Permissions: role.PermViewChannels | role.PermConnect}},
 		&fakeVisibility{},
 		&fakeMutes{},
 		&fakeProfileNames{name: "John"},
@@ -118,7 +118,7 @@ func TestAuthorizeVoice_FallsBackToIdentityWithoutReplicatedProfile(t *testing.T
 		&fakeServers{server: srv},
 		&fakeCategories{},
 		&fakeChannels{getByIDChannel: channel},
-		&fakeStandings{standing: role.Standing{IsMember: true, Permissions: role.PermViewChannels}},
+		&fakeStandings{standing: role.Standing{IsMember: true, Permissions: role.PermViewChannels | role.PermConnect}},
 		&fakeVisibility{},
 		&fakeMutes{},
 		&fakeProfileNames{},
@@ -141,7 +141,7 @@ func TestAuthorizeVoice_ProfileLookupErrorIsReturned(t *testing.T) {
 		&fakeServers{server: srv},
 		&fakeCategories{},
 		&fakeChannels{getByIDChannel: channel},
-		&fakeStandings{standing: role.Standing{IsMember: true, Permissions: role.PermViewChannels}},
+		&fakeStandings{standing: role.Standing{IsMember: true, Permissions: role.PermViewChannels | role.PermConnect}},
 		&fakeVisibility{},
 		&fakeMutes{},
 		&fakeProfileNames{err: profileErr},
@@ -161,7 +161,7 @@ func TestAuthorizeVoice_MutedMemberRemainsAllowedAndIsMarkedMuted(t *testing.T) 
 		&fakeServers{server: srv},
 		&fakeCategories{},
 		&fakeChannels{getByIDChannel: channel},
-		&fakeStandings{standing: role.Standing{IsMember: true, Permissions: role.PermViewChannels}},
+		&fakeStandings{standing: role.Standing{IsMember: true, Permissions: role.PermViewChannels | role.PermConnect}},
 		&fakeVisibility{},
 		mutes,
 	)
@@ -186,7 +186,7 @@ func TestAuthorizeVoice_MuteLookupErrorIsReturned(t *testing.T) {
 		&fakeServers{server: srv},
 		&fakeCategories{},
 		&fakeChannels{getByIDChannel: channel},
-		&fakeStandings{standing: role.Standing{IsMember: true, Permissions: role.PermViewChannels}},
+		&fakeStandings{standing: role.Standing{IsMember: true, Permissions: role.PermViewChannels | role.PermConnect}},
 		&fakeVisibility{},
 		&fakeMutes{err: muteErr},
 	)

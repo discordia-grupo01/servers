@@ -12,6 +12,8 @@ import (
 	"github.com/discordia-grupo01/servers/internal/model/role"
 )
 
+const viewAndConnect = role.PermViewChannels | role.PermConnect
+
 // voiceSetup is a voice channel in a server owned by testOwner, seen by a
 // member with the given standing and channel overrides.
 func voiceSetup(standing role.Standing, layers map[uuid.UUID]channelperm.Layers, channelID uuid.UUID) (*fakeVisibility, func() error) {
@@ -34,7 +36,7 @@ func voiceSetup(standing role.Standing, layers map[uuid.UUID]channelperm.Layers,
 func TestAuthorizeVoice_ChannelHiddenByOverride_IsNotFound(t *testing.T) {
 	channelID := uuid.New()
 	_, authorize := voiceSetup(
-		role.Standing{IsMember: true, Permissions: role.PermViewChannels | role.PermSendMessages},
+		role.Standing{IsMember: true, Permissions: viewAndConnect | role.PermSendMessages},
 		map[uuid.UUID]channelperm.Layers{
 			channelID: {Everyone: channelperm.Override{ChannelID: channelID, Deny: role.PermViewChannels}},
 		},
@@ -46,12 +48,12 @@ func TestAuthorizeVoice_ChannelHiddenByOverride_IsNotFound(t *testing.T) {
 	}
 }
 
-func TestAuthorizeVoice_OverrideGrantsViewMissingServerWide_IsAllowed(t *testing.T) {
+func TestAuthorizeVoice_OverrideGrantsViewAndConnectMissingServerWide_IsAllowed(t *testing.T) {
 	channelID := uuid.New()
 	_, authorize := voiceSetup(
 		role.Standing{IsMember: true},
 		map[uuid.UUID]channelperm.Layers{
-			channelID: {Roles: []channelperm.Override{{ChannelID: channelID, RoleID: uuid.New(), Allow: role.PermViewChannels}}},
+			channelID: {Roles: []channelperm.Override{{ChannelID: channelID, RoleID: uuid.New(), Allow: viewAndConnect}}},
 		},
 		channelID,
 	)
@@ -64,7 +66,7 @@ func TestAuthorizeVoice_OverrideGrantsViewMissingServerWide_IsAllowed(t *testing
 func TestAuthorizeVoice_RoleOverrideAllowsWhatEveryoneDenies_IsAllowed(t *testing.T) {
 	channelID := uuid.New()
 	_, authorize := voiceSetup(
-		role.Standing{IsMember: true, Permissions: role.PermViewChannels},
+		role.Standing{IsMember: true, Permissions: viewAndConnect},
 		map[uuid.UUID]channelperm.Layers{
 			channelID: {
 				Everyone: channelperm.Override{ChannelID: channelID, Deny: role.PermViewChannels},
@@ -90,7 +92,7 @@ func TestAuthorizeVoice_MemberWithoutViewAnywhere_IsNotFound(t *testing.T) {
 func TestAuthorizeVoice_OverridesOfAnotherChannel_DontApply(t *testing.T) {
 	channelID, other := uuid.New(), uuid.New()
 	_, authorize := voiceSetup(
-		role.Standing{IsMember: true, Permissions: role.PermViewChannels},
+		role.Standing{IsMember: true, Permissions: viewAndConnect},
 		map[uuid.UUID]channelperm.Layers{
 			other: {Everyone: channelperm.Override{ChannelID: other, Deny: role.PermViewChannels}},
 		},
@@ -139,11 +141,75 @@ func TestAuthorizeVoice_OverridesLookupErrorIsReturned(t *testing.T) {
 		&fakeServers{server: srv},
 		&fakeCategories{},
 		&fakeChannels{getByIDChannel: channel},
-		&fakeStandings{standing: role.Standing{IsMember: true, Permissions: role.PermViewChannels}},
+		&fakeStandings{standing: role.Standing{IsMember: true, Permissions: viewAndConnect}},
 		&fakeVisibility{err: lookupErr},
 	)
 
 	if _, err := svc.AuthorizeVoice(context.Background(), channel.ID, "member-1"); !errors.Is(err, lookupErr) {
 		t.Errorf("err = %v, want overrides lookup error", err)
+	}
+}
+
+func TestAuthorizeVoice_MemberWithoutConnect_IsForbidden(t *testing.T) {
+	_, authorize := voiceSetup(role.Standing{IsMember: true, Permissions: role.PermViewChannels}, nil, uuid.New())
+
+	if err := authorize(); !errors.Is(err, model.ErrVoiceConnectForbidden) {
+		t.Errorf("err = %v, want ErrVoiceConnectForbidden", err)
+	}
+}
+
+func TestAuthorizeVoice_EveryoneOverrideDeniesConnect_IsForbidden(t *testing.T) {
+	channelID := uuid.New()
+	_, authorize := voiceSetup(
+		role.Standing{IsMember: true, Permissions: viewAndConnect},
+		map[uuid.UUID]channelperm.Layers{
+			channelID: {Everyone: channelperm.Override{ChannelID: channelID, Deny: role.PermConnect}},
+		},
+		channelID,
+	)
+
+	if err := authorize(); !errors.Is(err, model.ErrVoiceConnectForbidden) {
+		t.Errorf("err = %v, want ErrVoiceConnectForbidden", err)
+	}
+}
+
+func TestAuthorizeVoice_RoleOverrideAllowsConnectEveryoneDenies_IsAllowed(t *testing.T) {
+	channelID := uuid.New()
+	_, authorize := voiceSetup(
+		role.Standing{IsMember: true, Permissions: viewAndConnect},
+		map[uuid.UUID]channelperm.Layers{
+			channelID: {
+				Everyone: channelperm.Override{ChannelID: channelID, Deny: role.PermConnect},
+				Roles:    []channelperm.Override{{ChannelID: channelID, RoleID: uuid.New(), Allow: role.PermConnect}},
+			},
+		},
+		channelID,
+	)
+
+	if err := authorize(); err != nil {
+		t.Fatalf("AuthorizeVoice: %v", err)
+	}
+}
+
+func TestAuthorizeVoice_HiddenChannelWithoutConnect_IsNotFound(t *testing.T) {
+	_, authorize := voiceSetup(role.Standing{IsMember: true, Permissions: role.PermConnect}, nil, uuid.New())
+
+	if err := authorize(); !errors.Is(err, model.ErrChannelNotFound) {
+		t.Errorf("err = %v, want ErrChannelNotFound", err)
+	}
+}
+
+func TestAuthorizeVoice_AdministratorWithoutConnect_IsAllowed(t *testing.T) {
+	channelID := uuid.New()
+	_, authorize := voiceSetup(
+		role.Standing{IsMember: true, Permissions: role.PermAdministrator},
+		map[uuid.UUID]channelperm.Layers{
+			channelID: {Everyone: channelperm.Override{ChannelID: channelID, Deny: role.PermConnect}},
+		},
+		channelID,
+	)
+
+	if err := authorize(); err != nil {
+		t.Fatalf("AuthorizeVoice: %v", err)
 	}
 }

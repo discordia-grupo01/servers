@@ -34,7 +34,7 @@ type response struct {
 
 // AuthorizeVoice godoc
 // @Summary      Check voice channel access
-// @Description  Confirms that the authenticated user can connect to a voice channel: they must see it with its per-role overrides applied (#57). 403 for a non-member, 404 if the channel does not exist or is hidden from them.
+// @Description  Confirms that the authenticated user can connect to a voice channel: they must see it and hold CONNECT in it, with its per-role overrides applied (#57, #17). 403 for a non-member or a member without CONNECT in the channel, 404 if the channel does not exist or is hidden from them.
 // @Tags         voice
 // @Produce      json
 // @Security     BearerAuth
