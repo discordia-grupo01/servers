@@ -96,13 +96,38 @@ func TestStanding_ManageMessages_ImplicitForOwnerAndAdministratorsOnly(t *testin
 }
 
 // #57: the permissions that can be overridden per channel. The number is
-// repeated in the overrides_channel_scoped CHECK of migration 0023, so this
+// repeated in the overrides_channel_scoped CHECK of migration 0025, so this
 // test fails if one changes without the other.
 func TestChannelScopedPermissions_MatchesTheMigrationCheck(t *testing.T) {
-	want := role.PermViewChannels | role.PermSendMessages | role.PermManageMessages | role.PermAddReactions
-	if role.ChannelScopedPermissions != want || role.ChannelScopedPermissions != 2563 {
-		t.Errorf("ChannelScopedPermissions = %d (%v), want 2563 (VIEW_CHANNELS, SEND_MESSAGES, MANAGE_MESSAGES, ADD_REACTIONS)",
+	want := role.PermViewChannels | role.PermSendMessages | role.PermManageMessages | role.PermAddReactions | role.PermConnect
+	if role.ChannelScopedPermissions != want || role.ChannelScopedPermissions != 6659 {
+		t.Errorf("ChannelScopedPermissions = %d (%v), want 6659 (VIEW_CHANNELS, SEND_MESSAGES, MANAGE_MESSAGES, ADD_REACTIONS, CONNECT)",
 			role.ChannelScopedPermissions, role.PermissionNames(role.ChannelScopedPermissions))
+	}
+}
+
+func TestConnect_IsInTheCatalogWithoutShiftingExistingBits(t *testing.T) {
+	mask, invalid, ok := role.ParsePermissions([]string{"CONNECT"})
+	if !ok {
+		t.Fatalf("CONNECT should be in the catalog, invalid=%q", invalid)
+	}
+	if mask != role.PermConnect || role.PermConnect != 4096 {
+		t.Errorf("mask = %d, PermConnect = %d, want 4096", mask, role.PermConnect)
+	}
+	if role.PermAddReactions != 2048 {
+		t.Errorf("bits shifted: ADD_REACTIONS=%d, want 2048", role.PermAddReactions)
+	}
+	if role.AllPermissions != 8191 {
+		t.Errorf("AllPermissions = %d, want 8191", role.AllPermissions)
+	}
+	if role.DefaultPermissions&role.PermConnect == 0 {
+		t.Error("a new role must start with CONNECT")
+	}
+	if role.ChannelScopedPermissions&role.PermConnect == 0 {
+		t.Error("CONNECT must be overridable per channel")
+	}
+	if got := role.PermissionNames(role.PermConnect); len(got) != 1 || got[0] != "CONNECT" {
+		t.Errorf("PermissionNames = %v, want [CONNECT]", got)
 	}
 }
 
