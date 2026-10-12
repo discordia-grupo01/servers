@@ -11,6 +11,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/apierr"
 	"github.com/discordia-grupo01/servers/internal/handler/roleview"
 	"github.com/discordia-grupo01/servers/internal/middleware"
+	"github.com/discordia-grupo01/servers/internal/model"
 	"github.com/discordia-grupo01/servers/internal/model/role"
 	"github.com/discordia-grupo01/servers/internal/service/role_service"
 )
@@ -24,6 +25,7 @@ type RoleUseCases interface {
 	SetDefaultRole(ctx context.Context, p role_service.SetDefaultRoleParams) error
 	DeleteRole(ctx context.Context, p role_service.DeleteRoleParams) error
 	ReorderRoles(ctx context.Context, p role_service.ReorderRolesParams) ([]role.Role, error)
+	ListRoleMembers(ctx context.Context, p role_service.ListRoleMembersParams) ([]model.Member, int, error)
 }
 
 type Handler struct {
@@ -317,4 +319,53 @@ func (h *Handler) DeleteRole(c *gin.Context) {
 		return
 	}
 	c.Status(http.StatusNoContent)
+}
+
+// ListRoleMembers godoc
+// @Summary      List the members that hold a role
+// @Description  Requires MANAGE_ROLES (the owner and administrators hold it implicitly). Paginated, oldest member first, with the same shape as GET /v1/servers/{serverId}/members. For @everyone it lists every member.
+// @Tags         roles
+// @Produce      json
+// @Security     BearerAuth
+// @Param        roleId  path   string  true   "Role ID"
+// @Param        limit   query  int     false  "Page size" default(20)
+// @Param        offset  query  int     false  "Items to skip" default(0)
+// @Success      200  {object}  model.MemberListResponse
+// @Failure      400  {object}  apierr.ErrorResponse  "invalid roleId, limit or offset"
+// @Failure      401  {object}  apierr.ErrorResponse
+// @Failure      403  {object}  apierr.ErrorResponse  "missing MANAGE_ROLES"
+// @Failure      404  {object}  apierr.ErrorResponse  "role not found"
+// @Router       /v1/roles/{roleId}/members [get]
+func (h *Handler) ListRoleMembers(c *gin.Context) {
+	roleID, ok := apierr.ParseUUIDParam(c, "roleId")
+	if !ok {
+		return
+	}
+	limit, ok := apierr.ParseNonNegativeIntQuery(c, "limit", model.MemberListDefaultLimit)
+	if !ok {
+		return
+	}
+	offset, ok := apierr.ParseNonNegativeIntQuery(c, "offset", 0)
+	if !ok {
+		return
+	}
+
+	members, total, err := h.uc.ListRoleMembers(c.Request.Context(), role_service.ListRoleMembersParams{
+		RoleID: roleID, UserID: middleware.UserID(c), Limit: limit, Offset: offset,
+	})
+	if err != nil {
+		apierr.WriteDomainError(c, err)
+		return
+	}
+	limit, offset = model.ClampMemberPage(limit, offset)
+	resp := model.MemberListResponse{
+		Members: make([]model.MemberResponse, len(members)),
+		Total:   total,
+		Limit:   limit,
+		Offset:  offset,
+	}
+	for i, m := range members {
+		resp.Members[i] = model.NewMemberResponse(m)
+	}
+	c.JSON(http.StatusOK, resp)
 }

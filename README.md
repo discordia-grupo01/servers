@@ -516,6 +516,7 @@ admins lo tienen implícito); ver "Roles, permisos y jerarquía".
 | GET | `/v1/servers/{serverId}/members/{userId}/roles` | si (miembro) | Listar los roles de un miembro. 404 si `userId` no es miembro. |
 | GET | `/v1/servers/{serverId}/members/{userId}/permissions` | si (miembro) | Permisos efectivos del miembro: todos si es el dueño o tiene `ADMINISTRATOR`, si no la unión de los de sus roles. 404 si `userId` no es miembro. |
 | PUT | `/v1/servers/{serverId}/default-role` | si (admin) | Definir el rol por defecto del server. |
+| GET | `/v1/roles/{roleId}/members` | si (`MANAGE_ROLES`) | Miembros que tienen ese rol (paginado, misma forma que `GET /v1/servers/{serverId}/members`). Para `@everyone`, todos los miembros. 404 si el rol no existe. |
 | DELETE | `/v1/roles/{roleId}` | si (admin) | Eliminar un rol (optativa). Limpia asignaciones; rechaza con 409 si el rol es el default actual del server (hay que asignar otro default primero). |
 | POST | `/v1/servers/{serverId}/channels` | si (admin) | Crear canal de texto o voz (`name`, `kind`, `category_id?`). 400 si el nombre esta vacio o ya existe otro canal con ese nombre en la misma categoria (o en el "sin categoria", segun corresponda). |
 | PATCH | `/v1/channels/{channelId}` | si (`MANAGE_CHANNELS`) | Editar nombre y/o topic de un canal. 404 si el caller no lo ve. |
