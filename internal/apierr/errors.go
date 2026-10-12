@@ -234,6 +234,8 @@ func WriteDomainError(c *gin.Context, err error) {
 		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("kind", "kind_invalid"))
 	case errors.Is(err, model.ErrVoiceChannelRequired):
 		RespondError(c, http.StatusForbidden, err.Error(), map[string]any{"reason": "voice_channel_required"})
+	case errors.Is(err, model.ErrVoiceConnectForbidden):
+		RespondError(c, http.StatusForbidden, err.Error(), map[string]any{"reason": "missing_permission", "permission": "CONNECT"})
 	case errors.Is(err, model.ErrChannelServerMismatch):
 		RespondError(c, http.StatusBadRequest, err.Error(), nil)
 	case errors.Is(err, model.ErrChannelReorderInvalid):

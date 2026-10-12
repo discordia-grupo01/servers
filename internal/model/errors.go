@@ -99,6 +99,7 @@ var (
 	ErrChannelKindInvalid      = errors.New("channel kind must be 'text' or 'voice'")
 	ErrChannelServerMismatch   = errors.New("channel does not belong to this server")
 	ErrVoiceChannelRequired    = errors.New("voice channel access requires a voice channel")
+	ErrVoiceConnectForbidden   = errors.New("you do not have permission to connect to this voice channel")
 
 	ErrCategoryNotFound         = errors.New("category not found")
 	ErrCategoryNameRequired     = errors.New("category name must be provided")

@@ -93,7 +93,7 @@ func (s *ChannelService) AuthorizeVoice(ctx context.Context, channelID uuid.UUID
 	if err != nil {
 		return VoiceAccess{}, err
 	}
-	if err := s.requireCanViewChannel(ctx, ch, standing, userID); err != nil {
+	if err := s.requireCanConnect(ctx, ch, standing, userID); err != nil {
 		return VoiceAccess{}, err
 	}
 
@@ -119,14 +119,7 @@ func (s *ChannelService) AuthorizeVoice(ctx context.Context, channelID uuid.UUID
 	return VoiceAccess{ChannelID: ch.ID, ServerID: ch.ServerID, Name: name, Muted: muted}, nil
 }
 
-// requireCanViewChannel checks that userID may see ch with the channel's
-// overrides applied (#57), the same rule messaging uses: a non-member is
-// forbidden, as before; a member who can't see the channel gets it as not
-// found, like everywhere else a hidden channel is managed
-// (service.RequireVisibleChannel). An override may also give VIEW_CHANNELS to
-// a member who lacks it server-wide. Administrators see everything, so no
-// lookup is made for them.
-func (s *ChannelService) requireCanViewChannel(ctx context.Context, ch model.Channel, standing role.Standing, userID string) error {
+func (s *ChannelService) requireCanConnect(ctx context.Context, ch model.Channel, standing role.Standing, userID string) error {
 	if !standing.IsMember {
 		return model.ErrForbiddenMissingPermission
 	}
@@ -138,8 +131,12 @@ func (s *ChannelService) requireCanViewChannel(ctx context.Context, ch model.Cha
 		return err
 	}
 	l := layers[ch.ID]
-	if !channelperm.CanView(standing, l.Everyone, l.Roles) {
+	perms := channelperm.Effective(standing, l.Everyone, l.Roles)
+	if perms&role.PermViewChannels == 0 {
 		return model.ErrChannelNotFound
+	}
+	if perms&role.PermConnect == 0 {
+		return model.ErrVoiceConnectForbidden
 	}
 	return nil
 }

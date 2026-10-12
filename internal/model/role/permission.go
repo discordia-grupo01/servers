@@ -31,22 +31,24 @@ const (
 	PermMentionEveryone
 	// PermAddReactions lets its holder react to messages with emojis (#48).
 	PermAddReactions
+	PermConnect
 )
 
 // DefaultPermissions are the permissions a newly created role starts with
-// (#21 CA1): enough to see the server's channels, talk and react in them.
-// Roles created before this default existed keep whatever they had.
-const DefaultPermissions = PermViewChannels | PermSendMessages | PermAddReactions
+// (#21 CA1): enough to see the server's channels, talk and react in them and
+// join its voice channels. Roles created before this default existed keep
+// whatever they had.
+const DefaultPermissions = PermViewChannels | PermSendMessages | PermAddReactions | PermConnect
 
 // ChannelScopedPermissions are the permissions that mean something in a
 // single channel, so a role's value for them can be overridden per channel
-// (#57). The rest act on the whole server. Its value (2563) is repeated in the
-// overrides_channel_scoped CHECK of migration 0023: keep them in sync.
-const ChannelScopedPermissions = PermViewChannels | PermSendMessages | PermManageMessages | PermAddReactions
+// (#57). The rest act on the whole server. Its value (6659) is repeated in the
+// overrides_channel_scoped CHECK of migration 0025: keep them in sync.
+const ChannelScopedPermissions = PermViewChannels | PermSendMessages | PermManageMessages | PermAddReactions | PermConnect
 
-// AllPermissions is every permission in the catalog. PermAddReactions is the
-// last bit, so all bits up to and including it are set.
-const AllPermissions = PermAddReactions<<1 - 1
+// AllPermissions is every permission in the catalog. PermConnect is the last
+// bit, so all bits up to and including it are set.
+const AllPermissions = PermConnect<<1 - 1
 
 var permissionsByName = map[string]Permission{
 	"VIEW_CHANNELS":    PermViewChannels,
@@ -61,6 +63,7 @@ var permissionsByName = map[string]Permission{
 	"MANAGE_MESSAGES":  PermManageMessages,
 	"MENTION_EVERYONE": PermMentionEveryone,
 	"ADD_REACTIONS":    PermAddReactions,
+	"CONNECT":          PermConnect,
 }
 
 // ParsePermissions translates permission names into a bitmask. If any name is

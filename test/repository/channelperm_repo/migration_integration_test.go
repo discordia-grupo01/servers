@@ -149,3 +149,66 @@ func TestMigration0020_DeletingChannelOrRoleCascades(t *testing.T) {
 		t.Error("the override outlived its role")
 	}
 }
+
+func applyMigration(ctx context.Context, t *testing.T, pool *pgxpool.Pool, file string) {
+	t.Helper()
+	schema, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatalf("read migration %s: %v", file, err)
+	}
+	if _, err := pool.Exec(ctx, string(schema)); err != nil {
+		t.Fatalf("apply migration %s: %v", file, err)
+	}
+}
+
+func TestMigration0025_GrantsConnectToWhoeverCouldSeeChannels(t *testing.T) {
+	pool := newPool(t)
+	ctx := context.Background()
+	channelID, viewerID := seed(ctx, t, pool)
+	var serverID uuid.UUID
+	if err := pool.QueryRow(ctx, `SELECT server_id FROM channels WHERE id = $1`, channelID).Scan(&serverID); err != nil {
+		t.Fatalf("read server: %v", err)
+	}
+	blindID := uuid.New()
+	exec(ctx, t, pool, `UPDATE roles SET permissions = $2 WHERE id = $1`, viewerID, role.PermViewChannels|role.PermSendMessages)
+	exec(ctx, t, pool, `INSERT INTO roles (id, server_id, name, color, position, permissions) VALUES ($1, $2, 'Blind', '#000000', 2, $3)`,
+		blindID, serverID, role.PermSendMessages)
+	exec(ctx, t, pool, insertOverride, channelID, blindID, role.PermViewChannels, 0)
+
+	applyMigration(ctx, t, pool, "../../../migrations/0023_add_reactions_permission.up.sql")
+	applyMigration(ctx, t, pool, "../../../migrations/0025_connect_permission.up.sql")
+
+	var viewerPerms, blindPerms role.Permission
+	if err := pool.QueryRow(ctx, `SELECT permissions FROM roles WHERE id = $1`, viewerID).Scan(&viewerPerms); err != nil {
+		t.Fatalf("read viewer: %v", err)
+	}
+	if err := pool.QueryRow(ctx, `SELECT permissions FROM roles WHERE id = $1`, blindID).Scan(&blindPerms); err != nil {
+		t.Fatalf("read blind: %v", err)
+	}
+	if viewerPerms&role.PermConnect == 0 {
+		t.Errorf("a role with VIEW_CHANNELS must get CONNECT, got %v", role.PermissionNames(viewerPerms))
+	}
+	if blindPerms&role.PermConnect != 0 {
+		t.Errorf("a role without VIEW_CHANNELS must not get CONNECT, got %v", role.PermissionNames(blindPerms))
+	}
+
+	var allow role.Permission
+	if err := pool.QueryRow(ctx, `SELECT allow FROM channel_permission_overrides WHERE role_id = $1`, blindID).Scan(&allow); err != nil {
+		t.Fatalf("read override: %v", err)
+	}
+	if allow != role.PermViewChannels|role.PermConnect {
+		t.Errorf("override allow = %v, want [CONNECT VIEW_CHANNELS]", role.PermissionNames(allow))
+	}
+
+	exec(ctx, t, pool, insertOverride, channelID, viewerID, 0, role.PermConnect)
+	if _, err := pool.Exec(ctx, `UPDATE channel_permission_overrides SET allow = allow | $2 WHERE role_id = $1`, blindID, role.PermKickMembers); err == nil {
+		t.Error("a server-level permission in an override must still violate the CHECK")
+	}
+
+	if n := count(ctx, t, pool, `SELECT COUNT(*) FROM outbox_events WHERE routing_key = 'servers.role_updated' AND payload->'permissions' ? 'CONNECT'`); n != 1 {
+		t.Errorf("role_updated events with CONNECT = %d, want 1", n)
+	}
+	if n := count(ctx, t, pool, `SELECT COUNT(*) FROM outbox_events WHERE routing_key = 'servers.channel_overrides_updated' AND payload::text LIKE '%CONNECT%'`); n != 1 {
+		t.Errorf("channel_overrides_updated events with CONNECT = %d, want 1", n)
+	}
+}

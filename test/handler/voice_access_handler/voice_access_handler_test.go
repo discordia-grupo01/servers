@@ -90,3 +90,20 @@ func TestAuthorizeVoice_ForbiddenAccess_ReturnsForbidden(t *testing.T) {
 		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
 	}
 }
+
+func TestAuthorizeVoice_WithoutConnect_ReturnsForbiddenNamingThePermission(t *testing.T) {
+	access := &fakeAccess{err: model.ErrVoiceConnectForbidden}
+	r := newRouter(access)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/channels/"+uuid.NewString()+"/voice-access", nil)
+	req.Header.Set("X-User-Id", "member-1")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	}
+	if body := w.Body.String(); !strings.Contains(body, `"permission":"CONNECT"`) || !strings.Contains(body, `"reason":"missing_permission"`) {
+		t.Errorf("body = %s, want reason missing_permission and permission CONNECT", body)
+	}
+}

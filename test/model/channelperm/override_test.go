@@ -138,6 +138,16 @@ func TestParseMasks_Valid(t *testing.T) {
 	}
 }
 
+func TestParseMasks_ConnectIsOverridable(t *testing.T) {
+	allow, deny, err := channelperm.ParseMasks([]string{"VIEW_CHANNELS"}, []string{"CONNECT"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if allow != view || deny != role.PermConnect {
+		t.Errorf("allow=%v deny=%v", role.PermissionNames(allow), role.PermissionNames(deny))
+	}
+}
+
 func TestParseMasks_UnknownName(t *testing.T) {
 	for _, lists := range [][2][]string{{{"FLY"}, nil}, {nil, {"SEND_MESSAGES", "FLY"}}} {
 		_, _, err := channelperm.ParseMasks(lists[0], lists[1])
