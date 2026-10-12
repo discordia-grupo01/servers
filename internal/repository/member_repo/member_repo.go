@@ -90,24 +90,42 @@ func (r *MemberRepository) AssignRole(ctx context.Context, serverID uuid.UUID, u
 // ListMembers returns one page of a server's members ordered by join date
 // (oldest first, user_id as a tie-breaker), along with the total member
 // count so the caller can render pagination. Each member carries their
-// replicated public profile, or a nil Profile if it hasn't arrived yet.
+// replicated public profile, or a nil Profile if it hasn't arrived yet, and
+// when their active mute ends, if they have one.
 func (r *MemberRepository) ListMembers(ctx context.Context, serverID uuid.UUID, limit, offset int) ([]model.Member, int, error) {
+	return r.listMembers(ctx, serverID, nil, limit, offset)
+}
+
+// ListRoleMembers is ListMembers restricted to the members that hold roleID.
+// Every member holds @everyone, so for it this is the whole server.
+func (r *MemberRepository) ListRoleMembers(ctx context.Context, serverID, roleID uuid.UUID, limit, offset int) ([]model.Member, int, error) {
+	return r.listMembers(ctx, serverID, &roleID, limit, offset)
+}
+
+func (r *MemberRepository) listMembers(ctx context.Context, serverID uuid.UUID, roleID *uuid.UUID, limit, offset int) ([]model.Member, int, error) {
+	const holdsRole = `($2::uuid IS NULL OR EXISTS (
+		SELECT 1 FROM member_roles mr
+		 WHERE mr.server_id = sm.server_id AND mr.user_id = sm.user_id AND mr.role_id = $2))`
+
 	var total int
 	if err := r.pool.QueryRow(ctx,
-		`SELECT COUNT(*) FROM server_members WHERE server_id = $1`, serverID,
+		`SELECT COUNT(*) FROM server_members sm WHERE sm.server_id = $1 AND `+holdsRole,
+		serverID, roleID,
 	).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("count members: %w", err)
 	}
 
 	rows, err := r.pool.Query(ctx, `
-		SELECT sm.user_id, sm.is_owner, sm.joined_at,
+		SELECT sm.user_id, sm.is_owner, sm.joined_at, mu.until_at,
 		       p.user_id, p.name, p.avatar_url, p.description, p.status_text, p.status_emoji, p.version
 		  FROM server_members sm
 		  LEFT JOIN user_profiles p ON p.user_id = sm.user_id
-		 WHERE sm.server_id = $1
+		  LEFT JOIN server_mutes mu
+		    ON mu.server_id = sm.server_id AND mu.user_id = sm.user_id AND mu.until_at > now()
+		 WHERE sm.server_id = $1 AND `+holdsRole+`
 		 ORDER BY sm.joined_at ASC, sm.user_id ASC
-		 LIMIT $2 OFFSET $3`,
-		serverID, limit, offset,
+		 LIMIT $3 OFFSET $4`,
+		serverID, roleID, limit, offset,
 	)
 	if err != nil {
 		return nil, 0, fmt.Errorf("list members: %w", err)
@@ -122,7 +140,7 @@ func (r *MemberRepository) ListMembers(ctx context.Context, serverID uuid.UUID, 
 			name, avatarURL, description, statusText, statusEmoji *string
 			version                                               *int64
 		)
-		if err := rows.Scan(&m.UserID, &m.IsOwner, &m.JoinedAt,
+		if err := rows.Scan(&m.UserID, &m.IsOwner, &m.JoinedAt, &m.MutedUntil,
 			&profileUserID, &name, &avatarURL, &description, &statusText, &statusEmoji, &version,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scan member: %w", err)

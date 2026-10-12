@@ -60,6 +60,7 @@ func newRepo(t *testing.T) (*member_repo.MemberRepository, *repository.ServerRep
 		"../../../migrations/0017_user_profiles.up.sql",
 		"../../../migrations/0019_everyone_role.up.sql",
 		"../../../migrations/0020_channel_permission_overrides.up.sql",
+		"../../../migrations/0021_server_mutes.up.sql",
 	} {
 		schema, err := os.ReadFile(file)
 		if err != nil {
@@ -396,7 +397,7 @@ func TestMemberRepo_ListMembers_ReportsOwnerFlag(t *testing.T) {
 // packages might have created, so a test run leaves the database exactly as
 // clean as it found it -- both before it starts and after it finishes.
 func dropAllTestTables(ctx context.Context, pool *pgxpool.Pool) {
-	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS channel_permission_overrides, categories, user_profiles, outbox_events, member_roles, roles, server_bans, invitations, server_members, channels, servers CASCADE`)
+	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS channel_permission_overrides, categories, user_profiles, outbox_events, member_roles, roles, server_mutes, server_bans, invitations, server_members, channels, servers CASCADE`)
 }
 
 func env(k, def string) string {
@@ -442,5 +443,90 @@ func TestMemberRepo_ListMembers_JoinsReplicatedProfiles(t *testing.T) {
 				t.Errorf("owner Profile = %+v, want nil (not replicated)", *m.Profile)
 			}
 		}
+	}
+}
+
+func TestMemberRepo_ListMembers_ReportsOnlyActiveMutes(t *testing.T) {
+	members, servers, _, pool := newRepo(t)
+	ctx := context.Background()
+	srv, muted := seedServerWithMember(ctx, t, servers, pool)
+	expired := "expired-" + uuid.NewString()
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO server_members (server_id, user_id, is_owner, joined_at) VALUES ($1, $2, FALSE, now())`,
+		srv.ID, expired,
+	); err != nil {
+		t.Fatal(err)
+	}
+	until := time.Now().UTC().Add(time.Hour).Truncate(time.Millisecond)
+	for _, mute := range []struct {
+		user           string
+		mutedAt, until time.Time
+	}{
+		{muted, time.Now().UTC().Add(-time.Minute), until},
+		{expired, time.Now().UTC().Add(-2 * time.Hour), time.Now().UTC().Add(-time.Hour)},
+	} {
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO server_mutes (server_id, user_id, muted_by, muted_at, until_at) VALUES ($1, $2, 'mod', $3, $4)`,
+			srv.ID, mute.user, mute.mutedAt, mute.until,
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	list, _, err := members.ListMembers(ctx, srv.ID, 50, 0)
+	if err != nil {
+		t.Fatalf("ListMembers: %v", err)
+	}
+	byUser := map[string]model.Member{}
+	for _, m := range list {
+		byUser[m.UserID] = m
+	}
+	if got := byUser[muted].MutedUntil; got == nil || !got.Equal(until) {
+		t.Errorf("muted member: MutedUntil = %v, want %v", got, until)
+	}
+	if got := byUser[expired].MutedUntil; got != nil {
+		t.Errorf("a member whose mute expired shows as muted until %v", got)
+	}
+	if got := byUser[srv.OwnerID].MutedUntil; got != nil {
+		t.Errorf("a member never muted shows as muted until %v", got)
+	}
+}
+
+func TestMemberRepo_ListRoleMembers_OnlyWhoHoldsIt(t *testing.T) {
+	members, servers, roles, pool := newRepo(t)
+	ctx := context.Background()
+	srv, holder := seedServerWithMember(ctx, t, servers, pool)
+	other := "other-" + uuid.NewString()
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO server_members (server_id, user_id, is_owner, joined_at) VALUES ($1, $2, FALSE, now())`,
+		srv.ID, other,
+	); err != nil {
+		t.Fatal(err)
+	}
+	mod := seedRole(ctx, t, roles, srv.ID, "Mod")
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO member_roles (server_id, user_id, role_id) VALUES ($1, $2, $3)`,
+		srv.ID, holder, mod.ID,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	got, total, err := members.ListRoleMembers(ctx, srv.ID, mod.ID, 50, 0)
+	if err != nil {
+		t.Fatalf("ListRoleMembers: %v", err)
+	}
+	if total != 1 || len(got) != 1 || got[0].UserID != holder {
+		t.Errorf("got %+v (total %d), want only %s", got, total, holder)
+	}
+
+	empty := seedRole(ctx, t, roles, srv.ID, "Nadie")
+	got, total, err = members.ListRoleMembers(ctx, srv.ID, empty.ID, 50, 0)
+	if err != nil || total != 0 || len(got) != 0 {
+		t.Errorf("a role nobody holds: %+v, %d, %v", got, total, err)
+	}
+
+	all, allTotal, _ := members.ListMembers(ctx, srv.ID, 50, 0)
+	if allTotal != len(all) || allTotal < 3 {
+		t.Errorf("the unfiltered list changed: %d members, total %d", len(all), allTotal)
 	}
 }

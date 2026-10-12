@@ -81,17 +81,6 @@ func (s *MembershipService) ListMembers(ctx context.Context, p ListMembersParams
 		return nil, 0, model.ErrForbiddenNotMember
 	}
 
-	limit := p.Limit
-	switch {
-	case limit <= 0:
-		limit = model.MemberListDefaultLimit
-	case limit > model.MemberListMaxLimit:
-		limit = model.MemberListMaxLimit
-	}
-	offset := p.Offset
-	if offset < 0 {
-		offset = 0
-	}
-
+	limit, offset := model.ClampMemberPage(p.Limit, p.Offset)
 	return s.members.ListMembers(ctx, p.ServerID, limit, offset)
 }

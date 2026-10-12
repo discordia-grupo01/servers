@@ -723,6 +723,66 @@ paths:
       summary: Edit a role
       tags:
         - roles
+  "/v1/roles/{roleId}/members":
+    get:
+      description: Requires MANAGE_ROLES (the owner and administrators hold it
+        implicitly). Paginated, oldest member first, with the same shape as GET
+        /v1/servers/{serverId}/members. For @everyone it lists every member.
+      parameters:
+        - description: Role ID
+          in: path
+          name: roleId
+          required: true
+          schema:
+            type: string
+        - description: Page size
+          in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+        - description: Items to skip
+          in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/model.MemberListResponse"
+        "400":
+          description: invalid roleId, limit or offset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "403":
+          description: missing MANAGE_ROLES
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "404":
+          description: role not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+      security:
+        - BearerAuth: []
+      summary: List the members that hold a role
+      tags:
+        - roles
   /v1/servers:
     get:
       description: Servers the caller is a member of, each with only the channels the
@@ -1727,7 +1787,9 @@ paths:
       description: Caller must already be a member. Paginated. Each member carries
         their public profile (name, avatar, description, status), replicated
         from identify; profile is null until it has been replicated, and may lag
-        a few seconds behind a profile edit.
+        a few seconds behind a profile edit. muted_until is when the member's
+        active mute ends, or null if they aren't muted (an expired mute counts
+        as not muted).
       parameters:
         - description: Server ID
           in: path
@@ -2862,6 +2924,13 @@ components:
         is_owner:
           type: boolean
         joined_at:
+          type: string
+        muted_until:
+          description: >-
+            MutedUntil is when the member's mute ends (they can't send messages
+            or
+
+            speak until then), null if they aren't muted.
           type: string
         profile:
           allOf:
