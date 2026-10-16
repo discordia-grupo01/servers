@@ -479,6 +479,30 @@ y recibe qué menciones valen y a quién notificar:
   canal no cambia quién lo ve; se pide igual para que el día que haya permisos
   por canal solo cambie la query.
 
+## Usuarios suspendidos
+
+`discordia-admin` suspende y reactiva cuentas con `admin.user_suspended` y
+`admin.user_reactivated` (firmados con `ADMIN_EVENTS_HMAC_SECRET`). El consumidor
+(`internal/events/admin_consumer`, cola `servers.admin_events`) los guarda en
+`suspended_users` solo si traen una `version` mayor a la guardada. El middleware
+`RejectSuspended`, que corre después de `Auth` en todo `/v1` autenticado, responde
+`403` a cualquier request de un suspendido, con el formato de error habitual y el
+motivo en `details.error_code`:
+
+```json
+{ "error": { "code": 403, "message": "account suspended", "details": { "error_code": "ACCOUNT_SUSPENDED" } } }
+```
+
+- Incluye `GET /v1/channels/{id}/voice-access`, que el servicio de voz usa para
+  autorizar el token: así la entrada a voz queda bloqueada sin tocar ese servicio.
+- El estado se cachea en memoria 5 segundos por usuario; la instancia que aplica
+  el evento invalida la entrada al instante, las demás se enteran dentro de esa
+  ventana. Si la base no responde, el request se rechaza con `503` (no se deja
+  pasar a alguien que podría estar suspendido).
+- El suspendido sigue siendo miembro de sus servidores y no se le cambia el rol.
+  Reactivar levanta todo con el siguiente evento.
+- Rutas públicas (`/livez`, `/readyz`, íconos y banners) no se ven afectadas.
+
 ## Endpoints
 Ver [`openapi.yaml`](openapi.yaml) -- **generado automáticamente y actualizado
 solo**, no se edita a mano ni hace falta correr nada vos. Sale de las

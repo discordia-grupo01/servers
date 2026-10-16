@@ -3,10 +3,13 @@ package e2e_test
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"os"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -14,8 +17,19 @@ import (
 	"github.com/discordia-grupo01/events-contract/admin"
 	"github.com/discordia-grupo01/events-contract/envelope"
 	"github.com/discordia-grupo01/servers/internal/events/admin_consumer"
+	"github.com/discordia-grupo01/servers/internal/handler"
+	"github.com/discordia-grupo01/servers/internal/iconstore"
+	"github.com/discordia-grupo01/servers/internal/middleware"
 	"github.com/discordia-grupo01/servers/internal/repository"
+	"github.com/discordia-grupo01/servers/internal/repository/category_repo"
+	"github.com/discordia-grupo01/servers/internal/repository/channel_repo"
+	"github.com/discordia-grupo01/servers/internal/repository/channelperm_repo"
+	"github.com/discordia-grupo01/servers/internal/repository/member_repo"
+	"github.com/discordia-grupo01/servers/internal/repository/moderation_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/suspension_repo"
+	"github.com/discordia-grupo01/servers/internal/repository/user_profile_repo"
+	"github.com/discordia-grupo01/servers/internal/service"
+	"github.com/discordia-grupo01/servers/internal/service/channel_service"
 )
 
 const adminSecret = "e2e-admin-secret"
@@ -25,7 +39,7 @@ const adminSecret = "e2e-admin-secret"
 // pool. The consumer's queue is declared, bound and purged here first, so
 // nothing published by the test can be dropped for lack of a bound queue and
 // nothing left over from an earlier run is consumed.
-func setupAdminReplica(t *testing.T) (*amqp.Channel, *pgxpool.Pool) {
+func setupAdminReplica(t *testing.T, onApplied admin_consumer.Invalidator) (*amqp.Channel, *pgxpool.Pool) {
 	t.Helper()
 	if os.Getenv("DATABASE_HOST") == "" || os.Getenv("RABBITMQ_URL") == "" {
 		t.Skip("DATABASE_HOST and RABBITMQ_URL both required: skipping end-to-end test")
@@ -83,7 +97,11 @@ func setupAdminReplica(t *testing.T) (*amqp.Channel, *pgxpool.Pool) {
 		ch.Close()
 	})
 
-	go admin_consumer.New(os.Getenv("RABBITMQ_URL"), adminSecret, suspension_repo.NewSuspensionRepository(pool)).Start(ctx)
+	var store admin_consumer.Store = suspension_repo.NewSuspensionRepository(pool)
+	if onApplied != nil {
+		store = admin_consumer.WithInvalidation(store, onApplied)
+	}
+	go admin_consumer.New(os.Getenv("RABBITMQ_URL"), adminSecret, store).Start(ctx)
 	return ch, pool
 }
 
@@ -138,7 +156,7 @@ func hasSuspensionRow(t *testing.T, pool *pgxpool.Pool, user string) bool {
 }
 
 func TestAdminEvents_SuspendAndReactivateAreReplicated(t *testing.T) {
-	ch, pool := setupAdminReplica(t)
+	ch, pool := setupAdminReplica(t, nil)
 	user := uuid.NewString() // servers has never seen this user: the row is created anyway
 
 	publishAdmin(t, ch, admin.RoutingKeyUserSuspended, suspend(adminSecret, user, 1))
@@ -162,7 +180,7 @@ func TestAdminEvents_SuspendAndReactivateAreReplicated(t *testing.T) {
 // the end is processed after them (same queue, same consumer), which proves the
 // invalid ones were already handled and rejected.
 func TestAdminEvents_UnverifiableEventsChangeNothing(t *testing.T) {
-	ch, pool := setupAdminReplica(t)
+	ch, pool := setupAdminReplica(t, nil)
 	victim := uuid.NewString()
 	probe := uuid.NewString()
 
@@ -182,4 +200,138 @@ func TestAdminEvents_UnverifiableEventsChangeNothing(t *testing.T) {
 	if hasSuspensionRow(t, pool, victim) {
 		t.Errorf("victim has a suspended_users row after only unverifiable events")
 	}
+}
+
+// lateInvalidator forwards to a guard that is built after the consumer starts
+// (the guard needs the pool setupAdminReplica creates).
+type lateInvalidator struct {
+	guard atomic.Pointer[middleware.SuspensionGuard]
+}
+
+func (l *lateInvalidator) Invalidate(userID string) {
+	if g := l.guard.Load(); g != nil {
+		g.Invalidate(userID)
+	}
+}
+
+// Full path: signed admin.user_suspended over RabbitMQ -> consumer -> Postgres
+// -> RejectSuspended -> 403 on a real route and on voice-access, which is what
+// the voice service uses to authorize the LiveKit token. A later
+// admin.user_reactivated lifts it.
+func TestAdminEvents_SuspendedUserIsRejectedAndVoiceAccessDenied(t *testing.T) {
+	late := &lateInvalidator{}
+	ch, pool := setupAdminReplica(t, late)
+	ctx := context.Background()
+
+	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS channel_permission_overrides, user_profiles, outbox_events, member_roles, roles, server_mutes, ownership_transfers, categories, server_bans, invitations, server_members, channels, servers CASCADE`)
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DROP TABLE IF EXISTS channel_permission_overrides, user_profiles, outbox_events, member_roles, roles, server_mutes, ownership_transfers, categories, server_bans, invitations, server_members, channels, servers CASCADE`)
+	})
+	for _, f := range []string{
+		"0001_init.up.sql", "0002_invitations.up.sql",
+		"0003_roles.up.sql", "0004_member_roles.up.sql", "0005_default_role.up.sql",
+		"0006_ownership_transfers.up.sql", "0007_categories.up.sql",
+		"0008_ownership_transfer_cancelled_status.up.sql", "0009_server_banner.up.sql",
+		"0010_native_categories.up.sql", "0011_outbox_events.up.sql",
+		"0012_category_name_key.up.sql", "0013_unassigned_category.up.sql",
+		"0014_drop_default_kind.up.sql", "0015_role_positions.up.sql",
+		"0016_server_bans_banned_by.up.sql", "0017_user_profiles.up.sql",
+		"0019_everyone_role.up.sql", "0020_channel_permission_overrides.up.sql",
+		"0021_server_mutes.up.sql",
+	} {
+		schema, err := os.ReadFile("../../migrations/" + f)
+		if err != nil {
+			t.Fatalf("read migration %s: %v", f, err)
+		}
+		if _, err := pool.Exec(ctx, string(schema)); err != nil {
+			t.Fatalf("apply migration %s: %v", f, err)
+		}
+	}
+
+	serverRepo := repository.NewServerRepository(pool)
+	memberRepo := member_repo.NewMemberRepository(pool)
+	categoryRepo := category_repo.NewCategoryRepository(pool)
+	channelRepo := channel_repo.NewChannelRepository(pool)
+	moderationRepo := moderation_repo.NewRepository(pool)
+	channelPermRepo := channelperm_repo.NewRepository(pool)
+	icons, err := iconstore.NewLocalStore(t.TempDir(), 1<<20)
+	if err != nil {
+		t.Fatalf("iconstore: %v", err)
+	}
+	guard := middleware.NewSuspensionGuard(suspension_repo.NewSuspensionRepository(pool), time.Minute)
+	late.guard.Store(guard)
+
+	gin.SetMode(gin.TestMode)
+	router := handler.NewRouter(handler.Deps{
+		Servers:         service.New(serverRepo, icons, memberRepo, channelPermRepo),
+		Icons:           icons,
+		VoiceAccess:     channel_service.New(serverRepo, categoryRepo, channelRepo, memberRepo, channelPermRepo, moderationRepo, user_profile_repo.NewUserProfileRepository(pool)),
+		Auth:            middleware.AuthConfig{UserIDHeader: "X-User-Id"},
+		RejectSuspended: guard.RejectSuspended(),
+		DB:              pool,
+	})
+
+	owner := uuid.NewString()
+	w := postCreateServer(t, router, owner, "suspend-"+uuid.NewString()[:8])
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create server status = %d body = %s", w.Code, w.Body.String())
+	}
+	var srv struct {
+		Channels []struct {
+			ID   string `json:"id"`
+			Kind string `json:"kind"`
+		} `json:"channels"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &srv); err != nil {
+		t.Fatalf("decode server: %v", err)
+	}
+	voiceID := ""
+	for _, c := range srv.Channels {
+		if c.Kind == "voice" {
+			voiceID = c.ID
+		}
+	}
+	if voiceID == "" {
+		t.Fatalf("no voice channel in %s", w.Body.String())
+	}
+	voicePath := "/v1/channels/" + voiceID + "/voice-access"
+
+	// Active: voice-access authorizes the owner (this also caches "not suspended").
+	if w := doAsUser(t, router, http.MethodGet, voicePath, owner); w.Code != http.StatusOK {
+		t.Fatalf("voice-access before suspension = %d body = %s", w.Code, w.Body.String())
+	}
+
+	assertSuspended := func(want bool) {
+		t.Helper()
+		deadline := time.Now().Add(10 * time.Second)
+		for time.Now().Before(deadline) {
+			w := doAsUser(t, router, http.MethodGet, voicePath, owner)
+			if (w.Code == http.StatusForbidden) == want {
+				if want {
+					var e struct {
+						Error struct {
+							Details map[string]any `json:"details"`
+						} `json:"error"`
+					}
+					_ = json.Unmarshal(w.Body.Bytes(), &e)
+					if e.Error.Details["error_code"] != "ACCOUNT_SUSPENDED" {
+						t.Fatalf("403 body = %s, want details.error_code ACCOUNT_SUSPENDED", w.Body.String())
+					}
+				}
+				return
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		t.Fatalf("timed out waiting for voice-access suspended=%v", want)
+	}
+
+	publishAdmin(t, ch, admin.RoutingKeyUserSuspended, suspend(adminSecret, owner, 1))
+	assertSuspended(true)
+	// Any other action is rejected too, e.g. creating a server.
+	if w := postCreateServer(t, router, owner, "again-"+uuid.NewString()[:8]); w.Code != http.StatusForbidden {
+		t.Errorf("create server while suspended = %d, want 403", w.Code)
+	}
+
+	publishAdmin(t, ch, admin.RoutingKeyUserReactivated, reactivate(adminSecret, owner, 2))
+	assertSuspended(false)
 }

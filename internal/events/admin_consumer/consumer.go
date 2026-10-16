@@ -32,6 +32,31 @@ type Store interface {
 	Apply(ctx context.Context, userID string, suspended bool, version int64) (bool, error)
 }
 
+// Invalidator is told which user's state just changed, so whatever caches it
+// (the suspension middleware) can drop it.
+type Invalidator interface {
+	Invalidate(userID string)
+}
+
+// WithInvalidation returns a Store that, after a state was actually applied,
+// invalidates the user in inv. A no-op or failed write leaves the cache alone.
+func WithInvalidation(store Store, inv Invalidator) Store {
+	return invalidatingStore{store: store, inv: inv}
+}
+
+type invalidatingStore struct {
+	store Store
+	inv   Invalidator
+}
+
+func (s invalidatingStore) Apply(ctx context.Context, userID string, suspended bool, version int64) (bool, error) {
+	applied, err := s.store.Apply(ctx, userID, suspended, version)
+	if applied && err == nil {
+		s.inv.Invalidate(userID)
+	}
+	return applied, err
+}
+
 type Consumer struct {
 	url    string
 	secret string

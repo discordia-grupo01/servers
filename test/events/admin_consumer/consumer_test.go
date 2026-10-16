@@ -163,3 +163,30 @@ func TestShouldRequeue_EmptySecretDropsEverything(t *testing.T) {
 		t.Errorf("Apply calls = %d, want 0", store.calls)
 	}
 }
+
+type recordingInvalidator struct{ users []string }
+
+func (r *recordingInvalidator) Invalidate(userID string) { r.users = append(r.users, userID) }
+
+// The cache is dropped only when a state was really written.
+func TestWithInvalidation_InvalidatesOnlyWhenApplied(t *testing.T) {
+	cases := []struct {
+		name  string
+		store *fakeStore
+		want  int
+	}{
+		{"applied", &fakeStore{applied: true}, 1},
+		{"stale no-op", &fakeStore{applied: false}, 0},
+		{"store error", &fakeStore{err: errors.New("db down")}, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			inv := &recordingInvalidator{}
+			store := admin_consumer.WithInvalidation(tc.store, inv)
+			_, _ = store.Apply(context.Background(), "user-1", true, 1)
+			if len(inv.users) != tc.want || (tc.want == 1 && inv.users[0] != "user-1") {
+				t.Errorf("invalidated = %v, want %d call(s)", inv.users, tc.want)
+			}
+		})
+	}
+}

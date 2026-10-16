@@ -98,9 +98,11 @@ func main() {
 	transferSvc := ownership_transfer_service.New(serverRepo, memberRepo, transferRepo)
 	go ownership_transfer_service.NewExpirer(transferRepo).Start(ctx)
 	go outbox.NewPoller(pool, publisher).Start(ctx)
+	suspensionRepo := suspension_repo.NewSuspensionRepository(pool)
+	suspensionGuard := middleware.NewSuspensionGuard(suspensionRepo, middleware.DefaultSuspensionCacheTTL)
 	if cfg.RabbitMQURL != "" {
 		go profile_consumer.New(cfg.RabbitMQURL, user_profile_repo.NewUserProfileRepository(pool)).Start(ctx)
-		go admin_consumer.New(cfg.RabbitMQURL, cfg.AdminEventsHMACSecret, suspension_repo.NewSuspensionRepository(pool)).Start(ctx)
+		go admin_consumer.New(cfg.RabbitMQURL, cfg.AdminEventsHMACSecret, admin_consumer.WithInvalidation(suspensionRepo, suspensionGuard)).Start(ctx)
 	} else {
 		log.Printf("profile_consumer: RABBITMQ_URL not set, member profiles won't be replicated")
 		log.Printf("admin_consumer: RABBITMQ_URL not set, platform suspensions won't be applied")
@@ -130,6 +132,7 @@ func main() {
 		VoiceAccess:        channelSvc,
 		Mentions:           mentionSvc,
 		Auth:               middleware.AuthConfig{UserIDHeader: cfg.UserIDHeader},
+		RejectSuspended:    suspensionGuard.RejectSuspended(),
 		DB:                 pool,
 	})
 
