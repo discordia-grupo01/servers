@@ -417,6 +417,7 @@ Eventos que publica el servicio (exchange `discordia.events`, contratos en
 `servers.channel_deleted`, `servers.channel_access_revoked`,
 `servers.server_deleted`, `servers.member_muted`, `servers.member_unmuted` y
 `servers.word_filter_updated`,
+`servers.server_updated`,
 más cinco **fotos completas** con las que `messaging` arma su réplica de
 permisos y decide sin llamar acá (ADR 0003):
 
@@ -427,6 +428,14 @@ permisos y decide sin llamar acá (ADR 0003):
 | `servers.role_deleted` | se borra un rol (el consumidor lo saca de miembros y overrides) |
 | `servers.member_roles_updated` | alguien se une (creando el servidor o por invitación) o se le asigna o quita un rol: todos sus roles, `@everyone` incluido |
 | `servers.channel_overrides_updated` | se crea, edita o borra un override: todos los overrides del canal (lista vacía si no queda ninguno) |
+
+Además, `servers.server_updated` (`server_id`, `name`, `owner_id`, `created_at`)
+es la foto del servidor que `admin` usa para su listado de servidores: se
+publica al crear el servidor, al cambiarle el nombre y al aceptar una
+transferencia de propiedad (cambiar solo el ícono o el banner no la publica).
+No lleva `version`: `admin` se queda con la de `occurred_at` más nuevo. La
+migración `0026_backfill_server_updated` la publica para todos los servidores
+ya existentes y se puede repetir sin riesgo.
 
 Cada foto se escribe en el outbox en la **misma transacción** que el cambio
 (`repository/access_events.go`) y lleva el estado ya escrito, así que un
