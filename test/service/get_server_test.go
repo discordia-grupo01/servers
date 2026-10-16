@@ -64,3 +64,44 @@ func TestGetServerImageURLs_UnknownServer_PropagatesNotFound(t *testing.T) {
 		t.Errorf("err = %v, want ErrServerNotFound", err)
 	}
 }
+
+func TestCheckMembership_Member_ReturnsNil(t *testing.T) {
+	repo, icons := &fakeRepoHelper{memberResult: true}, &fakeIconsHelper{}
+
+	if err := service.New(repo, icons, repo, repo).CheckMembership(context.Background(), uuid.New(), "user-1"); err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if repo.memberCalls != 1 || repo.getCalls != 0 {
+		t.Errorf("IsMember calls = %d, GetByID calls = %d, want 1 and 0", repo.memberCalls, repo.getCalls)
+	}
+}
+
+func TestCheckMembership_NotAMember_ReturnsForbidden(t *testing.T) {
+	repo, icons := &fakeRepoHelper{}, &fakeIconsHelper{}
+
+	err := service.New(repo, icons, repo, repo).CheckMembership(context.Background(), uuid.New(), "user-1")
+	if !errors.Is(err, model.ErrForbiddenNotMember) {
+		t.Errorf("err = %v, want ErrForbiddenNotMember", err)
+	}
+}
+
+func TestCheckMembership_UnknownServer_PropagatesNotFound(t *testing.T) {
+	repo, icons := &fakeRepoHelper{memberErr: model.ErrServerNotFound}, &fakeIconsHelper{}
+
+	err := service.New(repo, icons, repo, repo).CheckMembership(context.Background(), uuid.New(), "user-1")
+	if !errors.Is(err, model.ErrServerNotFound) {
+		t.Errorf("err = %v, want ErrServerNotFound", err)
+	}
+}
+
+func TestCheckMembership_NoUser_ReturnsUnauthorized(t *testing.T) {
+	repo, icons := &fakeRepoHelper{memberResult: true}, &fakeIconsHelper{}
+
+	err := service.New(repo, icons, repo, repo).CheckMembership(context.Background(), uuid.New(), "")
+	if !errors.Is(err, model.ErrUnauthorized) {
+		t.Errorf("err = %v, want ErrUnauthorized", err)
+	}
+	if repo.memberCalls != 0 {
+		t.Error("must not query without a user")
+	}
+}

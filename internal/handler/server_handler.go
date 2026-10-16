@@ -30,6 +30,7 @@ type ServerUseCases interface {
 	CreateServer(ctx context.Context, p service.CreateServerParams) (model.Server, error)
 	ListMyServers(ctx context.Context, userID string) ([]model.Server, error)
 	GetServer(ctx context.Context, id uuid.UUID, userID string) (model.Server, error)
+	CheckMembership(ctx context.Context, id uuid.UUID, userID string) error
 	UpdateServer(ctx context.Context, p service.UpdateServerParams) (model.Server, error)
 	GetServerImageURLs(ctx context.Context, id uuid.UUID) (iconURL, bannerURL *string, err error)
 	DeleteServer(ctx context.Context, p service.DeleteServerParams) error
@@ -274,6 +275,36 @@ func (h *serverHandler) getServer(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, toServerResponse(srv))
+}
+
+type membershipResponse struct {
+	ServerID string `json:"server_id"`
+	Member   bool   `json:"member"`
+}
+
+// getMembership godoc
+// @Summary      Check membership of a server
+// @Description  Confirms that the authenticated user owns the server or is a member of it, without loading the server. Meant for services that poll it (voice presence). 403 for a non-member, 404 if the server does not exist.
+// @Tags         servers
+// @Produce      json
+// @Security     BearerAuth
+// @Param        serverId  path  string  true  "Server ID"
+// @Success      200  {object} membershipResponse
+// @Failure      400  {object} apierr.ErrorResponse
+// @Failure      401  {object} apierr.ErrorResponse
+// @Failure      403  {object} apierr.ErrorResponse
+// @Failure      404  {object} apierr.ErrorResponse
+// @Router       /v1/servers/{serverId}/membership [get]
+func (h *serverHandler) getMembership(c *gin.Context) {
+	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
+	if !ok {
+		return
+	}
+	if err := h.uc.CheckMembership(c.Request.Context(), serverID, middleware.UserID(c)); err != nil {
+		apierr.WriteDomainError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, membershipResponse{ServerID: serverID.String(), Member: true})
 }
 
 // getIcon godoc

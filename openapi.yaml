@@ -2107,6 +2107,55 @@ paths:
       summary: Remove a role from a member
       tags:
         - member-roles
+  "/v1/servers/{serverId}/membership":
+    get:
+      description: Confirms that the authenticated user owns the server or is a member
+        of it, without loading the server. Meant for services that poll it
+        (voice presence). 403 for a non-member, 404 if the server does not
+        exist.
+      parameters:
+        - description: Server ID
+          in: path
+          name: serverId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/handler.membershipResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+      security:
+        - BearerAuth: []
+      summary: Check membership of a server
+      tags:
+        - servers
   "/v1/servers/{serverId}/mentions/resolve":
     post:
       description: Called by messaging with the author's token before saving a
@@ -2813,6 +2862,13 @@ components:
       properties:
         confirm_name:
           example: Mi Comunidad
+          type: string
+      type: object
+    handler.membershipResponse:
+      properties:
+        member:
+          type: boolean
+        server_id:
           type: string
       type: object
     handler.serverResponse:

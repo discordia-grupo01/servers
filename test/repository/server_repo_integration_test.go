@@ -310,6 +310,44 @@ func TestRepo_ListForUser_OnlyReturnsServersTheUserBelongsTo(t *testing.T) {
 	}
 }
 
+func TestRepo_IsMember_OwnerMemberAndStranger(t *testing.T) {
+	repo, pool := newRepo(t)
+	ctx := context.Background()
+
+	owner := "owner-" + uuid.NewString()
+	srv, ch := serverFixture("Is Member", owner)
+	if err := repo.CreateServer(ctx, srv, nil, ch, []outbox.Event{testOutboxEvent()}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	member := "member-" + uuid.NewString()
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO server_members (server_id, user_id, is_owner, joined_at) VALUES ($1, $2, FALSE, now())`,
+		srv.ID, member,
+	); err != nil {
+		t.Fatalf("seed membership: %v", err)
+	}
+
+	for _, c := range []struct {
+		user string
+		want bool
+	}{{owner, true}, {member, true}, {"stranger-" + uuid.NewString(), false}} {
+		got, err := repo.IsMember(ctx, srv.ID, c.user)
+		if err != nil {
+			t.Fatalf("IsMember(%s): %v", c.user, err)
+		}
+		if got != c.want {
+			t.Errorf("IsMember(%s) = %v, want %v", c.user, got, c.want)
+		}
+	}
+}
+
+func TestRepo_IsMember_UnknownServer_ReturnsNotFound(t *testing.T) {
+	repo, _ := newRepo(t)
+	if _, err := repo.IsMember(context.Background(), uuid.New(), "someone"); !errors.Is(err, model.ErrServerNotFound) {
+		t.Errorf("err = %v, want ErrServerNotFound", err)
+	}
+}
+
 func TestRepo_ListForUser_IncludesServersJoinedNotOwned(t *testing.T) {
 	repo, pool := newRepo(t)
 	ctx := context.Background()

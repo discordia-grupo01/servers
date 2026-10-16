@@ -88,6 +88,7 @@ func NewRouter(d Deps) *gin.Engine {
 	v1.POST("/servers", h.createServer)
 	v1.GET("/servers", h.listMyServers)
 	v1.GET("/servers/:serverId", h.getServer)
+	v1.GET("/servers/:serverId/membership", h.getMembership)
 	v1.PATCH("/servers/:serverId", h.updateServer)
 	v1.DELETE("/servers/:serverId", h.deleteServer)
 
