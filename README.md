@@ -51,6 +51,7 @@ Con `docker compose up` se levanta también el servicio (`api`) contra la base.
 | DATABASE_PASSWORD | **(obligatoria)** | Password de conexion. |
 | DATABASE_SSLMODE | disable | `disable` en local; `require` cuando la BDD es Supabase (exige TLS). |
 | DATABASE_SCHEMA | - (vacio) | Vacio en local. En Supabase, el schema dedicado de este servicio dentro del proyecto compartido (ver seccion "Supabase" mas abajo). |
+| DATABASE_MAX_CONNS | 0 (el default de pgx) | Maximo de conexiones del pool. 0 deja el default de pgx, `max(4, CPUs)`, que se queda corto cuando varios clientes consultan a la vez y las consultas esperan una conexion libre. Antes de subirlo, mirar el limite de conexiones de la base (o del pooler de Supabase): cada instancia abre hasta ese numero. |
 | USER_ID_HEADER | - (vacio) | Vacio = el usuario sale del `sub` del JWT (`Authorization: Bearer ...`), que es lo que llega via Kong. Solo para desarrollo local (curl/tests): con `X-User-Id` el servicio toma ese header como identidad del usuario. **Nunca setearlo en un entorno desplegado**: Kong no filtra ese header, asi que cualquier cliente podria hacerse pasar por otro usuario. |
 | ICON_DIR | ./data/icons | Directorio donde se guardan los iconos subidos (si no se usa Supabase Storage, ver debajo). |
 | ICON_MAX_BYTES | 5242880 | Tamano maximo (bytes) de un icono o banner. |

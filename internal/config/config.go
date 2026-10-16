@@ -20,6 +20,11 @@ type Config struct {
 	DatabasePassword string
 	DatabaseSSLMode  string
 	DatabaseSchema   string
+	// DatabaseMaxConns caps the connection pool. 0 keeps pgx's default,
+	// max(4, number of CPUs), which is small for a service that answers many
+	// polling clients; mind the connection limit of the database (or its
+	// pooler) before raising it, since every instance opens that many.
+	DatabaseMaxConns int
 
 	UserIDHeader string
 
@@ -51,6 +56,7 @@ func Load() (Config, error) {
 		DatabasePassword: os.Getenv("DATABASE_PASSWORD"),
 		DatabaseSSLMode:  getenv("DATABASE_SSLMODE", "disable"),
 		DatabaseSchema:   os.Getenv("DATABASE_SCHEMA"),
+		DatabaseMaxConns: int(getenvInt64("DATABASE_MAX_CONNS", 0)),
 
 		UserIDHeader: getenv("USER_ID_HEADER", ""),
 
@@ -96,6 +102,9 @@ func (c Config) PostgresDSN() string {
 	)
 	if c.DatabaseSchema != "" {
 		dsn += fmt.Sprintf(" options='-c search_path=%s'", c.DatabaseSchema)
+	}
+	if c.DatabaseMaxConns > 0 {
+		dsn += fmt.Sprintf(" pool_max_conns=%d", c.DatabaseMaxConns)
 	}
 	return dsn
 }
