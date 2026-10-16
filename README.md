@@ -58,6 +58,7 @@ Con `docker compose up` se levanta también el servicio (`api`) contra la base.
 | SUPABASE_STORAGE_BUCKET | - (vacio) | Nombre del bucket de Storage. |
 | SUPABASE_SERVICE_KEY | - (vacio) | `service_role` key del proyecto (Project Settings > API) -- nunca la `anon` key, esta se salta las políticas RLS del bucket. |
 | RABBITMQ_URL | - (vacio) | Conexion al broker para publicar eventos de dominio y consumir `users.profile_updated` (exchange `discordia.events`, ver ADR-07). Vacia = publisher en no-op y sin réplica de perfiles (`profile: null` en `GET /members`); el servicio funciona igual sin RabbitMQ. |
+| ADMIN_EVENTS_HMAC_SECRET | - (vacio) | Secreto compartido con `discordia-admin` para verificar la firma HMAC de `admin.user_suspended` / `admin.user_reactivated`. **Obligatoria si `RABBITMQ_URL` está seteada** (si falta, el servicio no arranca); sin RabbitMQ no se aplican suspensiones. Los eventos sin firma o con firma inválida se descartan con un `warn` y no cambian ningún estado. |
 
 Publicar un evento nunca pasa directo por RabbitMQ desde el request: el
 handler escribe una fila en `outbox_events` en la misma transacción que el

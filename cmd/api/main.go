@@ -8,6 +8,7 @@ import (
 
 	"github.com/discordia-grupo01/servers/internal/config"
 	"github.com/discordia-grupo01/servers/internal/events"
+	"github.com/discordia-grupo01/servers/internal/events/admin_consumer"
 	"github.com/discordia-grupo01/servers/internal/events/profile_consumer"
 	"github.com/discordia-grupo01/servers/internal/handler"
 	"github.com/discordia-grupo01/servers/internal/iconstore"
@@ -21,6 +22,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/repository/moderation_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/ownership_transfer_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/role_repo"
+	"github.com/discordia-grupo01/servers/internal/repository/suspension_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/user_profile_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/word_filter_repo"
 	"github.com/discordia-grupo01/servers/internal/service"
@@ -98,8 +100,10 @@ func main() {
 	go outbox.NewPoller(pool, publisher).Start(ctx)
 	if cfg.RabbitMQURL != "" {
 		go profile_consumer.New(cfg.RabbitMQURL, user_profile_repo.NewUserProfileRepository(pool)).Start(ctx)
+		go admin_consumer.New(cfg.RabbitMQURL, cfg.AdminEventsHMACSecret, suspension_repo.NewSuspensionRepository(pool)).Start(ctx)
 	} else {
 		log.Printf("profile_consumer: RABBITMQ_URL not set, member profiles won't be replicated")
+		log.Printf("admin_consumer: RABBITMQ_URL not set, platform suspensions won't be applied")
 	}
 	invSvc := invitation.NewService(repository.NewInvitationRepository(pool), serverRepo, memberRepo)
 	categorySvc := category_service.New(serverRepo, categoryRepo, memberRepo)

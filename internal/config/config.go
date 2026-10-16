@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -30,6 +31,11 @@ type Config struct {
 	SupabaseServiceKey    string
 
 	RabbitMQURL string
+
+	// AdminEventsHMACSecret is shared with discordia-admin: it signs the
+	// admin.user_suspended / admin.user_reactivated events and this service
+	// drops any whose signature doesn't verify. Required when RabbitMQURL is set.
+	AdminEventsHMACSecret string
 }
 
 func Load() (Config, error) {
@@ -56,6 +62,8 @@ func Load() (Config, error) {
 		SupabaseServiceKey:    os.Getenv("SUPABASE_SERVICE_KEY"),
 
 		RabbitMQURL: os.Getenv("RABBITMQ_URL"),
+
+		AdminEventsHMACSecret: os.Getenv("ADMIN_EVENTS_HMAC_SECRET"),
 	}
 
 	var missing []string
@@ -70,7 +78,11 @@ func Load() (Config, error) {
 			missing = append(missing, k)
 		}
 	}
+	if c.RabbitMQURL != "" && c.AdminEventsHMACSecret == "" {
+		missing = append(missing, "ADMIN_EVENTS_HMAC_SECRET (required when RABBITMQ_URL is set)")
+	}
 	if len(missing) > 0 {
+		sort.Strings(missing)
 		return Config{}, fmt.Errorf("missing required environment variables: %s", strings.Join(missing, ", "))
 	}
 
