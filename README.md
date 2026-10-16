@@ -500,7 +500,9 @@ motivo en `details.error_code`:
   ventana. Si la base no responde, el request se rechaza con `503` (no se deja
   pasar a alguien que podría estar suspendido).
 - El suspendido sigue siendo miembro de sus servidores y no se le cambia el rol.
-  Reactivar levanta todo con el siguiente evento.
+  En `GET /v1/servers/{id}/members` (y en el listado de miembros de un rol) sigue
+  figurando, pero con `profile: null`: no se devuelven su nombre ni su avatar
+  mientras dure la suspensión. Reactivar levanta todo con el siguiente evento.
 - Rutas públicas (`/livez`, `/readyz`, íconos y banners) no se ven afectadas.
 
 ## Endpoints

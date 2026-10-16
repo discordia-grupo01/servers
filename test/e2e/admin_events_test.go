@@ -20,6 +20,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/handler"
 	"github.com/discordia-grupo01/servers/internal/iconstore"
 	"github.com/discordia-grupo01/servers/internal/middleware"
+	"github.com/discordia-grupo01/servers/internal/model"
 	"github.com/discordia-grupo01/servers/internal/repository"
 	"github.com/discordia-grupo01/servers/internal/repository/category_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/channel_repo"
@@ -30,6 +31,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/repository/user_profile_repo"
 	"github.com/discordia-grupo01/servers/internal/service"
 	"github.com/discordia-grupo01/servers/internal/service/channel_service"
+	"github.com/discordia-grupo01/servers/internal/service/membership_service"
 )
 
 const adminSecret = "e2e-admin-secret"
@@ -265,6 +267,7 @@ func TestAdminEvents_SuspendedUserIsRejectedAndVoiceAccessDenied(t *testing.T) {
 	router := handler.NewRouter(handler.Deps{
 		Servers:         service.New(serverRepo, icons, memberRepo, channelPermRepo),
 		Icons:           icons,
+		Membership:      membership_service.New(serverRepo, memberRepo),
 		VoiceAccess:     channel_service.New(serverRepo, categoryRepo, channelRepo, memberRepo, channelPermRepo, moderationRepo, user_profile_repo.NewUserProfileRepository(pool)),
 		Auth:            middleware.AuthConfig{UserIDHeader: "X-User-Id"},
 		RejectSuspended: guard.RejectSuspended(),
@@ -277,6 +280,7 @@ func TestAdminEvents_SuspendedUserIsRejectedAndVoiceAccessDenied(t *testing.T) {
 		t.Fatalf("create server status = %d body = %s", w.Code, w.Body.String())
 	}
 	var srv struct {
+		ID       string `json:"id"`
 		Channels []struct {
 			ID   string `json:"id"`
 			Kind string `json:"kind"`
@@ -334,4 +338,42 @@ func TestAdminEvents_SuspendedUserIsRejectedAndVoiceAccessDenied(t *testing.T) {
 
 	publishAdmin(t, ch, admin.RoutingKeyUserReactivated, reactivate(adminSecret, owner, 2))
 	assertSuspended(false)
+
+	// A suspended member stays in GET /members but without their own profile.
+	other := uuid.NewString()
+	for _, q := range []string{
+		`INSERT INTO server_members (server_id, user_id, is_owner, joined_at) VALUES ('` + srv.ID + `', '` + other + `', FALSE, now())`,
+		`INSERT INTO user_profiles (user_id, name, version) VALUES ('` + other + `', 'Other', 1), ('` + owner + `', 'Owner', 1)`,
+	} {
+		if _, err := pool.Exec(ctx, q); err != nil {
+			t.Fatalf("seed %q: %v", q, err)
+		}
+	}
+	profileOf := func() map[string]*model.MemberProfileResponse {
+		w := doAsUser(t, router, http.MethodGet, "/v1/servers/"+srv.ID+"/members", owner)
+		if w.Code != http.StatusOK {
+			t.Fatalf("GET /members = %d body = %s", w.Code, w.Body.String())
+		}
+		var resp model.MemberListResponse
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("decode members: %v", err)
+		}
+		out := map[string]*model.MemberProfileResponse{}
+		for _, m := range resp.Members {
+			out[m.UserID] = m.Profile
+		}
+		return out
+	}
+	if p := profileOf(); p[other] == nil || p[other].Name != "Other" {
+		t.Fatalf("before suspension profiles = %+v, want Other's profile", p)
+	}
+	publishAdmin(t, ch, admin.RoutingKeyUserSuspended, suspend(adminSecret, other, 1))
+	waitForSuspension(t, pool, other, true, 1)
+	p := profileOf()
+	if _, listed := p[other]; !listed || p[other] != nil {
+		t.Errorf("suspended member: listed=%v profile=%+v, want listed with a null profile", listed, p[other])
+	}
+	if p[owner] == nil || p[owner].Name != "Owner" {
+		t.Errorf("owner profile = %+v, want it untouched", p[owner])
+	}
 }

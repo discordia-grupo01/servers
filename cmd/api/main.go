@@ -43,6 +43,7 @@ import (
 // @version      1.0.0
 // @description  Servers service: servers, channels, categories, roles, member roles, membership, invitations, ownership transfer, mentions.
 // @description  All /v1/** routes require identity: the JWT is validated by Kong at the gateway, and this service takes the user id from the X-User-Id header (or from the "sub" claim of the token Kong forwards).
+// @description  A user suspended at platform level gets 403 with details.error_code ACCOUNT_SUSPENDED on every /v1/** route (including GET /v1/channels/{channelId}/voice-access) until reactivated.
 // @BasePath     /
 // @securityDefinitions.apikey  BearerAuth
 // @in                          header
