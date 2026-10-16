@@ -52,7 +52,7 @@ func (h *Handler) LeaveServer(c *gin.Context) {
 
 // ListMembers godoc
 // @Summary      List a server's members
-// @Description  Caller must already be a member. Paginated. Each member carries their public profile (name, avatar, description, status), replicated from identify; profile is null until it has been replicated, and may lag a few seconds behind a profile edit. muted_until is when the member's active mute ends, or null if they aren't muted (an expired mute counts as not muted).
+// @Description  Caller must already be a member. Paginated. Each member carries their public profile (name, avatar, description, status), replicated from identify; profile is null until it has been replicated, and may lag a few seconds behind a profile edit. A member suspended at platform level stays in the list but with a null profile (no name or avatar of their own) until reactivated. muted_until is when the member's active mute ends, or null if they aren't muted (an expired mute counts as not muted).
 // @Tags         membership
 // @Produce      json
 // @Security     BearerAuth
@@ -62,7 +62,7 @@ func (h *Handler) LeaveServer(c *gin.Context) {
 // @Success      200  {object}  model.MemberListResponse
 // @Failure      400  {object}  apierr.ErrorResponse  "invalid limit/offset"
 // @Failure      401  {object}  apierr.ErrorResponse
-// @Failure      403  {object}  apierr.ErrorResponse  "caller is not a member"
+// @Failure      403  {object}  apierr.ErrorResponse  "caller is not a member, or the caller's account is suspended (details.error_code ACCOUNT_SUSPENDED)"
 // @Failure      404  {object}  apierr.ErrorResponse
 // @Router       /v1/servers/{serverId}/members [get]
 func (h *Handler) ListMembers(c *gin.Context) {

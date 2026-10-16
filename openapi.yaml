@@ -6,6 +6,8 @@ info:
     membership, invitations, ownership transfer, mentions.
 
     All /v1/** routes require identity: the JWT is validated by Kong at the gateway, and this service takes the user id from the X-User-Id header (or from the "sub" claim of the token Kong forwards).
+
+    A user suspended at platform level gets 403 with details.error_code ACCOUNT_SUSPENDED on every /v1/** route (including GET /v1/channels/{channelId}/voice-access) until reactivated.
   title: Discordia - Servers
   version: 1.0.0
 paths:
@@ -1787,9 +1789,11 @@ paths:
       description: Caller must already be a member. Paginated. Each member carries
         their public profile (name, avatar, description, status), replicated
         from identify; profile is null until it has been replicated, and may lag
-        a few seconds behind a profile edit. muted_until is when the member's
-        active mute ends, or null if they aren't muted (an expired mute counts
-        as not muted).
+        a few seconds behind a profile edit. A member suspended at platform
+        level stays in the list but with a null profile (no name or avatar of
+        their own) until reactivated. muted_until is when the member's active
+        mute ends, or null if they aren't muted (an expired mute counts as not
+        muted).
       parameters:
         - description: Server ID
           in: path
@@ -1829,7 +1833,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "403":
-          description: caller is not a member
+          description: caller is not a member, or the caller's account is suspended
+            (details.error_code ACCOUNT_SUSPENDED)
           content:
             application/json:
               schema:
@@ -2965,7 +2970,9 @@ components:
             Profile is null while the member's profile hasn't been replicated
             from
 
-            identify yet; clients can fall back to GET /v1/users/{id} then.
+            identify yet; clients can fall back to GET /v1/users/{id} then. It is also
+
+            null for a member suspended at platform level, who stays listed.
         user_id:
           type: string
       type: object

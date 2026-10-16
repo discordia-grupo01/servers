@@ -18,6 +18,7 @@ import (
 	"github.com/discordia-grupo01/events-contract/membership"
 	moderationevents "github.com/discordia-grupo01/events-contract/moderation"
 	"github.com/discordia-grupo01/events-contract/permissions"
+	"github.com/discordia-grupo01/events-contract/servers"
 	"github.com/discordia-grupo01/servers/internal/model"
 	"github.com/discordia-grupo01/servers/internal/model/channelperm"
 	"github.com/discordia-grupo01/servers/internal/model/moderation"
@@ -103,6 +104,7 @@ func (w world) revoked(ctx context.Context, t *testing.T, also ...string) map[uu
 		permissions.RoutingKeyMemberRolesUpdated,
 		permissions.RoutingKeyChannelOverridesUpdated,
 		permissions.RoutingKeyOwnerUpdated,
+		servers.RoutingKeyServerUpdated,
 	}, also...)
 	rows, err := w.pool.Query(ctx, `SELECT routing_key, payload FROM outbox_events WHERE NOT routing_key = ANY($1)`, ignored)
 	if err != nil {

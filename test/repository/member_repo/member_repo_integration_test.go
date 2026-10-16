@@ -61,6 +61,7 @@ func newRepo(t *testing.T) (*member_repo.MemberRepository, *repository.ServerRep
 		"../../../migrations/0019_everyone_role.up.sql",
 		"../../../migrations/0020_channel_permission_overrides.up.sql",
 		"../../../migrations/0021_server_mutes.up.sql",
+		"../../../migrations/0027_suspended_users.up.sql",
 	} {
 		schema, err := os.ReadFile(file)
 		if err != nil {
@@ -397,7 +398,7 @@ func TestMemberRepo_ListMembers_ReportsOwnerFlag(t *testing.T) {
 // packages might have created, so a test run leaves the database exactly as
 // clean as it found it -- both before it starts and after it finishes.
 func dropAllTestTables(ctx context.Context, pool *pgxpool.Pool) {
-	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS channel_permission_overrides, categories, user_profiles, outbox_events, member_roles, roles, server_mutes, server_bans, invitations, server_members, channels, servers CASCADE`)
+	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS channel_permission_overrides, categories, user_profiles, suspended_users, outbox_events, member_roles, roles, server_mutes, server_bans, invitations, server_members, channels, servers CASCADE`)
 }
 
 func env(k, def string) string {
@@ -442,6 +443,79 @@ func TestMemberRepo_ListMembers_JoinsReplicatedProfiles(t *testing.T) {
 			if m.Profile != nil {
 				t.Errorf("owner Profile = %+v, want nil (not replicated)", *m.Profile)
 			}
+		}
+	}
+}
+
+func seedProfile(ctx context.Context, t *testing.T, pool *pgxpool.Pool, user, name string) {
+	t.Helper()
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO user_profiles (user_id, name, avatar_url, description, status_text, status_emoji, version)
+		VALUES ($1, $2, 'https://cdn/'||$2||'.png', 'hola', 'jugando', 'x', 1)`, user, name,
+	); err != nil {
+		t.Fatalf("seed profile: %v", err)
+	}
+}
+
+func setSuspended(ctx context.Context, t *testing.T, pool *pgxpool.Pool, user string, suspended bool, version int64) {
+	t.Helper()
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO suspended_users (user_id, suspended, version) VALUES ($1, $2, $3)
+		ON CONFLICT (user_id) DO UPDATE SET suspended = EXCLUDED.suspended, version = EXCLUDED.version`,
+		user, suspended, version,
+	); err != nil {
+		t.Fatalf("set suspended: %v", err)
+	}
+}
+
+// A suspended member stays in the list (and in the total) but their own name
+// and avatar are not returned; everyone else keeps their profile.
+func TestMemberRepo_ListMembers_SuspendedMemberHasNoProfile(t *testing.T) {
+	members, servers, _, pool := newRepo(t)
+	ctx := context.Background()
+	srv, member := seedServerWithMember(ctx, t, servers, pool)
+	seedProfile(ctx, t, pool, member, "Suspendido")
+	seedProfile(ctx, t, pool, srv.OwnerID, "Dueño")
+	setSuspended(ctx, t, pool, member, true, 1)
+
+	all, total, err := members.ListMembers(ctx, srv.ID, 10, 0)
+	if err != nil {
+		t.Fatalf("ListMembers error = %v", err)
+	}
+	if total != 2 || len(all) != 2 {
+		t.Fatalf("total = %d, len = %d; want 2, 2 (the suspended member stays listed)", total, len(all))
+	}
+	for _, m := range all {
+		switch m.UserID {
+		case member:
+			if m.Profile != nil {
+				t.Errorf("suspended member Profile = %+v, want nil", *m.Profile)
+			}
+		case srv.OwnerID:
+			if m.Profile == nil || m.Profile.Name != "Dueño" {
+				t.Errorf("owner Profile = %+v, want the replicated one", m.Profile)
+			}
+		}
+	}
+}
+
+// After a reactivation the row stays with suspended = FALSE, and the profile
+// comes back.
+func TestMemberRepo_ListMembers_ReactivatedMemberGetsTheProfileBack(t *testing.T) {
+	members, servers, _, pool := newRepo(t)
+	ctx := context.Background()
+	srv, member := seedServerWithMember(ctx, t, servers, pool)
+	seedProfile(ctx, t, pool, member, "Vuelve")
+	setSuspended(ctx, t, pool, member, true, 1)
+	setSuspended(ctx, t, pool, member, false, 2)
+
+	all, _, err := members.ListMembers(ctx, srv.ID, 10, 0)
+	if err != nil {
+		t.Fatalf("ListMembers error = %v", err)
+	}
+	for _, m := range all {
+		if m.UserID == member && (m.Profile == nil || m.Profile.Name != "Vuelve") {
+			t.Errorf("reactivated member Profile = %+v, want the replicated one", m.Profile)
 		}
 	}
 }

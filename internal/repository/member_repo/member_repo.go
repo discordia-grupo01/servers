@@ -91,7 +91,9 @@ func (r *MemberRepository) AssignRole(ctx context.Context, serverID uuid.UUID, u
 // (oldest first, user_id as a tie-breaker), along with the total member
 // count so the caller can render pagination. Each member carries their
 // replicated public profile, or a nil Profile if it hasn't arrived yet, and
-// when their active mute ends, if they have one.
+// when their active mute ends, if they have one. A platform-suspended member
+// is still listed but with a nil Profile: their own name and avatar are not
+// shown while the suspension lasts.
 func (r *MemberRepository) ListMembers(ctx context.Context, serverID uuid.UUID, limit, offset int) ([]model.Member, int, error) {
 	return r.listMembers(ctx, serverID, nil, limit, offset)
 }
@@ -119,7 +121,8 @@ func (r *MemberRepository) listMembers(ctx context.Context, serverID uuid.UUID, 
 		SELECT sm.user_id, sm.is_owner, sm.joined_at, mu.until_at,
 		       p.user_id, p.name, p.avatar_url, p.description, p.status_text, p.status_emoji, p.version
 		  FROM server_members sm
-		  LEFT JOIN user_profiles p ON p.user_id = sm.user_id
+		  LEFT JOIN suspended_users su ON su.user_id = sm.user_id AND su.suspended
+		  LEFT JOIN user_profiles p ON p.user_id = sm.user_id AND su.user_id IS NULL
 		  LEFT JOIN server_mutes mu
 		    ON mu.server_id = sm.server_id AND mu.user_id = sm.user_id AND mu.until_at > now()
 		 WHERE sm.server_id = $1 AND `+holdsRole+`

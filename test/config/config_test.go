@@ -13,6 +13,9 @@ func setDB(t *testing.T) {
 	t.Setenv("DATABASE_NAME", "svc")
 	t.Setenv("DATABASE_USER", "u")
 	t.Setenv("DATABASE_PASSWORD", "p")
+	// CI exports RABBITMQ_URL for the integration tests; Load would then
+	// demand ADMIN_EVENTS_HMAC_SECRET too.
+	t.Setenv("RABBITMQ_URL", "")
 }
 
 func TestLoad_OK(t *testing.T) {
@@ -66,5 +69,37 @@ func TestLoad_InvalidIconMaxBytesFallsBackToDefault(t *testing.T) {
 	c, _ := config.Load()
 	if c.IconMaxBytes != 5*1024*1024 {
 		t.Errorf("IconMaxBytes = %d", c.IconMaxBytes)
+	}
+}
+
+func TestLoad_RabbitMQWithoutAdminSecretFails(t *testing.T) {
+	setDB(t)
+	t.Setenv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
+	t.Setenv("ADMIN_EVENTS_HMAC_SECRET", "")
+	_, err := config.Load()
+	if err == nil || !strings.Contains(err.Error(), "ADMIN_EVENTS_HMAC_SECRET") {
+		t.Fatalf("expected error mentioning ADMIN_EVENTS_HMAC_SECRET, got: %v", err)
+	}
+}
+
+func TestLoad_RabbitMQWithAdminSecret(t *testing.T) {
+	setDB(t)
+	t.Setenv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
+	t.Setenv("ADMIN_EVENTS_HMAC_SECRET", "s3cret")
+	c, err := config.Load()
+	if err != nil {
+		t.Fatalf("err = %v", err)
+	}
+	if c.AdminEventsHMACSecret != "s3cret" {
+		t.Errorf("AdminEventsHMACSecret = %q", c.AdminEventsHMACSecret)
+	}
+}
+
+func TestLoad_NoRabbitMQDoesNotNeedAdminSecret(t *testing.T) {
+	setDB(t)
+	t.Setenv("RABBITMQ_URL", "")
+	t.Setenv("ADMIN_EVENTS_HMAC_SECRET", "")
+	if _, err := config.Load(); err != nil {
+		t.Fatalf("err = %v", err)
 	}
 }

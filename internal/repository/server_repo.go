@@ -95,6 +95,9 @@ func (r *ServerRepository) CreateServer(ctx context.Context, srv model.Server, c
 		if err := PublishOwner(ctx, tx, srv.ID, srv.OwnerID); err != nil {
 			return err
 		}
+		if err := PublishServerUpdated(ctx, tx, srv.ID); err != nil {
+			return err
+		}
 		if err := PublishRoleUpdated(ctx, tx, everyoneRoleID); err != nil {
 			return err
 		}
@@ -272,23 +275,37 @@ func (r *ServerRepository) ListForUser(ctx context.Context, userID string) ([]mo
 	return servers, nil
 }
 
+// UpdateServer rewrites the server's editable fields. The previous name is
+// read under a row lock, in the same transaction as the UPDATE, so
+// servers.server_updated is written to the outbox atomically and only when the
+// name actually changed -- an icon or banner change publishes nothing.
 func (r *ServerRepository) UpdateServer(ctx context.Context, id uuid.UUID, name, nameKey string, iconURL, bannerURL *string) error {
-	tag, err := r.pool.Exec(ctx, `
-		UPDATE servers SET name = $1, name_key = $2, icon_url = $3, banner_url = $4
-		 WHERE id = $5`,
-		name, nameKey, iconURL, bannerURL, id,
-	)
-	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgUniqueViolation && pgErr.ConstraintName == "uq_servers_owner_name_key" {
-			return model.ErrNameTaken
+	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+		var previousName string
+		if err := tx.QueryRow(ctx, `SELECT name FROM servers WHERE id = $1 FOR UPDATE`, id).Scan(&previousName); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return model.ErrServerNotFound
+			}
+			return fmt.Errorf("lock server: %w", err)
 		}
-		return fmt.Errorf("update server: %w", err)
-	}
-	if tag.RowsAffected() == 0 {
-		return model.ErrServerNotFound
-	}
-	return nil
+
+		if _, err := tx.Exec(ctx, `
+			UPDATE servers SET name = $1, name_key = $2, icon_url = $3, banner_url = $4
+			 WHERE id = $5`,
+			name, nameKey, iconURL, bannerURL, id,
+		); err != nil {
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) && pgErr.Code == pgUniqueViolation && pgErr.ConstraintName == "uq_servers_owner_name_key" {
+				return model.ErrNameTaken
+			}
+			return fmt.Errorf("update server: %w", err)
+		}
+
+		if name == previousName {
+			return nil
+		}
+		return PublishServerUpdated(ctx, tx, id)
+	})
 }
 
 func (r *ServerRepository) SetDefaultRole(ctx context.Context, serverID, roleID uuid.UUID) error {

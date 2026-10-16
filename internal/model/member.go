@@ -27,7 +27,8 @@ type MemberResponse struct {
 	IsOwner  bool      `json:"is_owner"`
 	JoinedAt time.Time `json:"joined_at"`
 	// Profile is null while the member's profile hasn't been replicated from
-	// identify yet; clients can fall back to GET /v1/users/{id} then.
+	// identify yet; clients can fall back to GET /v1/users/{id} then. It is also
+	// null for a member suspended at platform level, who stays listed.
 	Profile *MemberProfileResponse `json:"profile"`
 	// MutedUntil is when the member's mute ends (they can't send messages or
 	// speak until then), null if they aren't muted.
