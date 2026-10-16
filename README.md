@@ -58,6 +58,7 @@ Con `docker compose up` se levanta también el servicio (`api`) contra la base.
 | SUPABASE_STORAGE_BUCKET | - (vacio) | Nombre del bucket de Storage. |
 | SUPABASE_SERVICE_KEY | - (vacio) | `service_role` key del proyecto (Project Settings > API) -- nunca la `anon` key, esta se salta las políticas RLS del bucket. |
 | RABBITMQ_URL | - (vacio) | Conexion al broker para publicar eventos de dominio y consumir `users.profile_updated` (exchange `discordia.events`, ver ADR-07). Vacia = publisher en no-op y sin réplica de perfiles (`profile: null` en `GET /members`); el servicio funciona igual sin RabbitMQ. |
+| ADMIN_EVENTS_HMAC_SECRET | - (vacio) | Secreto compartido con `discordia-admin` para verificar la firma HMAC de `admin.user_suspended` / `admin.user_reactivated`. **Obligatoria si `RABBITMQ_URL` está seteada** (si falta, el servicio no arranca); sin RabbitMQ no se aplican suspensiones. Los eventos sin firma o con firma inválida se descartan con un `warn` y no cambian ningún estado. |
 
 Publicar un evento nunca pasa directo por RabbitMQ desde el request: el
 handler escribe una fila en `outbox_events` en la misma transacción que el
@@ -417,6 +418,7 @@ Eventos que publica el servicio (exchange `discordia.events`, contratos en
 `servers.channel_deleted`, `servers.channel_access_revoked`,
 `servers.server_deleted`, `servers.member_muted`, `servers.member_unmuted` y
 `servers.word_filter_updated`,
+`servers.server_updated`,
 más cinco **fotos completas** con las que `messaging` arma su réplica de
 permisos y decide sin llamar acá (ADR 0003):
 
@@ -427,6 +429,14 @@ permisos y decide sin llamar acá (ADR 0003):
 | `servers.role_deleted` | se borra un rol (el consumidor lo saca de miembros y overrides) |
 | `servers.member_roles_updated` | alguien se une (creando el servidor o por invitación) o se le asigna o quita un rol: todos sus roles, `@everyone` incluido |
 | `servers.channel_overrides_updated` | se crea, edita o borra un override: todos los overrides del canal (lista vacía si no queda ninguno) |
+
+Además, `servers.server_updated` (`server_id`, `name`, `owner_id`, `created_at`)
+es la foto del servidor que `admin` usa para su listado de servidores: se
+publica al crear el servidor, al cambiarle el nombre y al aceptar una
+transferencia de propiedad (cambiar solo el ícono o el banner no la publica).
+No lleva `version`: `admin` se queda con la de `occurred_at` más nuevo. La
+migración `0026_backfill_server_updated` la publica para todos los servidores
+ya existentes y se puede repetir sin riesgo.
 
 Cada foto se escribe en el outbox en la **misma transacción** que el cambio
 (`repository/access_events.go`) y lleva el estado ya escrito, así que un
@@ -468,6 +478,32 @@ y recibe qué menciones valen y a quién notificar:
   `400` si es de otro). Hoy `VIEW_CHANNELS` es a nivel servidor, así que el
   canal no cambia quién lo ve; se pide igual para que el día que haya permisos
   por canal solo cambie la query.
+
+## Usuarios suspendidos
+
+`discordia-admin` suspende y reactiva cuentas con `admin.user_suspended` y
+`admin.user_reactivated` (firmados con `ADMIN_EVENTS_HMAC_SECRET`). El consumidor
+(`internal/events/admin_consumer`, cola `servers.admin_events`) los guarda en
+`suspended_users` solo si traen una `version` mayor a la guardada. El middleware
+`RejectSuspended`, que corre después de `Auth` en todo `/v1` autenticado, responde
+`403` a cualquier request de un suspendido, con el formato de error habitual y el
+motivo en `details.error_code`:
+
+```json
+{ "error": { "code": 403, "message": "account suspended", "details": { "error_code": "ACCOUNT_SUSPENDED" } } }
+```
+
+- Incluye `GET /v1/channels/{id}/voice-access`, que el servicio de voz usa para
+  autorizar el token: así la entrada a voz queda bloqueada sin tocar ese servicio.
+- El estado se cachea en memoria 5 segundos por usuario; la instancia que aplica
+  el evento invalida la entrada al instante, las demás se enteran dentro de esa
+  ventana. Si la base no responde, el request se rechaza con `503` (no se deja
+  pasar a alguien que podría estar suspendido).
+- El suspendido sigue siendo miembro de sus servidores y no se le cambia el rol.
+  En `GET /v1/servers/{id}/members` (y en el listado de miembros de un rol) sigue
+  figurando, pero con `profile: null`: no se devuelven su nombre ni su avatar
+  mientras dure la suspensión. Reactivar levanta todo con el siguiente evento.
+- Rutas públicas (`/livez`, `/readyz`, íconos y banners) no se ven afectadas.
 
 ## Endpoints
 Ver [`openapi.yaml`](openapi.yaml) -- **generado automáticamente y actualizado

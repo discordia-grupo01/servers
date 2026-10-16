@@ -439,3 +439,91 @@ func env(k, def string) string {
 	}
 	return def
 }
+
+func countServerUpdated(ctx context.Context, t *testing.T, pool *pgxpool.Pool, serverID uuid.UUID) int {
+	t.Helper()
+	var n int
+	err := pool.QueryRow(ctx, `
+		SELECT count(*) FROM outbox_events
+		 WHERE routing_key = 'servers.server_updated' AND payload->>'server_id' = $1`, serverID.String(),
+	).Scan(&n)
+	if err != nil {
+		t.Fatalf("count server_updated: %v", err)
+	}
+	return n
+}
+
+func TestRepo_UpdateServer_RenamePublishesServerUpdatedWithTheNewName(t *testing.T) {
+	repo, pool := newRepo(t)
+	ctx := context.Background()
+	srv, chans := serverFixture("Before Rename", "owner-"+uuid.NewString())
+	if err := repo.CreateServer(ctx, srv, nil, chans, nil); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if got := countServerUpdated(ctx, t, pool, srv.ID); got != 1 {
+		t.Fatalf("server_updated after create = %d, want 1", got)
+	}
+
+	if err := repo.UpdateServer(ctx, srv.ID, "After Rename", "after rename", srv.IconURL, nil); err != nil {
+		t.Fatalf("UpdateServer: %v", err)
+	}
+
+	if got := countServerUpdated(ctx, t, pool, srv.ID); got != 2 {
+		t.Fatalf("server_updated after rename = %d, want 2", got)
+	}
+	var name, owner string
+	err := pool.QueryRow(ctx, `
+		SELECT payload->>'name', payload->>'owner_id' FROM outbox_events
+		 WHERE routing_key = 'servers.server_updated' AND payload->>'server_id' = $1
+		 ORDER BY created_at DESC, (payload->>'occurred_at') DESC LIMIT 1`, srv.ID.String(),
+	).Scan(&name, &owner)
+	if err != nil {
+		t.Fatalf("read event: %v", err)
+	}
+	if name != "After Rename" || owner != srv.OwnerID {
+		t.Errorf("event name/owner = %q/%q, want After Rename/%s", name, owner, srv.OwnerID)
+	}
+}
+
+func TestRepo_UpdateServer_OnlyIconOrBannerPublishesNothing(t *testing.T) {
+	repo, pool := newRepo(t)
+	ctx := context.Background()
+	srv, chans := serverFixture("Same Name", "owner-"+uuid.NewString())
+	if err := repo.CreateServer(ctx, srv, nil, chans, nil); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	iconURL, bannerURL := "/v1/servers/"+srv.ID.String()+"/icon", "/v1/servers/"+srv.ID.String()+"/banner"
+
+	if err := repo.UpdateServer(ctx, srv.ID, srv.Name, srv.NameKey, &iconURL, &bannerURL); err != nil {
+		t.Fatalf("UpdateServer: %v", err)
+	}
+
+	if got := countServerUpdated(ctx, t, pool, srv.ID); got != 1 {
+		t.Errorf("server_updated = %d, want only the one from creation", got)
+	}
+}
+
+func TestRepo_UpdateServer_NameTaken_PublishesNothing(t *testing.T) {
+	repo, pool := newRepo(t)
+	ctx := context.Background()
+	owner := "owner-" + uuid.NewString()
+	a, aCh := serverFixture("Server A", owner)
+	b, bCh := serverFixture("Server B", owner)
+	for _, s := range []struct {
+		srv   model.Server
+		chans []model.Channel
+	}{{a, aCh}, {b, bCh}} {
+		if err := repo.CreateServer(ctx, s.srv, nil, s.chans, nil); err != nil {
+			t.Fatalf("create: %v", err)
+		}
+	}
+
+	err := repo.UpdateServer(ctx, b.ID, "Server A", a.NameKey, b.IconURL, nil)
+	if !errors.Is(err, model.ErrNameTaken) {
+		t.Fatalf("err = %v, want ErrNameTaken", err)
+	}
+
+	if got := countServerUpdated(ctx, t, pool, b.ID); got != 1 {
+		t.Errorf("server_updated = %d, want only the one from creation", got)
+	}
+}

@@ -8,6 +8,7 @@ import (
 
 	"github.com/discordia-grupo01/servers/internal/config"
 	"github.com/discordia-grupo01/servers/internal/events"
+	"github.com/discordia-grupo01/servers/internal/events/admin_consumer"
 	"github.com/discordia-grupo01/servers/internal/events/profile_consumer"
 	"github.com/discordia-grupo01/servers/internal/handler"
 	"github.com/discordia-grupo01/servers/internal/iconstore"
@@ -21,6 +22,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/repository/moderation_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/ownership_transfer_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/role_repo"
+	"github.com/discordia-grupo01/servers/internal/repository/suspension_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/user_profile_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/word_filter_repo"
 	"github.com/discordia-grupo01/servers/internal/service"
@@ -41,6 +43,7 @@ import (
 // @version      1.0.0
 // @description  Servers service: servers, channels, categories, roles, member roles, membership, invitations, ownership transfer, mentions.
 // @description  All /v1/** routes require identity: the JWT is validated by Kong at the gateway, and this service takes the user id from the X-User-Id header (or from the "sub" claim of the token Kong forwards).
+// @description  A user suspended at platform level gets 403 with details.error_code ACCOUNT_SUSPENDED on every /v1/** route (including GET /v1/channels/{channelId}/voice-access) until reactivated.
 // @BasePath     /
 // @securityDefinitions.apikey  BearerAuth
 // @in                          header
@@ -96,10 +99,14 @@ func main() {
 	transferSvc := ownership_transfer_service.New(serverRepo, memberRepo, transferRepo)
 	go ownership_transfer_service.NewExpirer(transferRepo).Start(ctx)
 	go outbox.NewPoller(pool, publisher).Start(ctx)
+	suspensionRepo := suspension_repo.NewSuspensionRepository(pool)
+	suspensionGuard := middleware.NewSuspensionGuard(suspensionRepo, middleware.DefaultSuspensionCacheTTL)
 	if cfg.RabbitMQURL != "" {
 		go profile_consumer.New(cfg.RabbitMQURL, user_profile_repo.NewUserProfileRepository(pool)).Start(ctx)
+		go admin_consumer.New(cfg.RabbitMQURL, cfg.AdminEventsHMACSecret, admin_consumer.WithInvalidation(suspensionRepo, suspensionGuard)).Start(ctx)
 	} else {
 		log.Printf("profile_consumer: RABBITMQ_URL not set, member profiles won't be replicated")
+		log.Printf("admin_consumer: RABBITMQ_URL not set, platform suspensions won't be applied")
 	}
 	invSvc := invitation.NewService(repository.NewInvitationRepository(pool), serverRepo, memberRepo)
 	categorySvc := category_service.New(serverRepo, categoryRepo, memberRepo)
@@ -126,6 +133,7 @@ func main() {
 		VoiceAccess:        channelSvc,
 		Mentions:           mentionSvc,
 		Auth:               middleware.AuthConfig{UserIDHeader: cfg.UserIDHeader},
+		RejectSuspended:    suspensionGuard.RejectSuspended(),
 		DB:                 pool,
 	})
 

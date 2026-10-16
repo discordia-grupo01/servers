@@ -42,6 +42,7 @@ type Deps struct {
 	VoiceAccess        voice_access_handler.UseCases
 	Mentions           mention_handler.UseCases
 	Auth               middleware.AuthConfig
+	RejectSuspended    gin.HandlerFunc // after Auth on every authenticated route; optional
 	DB                 Pinger
 }
 
@@ -81,6 +82,9 @@ func NewRouter(d Deps) *gin.Engine {
 
 	v1 := r.Group("/v1")
 	v1.Use(middleware.Auth(d.Auth))
+	if d.RejectSuspended != nil {
+		v1.Use(d.RejectSuspended)
+	}
 	v1.POST("/servers", h.createServer)
 	v1.GET("/servers", h.listMyServers)
 	v1.GET("/servers/:serverId", h.getServer)
