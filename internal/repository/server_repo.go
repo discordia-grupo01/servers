@@ -95,6 +95,9 @@ func (r *ServerRepository) CreateServer(ctx context.Context, srv model.Server, c
 		if err := PublishOwner(ctx, tx, srv.ID, srv.OwnerID); err != nil {
 			return err
 		}
+		if err := PublishServerUpdated(ctx, tx, srv.ID); err != nil {
+			return err
+		}
 		if err := PublishRoleUpdated(ctx, tx, everyoneRoleID); err != nil {
 			return err
 		}

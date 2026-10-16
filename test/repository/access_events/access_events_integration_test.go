@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/discordia-grupo01/events-contract/permissions"
+	"github.com/discordia-grupo01/events-contract/servers"
 	"github.com/discordia-grupo01/servers/internal/model"
 	"github.com/discordia-grupo01/servers/internal/model/channelperm"
 	"github.com/discordia-grupo01/servers/internal/model/role"
@@ -344,6 +345,46 @@ func TestAcceptTransfer_PublishesTheNewOwner(t *testing.T) {
 	w.expectOne(ctx, t, permissions.RoutingKeyOwnerUpdated, map[string]any{"owner_id": "member-1"})
 }
 
+func TestAcceptTransfer_PublishesServerUpdatedWithTheNewOwner(t *testing.T) {
+	ctx := context.Background()
+	w := seedWorld(ctx, t)
+	transfer := model.OwnershipTransfer{
+		ID: uuid.New(), ServerID: w.serverID, FromUserID: owner, ToUserID: "member-1",
+		Status: model.OwnershipTransferPending, CreatedAt: time.Now().UTC(),
+	}
+	if err := w.transfers.Create(ctx, transfer); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	w.clearOutbox(ctx, t)
+
+	if _, err := w.transfers.Accept(ctx, transfer.ID, time.Now().UTC()); err != nil {
+		t.Fatalf("Accept: %v", err)
+	}
+
+	w.expectOne(ctx, t, servers.RoutingKeyServerUpdated, map[string]any{
+		"name": "Server", "owner_id": "member-1",
+	})
+}
+
+func TestRejectTransfer_DoesNotPublishServerUpdated(t *testing.T) {
+	ctx := context.Background()
+	w := seedWorld(ctx, t)
+	transfer := model.OwnershipTransfer{
+		ID: uuid.New(), ServerID: w.serverID, FromUserID: owner, ToUserID: "member-1",
+		Status: model.OwnershipTransferPending, CreatedAt: time.Now().UTC(),
+	}
+	if err := w.transfers.Create(ctx, transfer); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	w.clearOutbox(ctx, t)
+
+	if _, err := w.transfers.Reject(ctx, transfer.ID, time.Now().UTC()); err != nil {
+		t.Fatalf("Reject: %v", err)
+	}
+
+	w.expectNone(ctx, t, servers.RoutingKeyServerUpdated)
+}
+
 func TestRedeemInvitation_PublishesTheRolesOfTheNewMember(t *testing.T) {
 	ctx := context.Background()
 	w := seedWorld(ctx, t)
@@ -412,6 +453,40 @@ func TestCreateServer_PublishesOwnerEveryoneRoleAndOwnerRoles(t *testing.T) {
 				t.Errorf("member roles = %v", evt)
 			}
 		}
+	}
+}
+
+func TestCreateServer_PublishesServerUpdatedSnapshot(t *testing.T) {
+	ctx := context.Background()
+	w := seedWorld(ctx, t)
+	w.clearOutbox(ctx, t)
+
+	srv := model.Server{
+		ID: uuid.New(), Name: "Fresh", NameKey: "fresh-" + uuid.NewString(), OwnerID: "creator",
+		CreatedAt: time.Now().UTC().Truncate(time.Millisecond),
+	}
+	if err := w.servers.CreateServer(ctx, srv, nil, nil, nil); err != nil {
+		t.Fatalf("CreateServer: %v", err)
+	}
+
+	var payload []byte
+	if err := w.pool.QueryRow(ctx,
+		`SELECT payload FROM outbox_events WHERE routing_key = $1`, servers.RoutingKeyServerUpdated,
+	).Scan(&payload); err != nil {
+		t.Fatalf("%s not published: %v", servers.RoutingKeyServerUpdated, err)
+	}
+	var got servers.ServerUpdated
+	if err := json.Unmarshal(payload, &got); err != nil {
+		t.Fatalf("decode %s: %v", payload, err)
+	}
+	if got.ServerID != srv.ID.String() || got.Name != "Fresh" || got.OwnerID != "creator" {
+		t.Errorf("event = %+v, want server %s named Fresh owned by creator", got, srv.ID)
+	}
+	if !got.CreatedAt.Equal(srv.CreatedAt) {
+		t.Errorf("created_at = %v, want %v", got.CreatedAt, srv.CreatedAt)
+	}
+	if got.EventID == "" || got.OccurredAt.IsZero() {
+		t.Errorf("incomplete meta: %+v", got.Meta)
 	}
 }
 

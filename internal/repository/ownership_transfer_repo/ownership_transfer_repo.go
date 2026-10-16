@@ -193,7 +193,10 @@ func (r *Repository) Accept(ctx context.Context, id uuid.UUID, resolvedAt time.T
 		if err != nil {
 			return err
 		}
-		return repository.PublishOwner(ctx, tx, t.ServerID, t.ToUserID)
+		if err := repository.PublishOwner(ctx, tx, t.ServerID, t.ToUserID); err != nil {
+			return err
+		}
+		return repository.PublishServerUpdated(ctx, tx, t.ServerID)
 	})
 	if err != nil {
 		return model.OwnershipTransfer{}, err
