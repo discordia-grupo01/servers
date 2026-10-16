@@ -25,6 +25,7 @@ type Repo interface {
 	CreateServer(ctx context.Context, srv model.Server, categories []model.Category, channels []model.Channel, outboxEvents []outbox.Event) error
 	ListForUser(ctx context.Context, userID string) ([]model.Server, error)
 	GetByID(ctx context.Context, id uuid.UUID) (model.Server, error)
+	IsMember(ctx context.Context, id uuid.UUID, userID string) (bool, error)
 	UpdateServer(ctx context.Context, id uuid.UUID, name, nameKey string, iconURL, bannerURL *string) error
 	IconURLs(ctx context.Context, id uuid.UUID) (iconURL, bannerURL *string, err error)
 	DeleteServer(ctx context.Context, id uuid.UUID, buildEvents func(memberIDs []string, channelIDs []uuid.UUID) ([]outbox.Event, error)) error
@@ -234,6 +235,23 @@ func (s *Service) GetServer(ctx context.Context, id uuid.UUID, userID string) (m
 	}
 	srv.Channels = visible
 	return srv, nil
+}
+
+// CheckMembership returns nil if userID owns the server or is a member of it,
+// ErrForbiddenNotMember if not and ErrServerNotFound if it doesn't exist. Unlike
+// GetServer it loads nothing else, so it is cheap enough to be polled.
+func (s *Service) CheckMembership(ctx context.Context, id uuid.UUID, userID string) error {
+	if userID == "" {
+		return model.ErrUnauthorized
+	}
+	member, err := s.repo.IsMember(ctx, id, userID)
+	if err != nil {
+		return err
+	}
+	if !member {
+		return model.ErrForbiddenNotMember
+	}
+	return nil
 }
 
 func (s *Service) GetServerImageURLs(ctx context.Context, id uuid.UUID) (iconURL, bannerURL *string, err error) {

@@ -39,6 +39,10 @@ func (fakeServerUseCases) UpdateServer(context.Context, service.UpdateServerPara
 	return model.Server{}, nil
 }
 
+func (fakeServerUseCases) CheckMembership(context.Context, uuid.UUID, string) error {
+	return nil
+}
+
 func (fakeServerUseCases) GetServerImageURLs(context.Context, uuid.UUID) (iconURL, bannerURL *string, err error) {
 	return nil, nil, nil
 }

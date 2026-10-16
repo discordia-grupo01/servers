@@ -103,3 +103,23 @@ func TestLoad_NoRabbitMQDoesNotNeedAdminSecret(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestLoad_DatabaseMaxConns_DefaultsToPgxAndCapsThePoolWhenSet(t *testing.T) {
+	setDB(t)
+	c, err := config.Load()
+	if err != nil {
+		t.Fatalf("err = %v", err)
+	}
+	if c.DatabaseMaxConns != 0 || strings.Contains(c.PostgresDSN(), "pool_max_conns") {
+		t.Errorf("unset must leave pgx's default: %+v dsn=%q", c, c.PostgresDSN())
+	}
+
+	t.Setenv("DATABASE_MAX_CONNS", "12")
+	c, err = config.Load()
+	if err != nil {
+		t.Fatalf("err = %v", err)
+	}
+	if !strings.Contains(c.PostgresDSN(), "pool_max_conns=12") {
+		t.Errorf("DSN %q missing pool_max_conns=12", c.PostgresDSN())
+	}
+}

@@ -145,6 +145,25 @@ func (r *ServerRepository) GetByID(ctx context.Context, id uuid.UUID) (model.Ser
 	return s, nil
 }
 
+// IsMember reports whether userID owns serverID or is one of its members, in a
+// single query: callers that only need that answer (the voice service polling
+// who is in a server) must not pay for the channels, categories and roles that
+// GetByID loads.
+func (r *ServerRepository) IsMember(ctx context.Context, id uuid.UUID, userID string) (bool, error) {
+	var member bool
+	err := r.pool.QueryRow(ctx, `
+		SELECT s.owner_id = $2
+		    OR EXISTS (SELECT 1 FROM server_members m WHERE m.server_id = s.id AND m.user_id = $2)
+		  FROM servers s WHERE s.id = $1`, id, userID).Scan(&member)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, model.ErrServerNotFound
+		}
+		return false, fmt.Errorf("check server membership: %w", err)
+	}
+	return member, nil
+}
+
 func (r *ServerRepository) IconURLs(ctx context.Context, id uuid.UUID) (iconURL, bannerURL *string, err error) {
 	err = r.pool.QueryRow(ctx, `
 		SELECT icon_url, banner_url FROM servers WHERE id = $1`, id,

@@ -2,6 +2,7 @@ package handler_test
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -71,5 +72,57 @@ func TestGetServer_NotAMember_ReturnsNoChannels(t *testing.T) {
 	}
 	if s := decodeServer(t, w); s.Name != "Some Server" || s.Channels == nil || len(s.Channels) != 0 {
 		t.Errorf("got = %+v, want the server with channels: []", s)
+	}
+}
+
+func TestGetMembership_NoAuth_Returns401(t *testing.T) {
+	r, _ := newRouter(t, oneMB, nil)
+	w := getAsUser(t, r, "", "/v1/servers/"+uuid.New().String()+"/membership")
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want 401", w.Code)
+	}
+}
+
+func TestGetMembership_InvalidServerID_Returns400(t *testing.T) {
+	r, _ := newRouter(t, oneMB, nil)
+	w := getAsUser(t, r, testUser, "/v1/servers/not-a-uuid/membership")
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", w.Code)
+	}
+}
+
+func TestGetMembership_Member_Returns200WithoutLoadingTheServer(t *testing.T) {
+	r, repo := newRouter(t, oneMB, nil)
+	repo.memberResult = true
+	id := uuid.New()
+
+	w := getAsUser(t, r, testUser, "/v1/servers/"+id.String()+"/membership")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", w.Code, w.Body.String())
+	}
+	if body := w.Body.String(); !strings.Contains(body, `"member":true`) || !strings.Contains(body, id.String()) {
+		t.Errorf("body = %s", body)
+	}
+	if repo.memberCalls != 1 || repo.getCalls != 0 {
+		t.Errorf("IsMember calls = %d, GetByID calls = %d, want 1 and 0", repo.memberCalls, repo.getCalls)
+	}
+}
+
+// Unlike GET /v1/servers/{id}, which shows a non-member the server with no
+// channels, this is a yes/no check: voice must not read "200" as "member".
+func TestGetMembership_NotAMember_Returns403(t *testing.T) {
+	r, _ := newRouter(t, oneMB, nil)
+	w := getAsUser(t, r, testUser, "/v1/servers/"+uuid.New().String()+"/membership")
+	if w.Code != http.StatusForbidden {
+		t.Errorf("status = %d, want 403", w.Code)
+	}
+}
+
+func TestGetMembership_UnknownServer_Returns404(t *testing.T) {
+	r, repo := newRouter(t, oneMB, nil)
+	repo.memberErr = model.ErrServerNotFound
+	w := getAsUser(t, r, testUser, "/v1/servers/"+uuid.New().String()+"/membership")
+	if w.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", w.Code)
 	}
 }

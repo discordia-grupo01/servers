@@ -34,6 +34,10 @@ type fakeRepoHelper struct {
 
 	iconURLsCalls int
 
+	memberResult bool
+	memberErr    error
+	memberCalls  int
+
 	updateErr   error
 	updateCalls int
 
@@ -104,6 +108,11 @@ func (f *fakeRepoHelper) GetByID(_ context.Context, _ uuid.UUID) (model.Server, 
 		return model.Server{}, f.getErr
 	}
 	return f.getResult, nil
+}
+
+func (f *fakeRepoHelper) IsMember(_ context.Context, _ uuid.UUID, _ string) (bool, error) {
+	f.memberCalls++
+	return f.memberResult, f.memberErr
 }
 
 func (f *fakeRepoHelper) IconURLs(_ context.Context, _ uuid.UUID) (*string, *string, error) {
