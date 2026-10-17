@@ -59,3 +59,32 @@ func TestListRoleMembers_Errors(t *testing.T) {
 		}
 	}
 }
+
+func TestListRoleMembers_PassesHasRoleAndSearch(t *testing.T) {
+	cases := map[string]struct {
+		query           string
+		wantWithoutRole bool
+		wantSearch      string
+	}{
+		"defaults to holders": {"", false, ""},
+		"has_role=false":      {"has_role=false&q=ana", true, "ana"},
+		"has_role=true":       {"has_role=true", false, ""},
+	}
+	for name, tc := range cases {
+		fake := &fakeRoleUseCases{}
+		w := doJSON(t, newRouter(t, fake), http.MethodGet, roleMembersPath(uuid.NewString(), tc.query), "mod-1", nil)
+		if w.Code != http.StatusOK {
+			t.Fatalf("%s: status=%d body=%s", name, w.Code, w.Body.String())
+		}
+		if fake.gotRoleMembers.WithoutRole != tc.wantWithoutRole || fake.gotRoleMembers.Search != tc.wantSearch {
+			t.Errorf("%s: service got %+v", name, fake.gotRoleMembers)
+		}
+	}
+}
+
+func TestListRoleMembers_InvalidHasRole_400(t *testing.T) {
+	w := doJSON(t, newRouter(t, &fakeRoleUseCases{}), http.MethodGet, roleMembersPath(uuid.NewString(), "has_role=maybe"), "mod-1", nil)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", w.Code)
+	}
+}

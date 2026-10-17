@@ -72,6 +72,19 @@ func ParseNonNegativeIntQuery(c *gin.Context, name string, def int) (int, bool) 
 	return n, true
 }
 
+func ParseBoolQuery(c *gin.Context, name string, def bool) (bool, bool) {
+	raw := c.Query(name)
+	if raw == "" {
+		return def, true
+	}
+	b, err := strconv.ParseBool(raw)
+	if err != nil {
+		RespondError(c, http.StatusBadRequest, "invalid "+name, FieldErr(name, "must_be_a_boolean"))
+		return false, false
+	}
+	return b, true
+}
+
 // WriteDomainError maps a domain error (from internal/model) to its HTTP
 // response. Unrecognized errors are logged and returned as a generic 500 so
 // driver/internal details never leak to the client.
