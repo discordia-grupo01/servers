@@ -161,7 +161,7 @@ func TestListMembers_Success_200(t *testing.T) {
 	}
 	r := newRouter(t, uc)
 
-	w := doGet(t, r, membersPath(serverID.String(), "limit=5&offset=10"), testUser)
+	w := doGet(t, r, membersPath(serverID.String(), "limit=5&offset=10&q=ana"), testUser)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", w.Code)
 	}
@@ -173,6 +173,9 @@ func TestListMembers_Success_200(t *testing.T) {
 	}
 	if uc.gotListParams.Limit != 5 || uc.gotListParams.Offset != 10 {
 		t.Errorf("Limit/Offset = %d/%d, want 5/10", uc.gotListParams.Limit, uc.gotListParams.Offset)
+	}
+	if uc.gotListParams.Search != "ana" {
+		t.Errorf("Search = %q, want ana", uc.gotListParams.Search)
 	}
 
 	resp := decodeMemberList(t, w)

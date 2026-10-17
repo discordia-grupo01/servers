@@ -730,11 +730,24 @@ paths:
       description: Requires MANAGE_ROLES (the owner and administrators hold it
         implicitly). Paginated, oldest member first, with the same shape as GET
         /v1/servers/{serverId}/members. For @everyone it lists every member.
+        With has_role=false it lists the members that do NOT hold the role
+        instead (whom it can still be assigned to; nobody for @everyone).
       parameters:
         - description: Role ID
           in: path
           name: roleId
           required: true
+          schema:
+            type: string
+        - description: false lists the members without the role
+          in: query
+          name: has_role
+          schema:
+            type: boolean
+            default: true
+        - description: Keep only members whose name contains this, ignoring case and accents
+          in: query
+          name: q
           schema:
             type: string
         - description: Page size
@@ -757,7 +770,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/model.MemberListResponse"
         "400":
-          description: invalid roleId, limit or offset
+          description: invalid roleId, has_role, limit or offset
           content:
             application/json:
               schema:
@@ -1801,12 +1814,18 @@ paths:
           required: true
           schema:
             type: string
+        - description: Keep only members whose name contains this, ignoring case and
+            accents. Members without a visible profile never match.
+          in: query
+          name: q
+          schema:
+            type: string
         - description: Page size
           in: query
           name: limit
           schema:
             type: integer
-            default: 50
+            default: 20
         - description: Items to skip
           in: query
           name: offset

@@ -323,15 +323,17 @@ func (h *Handler) DeleteRole(c *gin.Context) {
 
 // ListRoleMembers godoc
 // @Summary      List the members that hold a role
-// @Description  Requires MANAGE_ROLES (the owner and administrators hold it implicitly). Paginated, oldest member first, with the same shape as GET /v1/servers/{serverId}/members. For @everyone it lists every member.
+// @Description  Requires MANAGE_ROLES (the owner and administrators hold it implicitly). Paginated, oldest member first, with the same shape as GET /v1/servers/{serverId}/members. For @everyone it lists every member. With has_role=false it lists the members that do NOT hold the role instead (whom it can still be assigned to; nobody for @everyone).
 // @Tags         roles
 // @Produce      json
 // @Security     BearerAuth
-// @Param        roleId  path   string  true   "Role ID"
-// @Param        limit   query  int     false  "Page size" default(20)
-// @Param        offset  query  int     false  "Items to skip" default(0)
+// @Param        roleId    path   string  true   "Role ID"
+// @Param        has_role  query  bool    false  "false lists the members without the role" default(true)
+// @Param        q         query  string  false  "Keep only members whose name contains this, ignoring case and accents"
+// @Param        limit     query  int     false  "Page size" default(20)
+// @Param        offset    query  int     false  "Items to skip" default(0)
 // @Success      200  {object}  model.MemberListResponse
-// @Failure      400  {object}  apierr.ErrorResponse  "invalid roleId, limit or offset"
+// @Failure      400  {object}  apierr.ErrorResponse  "invalid roleId, has_role, limit or offset"
 // @Failure      401  {object}  apierr.ErrorResponse
 // @Failure      403  {object}  apierr.ErrorResponse  "missing MANAGE_ROLES"
 // @Failure      404  {object}  apierr.ErrorResponse  "role not found"
@@ -349,9 +351,14 @@ func (h *Handler) ListRoleMembers(c *gin.Context) {
 	if !ok {
 		return
 	}
+	hasRole, ok := apierr.ParseBoolQuery(c, "has_role", true)
+	if !ok {
+		return
+	}
 
 	members, total, err := h.uc.ListRoleMembers(c.Request.Context(), role_service.ListRoleMembersParams{
-		RoleID: roleID, UserID: middleware.UserID(c), Limit: limit, Offset: offset,
+		RoleID: roleID, UserID: middleware.UserID(c), WithoutRole: !hasRole, Search: c.Query("q"),
+		Limit: limit, Offset: offset,
 	})
 	if err != nil {
 		apierr.WriteDomainError(c, err)

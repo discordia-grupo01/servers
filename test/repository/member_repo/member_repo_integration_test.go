@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"slices"
 	"testing"
 	"time"
 
@@ -55,6 +56,7 @@ func newRepo(t *testing.T) (*member_repo.MemberRepository, *repository.ServerRep
 		"../../../migrations/0004_member_roles.up.sql",
 		"../../../migrations/0005_default_role.up.sql",
 		"../../../migrations/0007_categories.up.sql",
+		"../../../migrations/0012_category_name_key.up.sql",
 		"../../../migrations/0011_outbox_events.up.sql",
 		"../../../migrations/0015_role_positions.up.sql",
 		"../../../migrations/0017_user_profiles.up.sql",
@@ -342,7 +344,7 @@ func TestMemberRepo_ListMembers_PaginatesAndReportsTotal(t *testing.T) {
 		t.Fatalf("seed second member: %v", err)
 	}
 
-	page1, total, err := members.ListMembers(ctx, srv.ID, 2, 0)
+	page1, total, err := members.ListMembers(ctx, srv.ID, "", 2, 0)
 	if err != nil {
 		t.Fatalf("ListMembers(page1) error = %v", err)
 	}
@@ -353,7 +355,7 @@ func TestMemberRepo_ListMembers_PaginatesAndReportsTotal(t *testing.T) {
 		t.Fatalf("len(page1) = %d, want 2", len(page1))
 	}
 
-	page2, total2, err := members.ListMembers(ctx, srv.ID, 2, 2)
+	page2, total2, err := members.ListMembers(ctx, srv.ID, "", 2, 2)
 	if err != nil {
 		t.Fatalf("ListMembers(page2) error = %v", err)
 	}
@@ -378,7 +380,7 @@ func TestMemberRepo_ListMembers_ReportsOwnerFlag(t *testing.T) {
 	ctx := context.Background()
 	srv, member := seedServerWithMember(ctx, t, servers, pool)
 
-	all, _, err := members.ListMembers(ctx, srv.ID, 10, 0)
+	all, _, err := members.ListMembers(ctx, srv.ID, "", 10, 0)
 	if err != nil {
 		t.Fatalf("ListMembers error = %v", err)
 	}
@@ -422,7 +424,7 @@ func TestMemberRepo_ListMembers_JoinsReplicatedProfiles(t *testing.T) {
 		t.Fatalf("seed profile: %v", err)
 	}
 
-	all, total, err := members.ListMembers(ctx, srv.ID, 10, 0)
+	all, total, err := members.ListMembers(ctx, srv.ID, "", 10, 0)
 	if err != nil {
 		t.Fatalf("ListMembers error = %v", err)
 	}
@@ -478,7 +480,7 @@ func TestMemberRepo_ListMembers_SuspendedMemberHasNoProfile(t *testing.T) {
 	seedProfile(ctx, t, pool, srv.OwnerID, "Dueño")
 	setSuspended(ctx, t, pool, member, true, 1)
 
-	all, total, err := members.ListMembers(ctx, srv.ID, 10, 0)
+	all, total, err := members.ListMembers(ctx, srv.ID, "", 10, 0)
 	if err != nil {
 		t.Fatalf("ListMembers error = %v", err)
 	}
@@ -509,7 +511,7 @@ func TestMemberRepo_ListMembers_ReactivatedMemberGetsTheProfileBack(t *testing.T
 	setSuspended(ctx, t, pool, member, true, 1)
 	setSuspended(ctx, t, pool, member, false, 2)
 
-	all, _, err := members.ListMembers(ctx, srv.ID, 10, 0)
+	all, _, err := members.ListMembers(ctx, srv.ID, "", 10, 0)
 	if err != nil {
 		t.Fatalf("ListMembers error = %v", err)
 	}
@@ -547,7 +549,7 @@ func TestMemberRepo_ListMembers_ReportsOnlyActiveMutes(t *testing.T) {
 		}
 	}
 
-	list, _, err := members.ListMembers(ctx, srv.ID, 50, 0)
+	list, _, err := members.ListMembers(ctx, srv.ID, "", 50, 0)
 	if err != nil {
 		t.Fatalf("ListMembers: %v", err)
 	}
@@ -585,7 +587,7 @@ func TestMemberRepo_ListRoleMembers_OnlyWhoHoldsIt(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, total, err := members.ListRoleMembers(ctx, srv.ID, mod.ID, 50, 0)
+	got, total, err := members.ListRoleMembers(ctx, srv.ID, mod.ID, "", 50, 0)
 	if err != nil {
 		t.Fatalf("ListRoleMembers: %v", err)
 	}
@@ -594,13 +596,100 @@ func TestMemberRepo_ListRoleMembers_OnlyWhoHoldsIt(t *testing.T) {
 	}
 
 	empty := seedRole(ctx, t, roles, srv.ID, "Nadie")
-	got, total, err = members.ListRoleMembers(ctx, srv.ID, empty.ID, 50, 0)
+	got, total, err = members.ListRoleMembers(ctx, srv.ID, empty.ID, "", 50, 0)
 	if err != nil || total != 0 || len(got) != 0 {
 		t.Errorf("a role nobody holds: %+v, %d, %v", got, total, err)
 	}
 
-	all, allTotal, _ := members.ListMembers(ctx, srv.ID, 50, 0)
+	all, allTotal, _ := members.ListMembers(ctx, srv.ID, "", 50, 0)
 	if allTotal != len(all) || allTotal < 3 {
 		t.Errorf("the unfiltered list changed: %d members, total %d", len(all), allTotal)
+	}
+}
+
+func seedMember(ctx context.Context, t *testing.T, pool *pgxpool.Pool, srv model.Server, userID string, joinedAt time.Time) {
+	t.Helper()
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO server_members (server_id, user_id, is_owner, joined_at) VALUES ($1, $2, FALSE, $3)`,
+		srv.ID, userID, joinedAt,
+	); err != nil {
+		t.Fatalf("seed member %s: %v", userID, err)
+	}
+}
+
+func userIDsOf(members []model.Member) []string {
+	ids := make([]string, len(members))
+	for i, m := range members {
+		ids[i] = m.UserID
+	}
+	return ids
+}
+
+func TestMemberRepo_ListMembers_SearchesByNameIgnoringCaseAndAccents(t *testing.T) {
+	members, servers, _, pool := newRepo(t)
+	ctx := context.Background()
+	srv, jose := seedServerWithMember(ctx, t, servers, pool)
+	seedProfile(ctx, t, pool, jose, "José Pérez")
+	base := time.Now().UTC()
+	josefina, ana, percent, noProfile := "josefina-"+uuid.NewString(), "ana-"+uuid.NewString(), "pct-"+uuid.NewString(), "ghost-"+uuid.NewString()
+	for i, id := range []string{josefina, ana, percent, noProfile} {
+		seedMember(ctx, t, pool, srv, id, base.Add(time.Duration(i+1)*time.Second))
+	}
+	seedProfile(ctx, t, pool, josefina, "JOSEFINA")
+	seedProfile(ctx, t, pool, ana, "Ana")
+	seedProfile(ctx, t, pool, percent, "100% real")
+
+	got, total, err := members.ListMembers(ctx, srv.ID, "  jose ", 10, 0)
+	if err != nil {
+		t.Fatalf("ListMembers: %v", err)
+	}
+	if total != 2 || !slices.Equal(userIDsOf(got), []string{jose, josefina}) {
+		t.Errorf("search jose = %v (total %d), want [%s %s] oldest first", userIDsOf(got), total, jose, josefina)
+	}
+
+	page2, total, _ := members.ListMembers(ctx, srv.ID, "jose", 1, 1)
+	if total != 2 || !slices.Equal(userIDsOf(page2), []string{josefina}) {
+		t.Errorf("second page of jose = %v (total %d), want [%s]", userIDsOf(page2), total, josefina)
+	}
+
+	got, total, _ = members.ListMembers(ctx, srv.ID, "0%", 10, 0)
+	if total != 1 || !slices.Equal(userIDsOf(got), []string{percent}) {
+		t.Errorf(`search "0%%" = %v, want only the literal match %s`, userIDsOf(got), percent)
+	}
+
+	got, total, _ = members.ListMembers(ctx, srv.ID, "ghost", 10, 0)
+	if total != 0 || len(got) != 0 {
+		t.Errorf("a member without a profile matched by id: %v", userIDsOf(got))
+	}
+}
+
+func TestMemberRepo_ListMembersWithoutRole_IsTheComplement(t *testing.T) {
+	members, servers, roles, pool := newRepo(t)
+	ctx := context.Background()
+	srv, holder := seedServerWithMember(ctx, t, servers, pool)
+	seedProfile(ctx, t, pool, holder, "Martina")
+	marcos := "marcos-" + uuid.NewString()
+	seedMember(ctx, t, pool, srv, marcos, time.Now().UTC().Add(time.Second))
+	seedProfile(ctx, t, pool, marcos, "Marcos")
+	mod := seedRole(ctx, t, roles, srv.ID, "Mod")
+	if err := members.AssignRole(ctx, srv.ID, holder, mod.ID); err != nil {
+		t.Fatalf("AssignRole: %v", err)
+	}
+
+	without, total, err := members.ListMembersWithoutRole(ctx, srv.ID, mod.ID, "", 50, 0)
+	if err != nil {
+		t.Fatalf("ListMembersWithoutRole: %v", err)
+	}
+	if total != 2 || slices.Contains(userIDsOf(without), holder) || !slices.Contains(userIDsOf(without), marcos) {
+		t.Errorf("without Mod = %v (total %d), want the owner and %s but not %s", userIDsOf(without), total, marcos, holder)
+	}
+
+	got, total, _ := members.ListMembersWithoutRole(ctx, srv.ID, mod.ID, "mar", 50, 0)
+	if total != 1 || !slices.Equal(userIDsOf(got), []string{marcos}) {
+		t.Errorf("without Mod matching mar = %v, want [%s]", userIDsOf(got), marcos)
+	}
+	got, total, _ = members.ListRoleMembers(ctx, srv.ID, mod.ID, "mar", 50, 0)
+	if total != 1 || !slices.Equal(userIDsOf(got), []string{holder}) {
+		t.Errorf("with Mod matching mar = %v, want [%s]", userIDsOf(got), holder)
 	}
 }

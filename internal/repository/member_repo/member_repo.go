@@ -5,6 +5,7 @@ package member_repo
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -94,41 +95,73 @@ func (r *MemberRepository) AssignRole(ctx context.Context, serverID uuid.UUID, u
 // when their active mute ends, if they have one. A platform-suspended member
 // is still listed but with a nil Profile: their own name and avatar are not
 // shown while the suspension lasts.
-func (r *MemberRepository) ListMembers(ctx context.Context, serverID uuid.UUID, limit, offset int) ([]model.Member, int, error) {
-	return r.listMembers(ctx, serverID, nil, limit, offset)
+//
+// A non-empty search keeps only the members whose name contains it, ignoring
+// case and accents; members without a visible profile never match it.
+func (r *MemberRepository) ListMembers(ctx context.Context, serverID uuid.UUID, search string, limit, offset int) ([]model.Member, int, error) {
+	return r.listMembers(ctx, memberFilter{serverID: serverID, search: search}, limit, offset)
 }
 
 // ListRoleMembers is ListMembers restricted to the members that hold roleID.
 // Every member holds @everyone, so for it this is the whole server.
-func (r *MemberRepository) ListRoleMembers(ctx context.Context, serverID, roleID uuid.UUID, limit, offset int) ([]model.Member, int, error) {
-	return r.listMembers(ctx, serverID, &roleID, limit, offset)
+func (r *MemberRepository) ListRoleMembers(ctx context.Context, serverID, roleID uuid.UUID, search string, limit, offset int) ([]model.Member, int, error) {
+	return r.listMembers(ctx, memberFilter{serverID: serverID, roleID: &roleID, search: search}, limit, offset)
 }
 
-func (r *MemberRepository) listMembers(ctx context.Context, serverID uuid.UUID, roleID *uuid.UUID, limit, offset int) ([]model.Member, int, error) {
-	const holdsRole = `($2::uuid IS NULL OR EXISTS (
+// ListMembersWithoutRole is ListMembers restricted to the members that don't
+// hold roleID: the ones it can still be assigned to. For @everyone it is
+// always empty.
+func (r *MemberRepository) ListMembersWithoutRole(ctx context.Context, serverID, roleID uuid.UUID, search string, limit, offset int) ([]model.Member, int, error) {
+	return r.listMembers(ctx, memberFilter{serverID: serverID, roleID: &roleID, withoutRole: true, search: search}, limit, offset)
+}
+
+type memberFilter struct {
+	serverID    uuid.UUID
+	roleID      *uuid.UUID
+	withoutRole bool
+	search      string
+}
+
+const memberFilterSQL = `sm.server_id = $1
+	   AND ($2::uuid IS NULL OR $3::bool <> EXISTS (
 		SELECT 1 FROM member_roles mr
-		 WHERE mr.server_id = sm.server_id AND mr.user_id = sm.user_id AND mr.role_id = $2))`
+		 WHERE mr.server_id = sm.server_id AND mr.user_id = sm.user_id AND mr.role_id = $2))
+	   AND ($4::text = '' OR unaccent(lower(p.name)) LIKE unaccent(lower($4)) ESCAPE '\')`
+
+const memberFromSQL = `
+		  FROM server_members sm
+		  LEFT JOIN suspended_users su ON su.user_id = sm.user_id AND su.suspended
+		  LEFT JOIN user_profiles p ON p.user_id = sm.user_id AND su.user_id IS NULL`
+
+func likeContains(search string) string {
+	if search == "" {
+		return ""
+	}
+	escaped := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(search)
+	return "%" + escaped + "%"
+}
+
+func (r *MemberRepository) listMembers(ctx context.Context, f memberFilter, limit, offset int) ([]model.Member, int, error) {
+	args := []any{f.serverID, f.roleID, f.withoutRole, likeContains(strings.TrimSpace(f.search))}
 
 	var total int
 	if err := r.pool.QueryRow(ctx,
-		`SELECT COUNT(*) FROM server_members sm WHERE sm.server_id = $1 AND `+holdsRole,
-		serverID, roleID,
+		`SELECT COUNT(*)`+memberFromSQL+` WHERE `+memberFilterSQL,
+		args...,
 	).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("count members: %w", err)
 	}
 
 	rows, err := r.pool.Query(ctx, `
 		SELECT sm.user_id, sm.is_owner, sm.joined_at, mu.until_at,
-		       p.user_id, p.name, p.avatar_url, p.description, p.status_text, p.status_emoji, p.version
-		  FROM server_members sm
-		  LEFT JOIN suspended_users su ON su.user_id = sm.user_id AND su.suspended
-		  LEFT JOIN user_profiles p ON p.user_id = sm.user_id AND su.user_id IS NULL
+		       p.user_id, p.name, p.avatar_url, p.description, p.status_text, p.status_emoji, p.version`+
+		memberFromSQL+`
 		  LEFT JOIN server_mutes mu
 		    ON mu.server_id = sm.server_id AND mu.user_id = sm.user_id AND mu.until_at > now()
-		 WHERE sm.server_id = $1 AND `+holdsRole+`
+		 WHERE `+memberFilterSQL+`
 		 ORDER BY sm.joined_at ASC, sm.user_id ASC
-		 LIMIT $3 OFFSET $4`,
-		serverID, roleID, limit, offset,
+		 LIMIT $5 OFFSET $6`,
+		append(args, limit, offset)...,
 	)
 	if err != nil {
 		return nil, 0, fmt.Errorf("list members: %w", err)

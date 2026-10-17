@@ -99,7 +99,7 @@ func TestListMembers_Success(t *testing.T) {
 	svc := newService(&fakeServers{server: srv}, members)
 
 	got, total, err := svc.ListMembers(context.Background(), membership_service.ListMembersParams{
-		ServerID: srv.ID, ActorUserID: testMember, Limit: 10, Offset: 0,
+		ServerID: srv.ID, ActorUserID: testMember, Search: "ana", Limit: 10, Offset: 0,
 	})
 	if err != nil {
 		t.Fatalf("ListMembers() error = %v, want nil", err)
@@ -107,8 +107,8 @@ func TestListMembers_Success(t *testing.T) {
 	if total != 2 || len(got) != 2 {
 		t.Errorf("got %d members (total=%d), want 2 (total=2)", len(got), total)
 	}
-	if members.gotLimit != 10 || members.gotOffset != 0 {
-		t.Errorf("repo called with limit=%d offset=%d, want 10, 0", members.gotLimit, members.gotOffset)
+	if members.gotSearch != "ana" || members.gotLimit != 10 || members.gotOffset != 0 {
+		t.Errorf("repo called with search=%q limit=%d offset=%d, want ana, 10, 0", members.gotSearch, members.gotLimit, members.gotOffset)
 	}
 }
 

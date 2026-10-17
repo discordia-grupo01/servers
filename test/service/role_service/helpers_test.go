@@ -150,16 +150,25 @@ type fakeMembers struct {
 	roleMembersTotal int
 	gotRoleMembers   struct {
 		serverID, roleID uuid.UUID
+		withoutRole      bool
+		search           string
 		limit, offset    int
 	}
 	roleMembersCalls int
 }
 
-func (f *fakeMembers) ListRoleMembers(_ context.Context, serverID, roleID uuid.UUID, limit, offset int) ([]model.Member, int, error) {
+func (f *fakeMembers) ListRoleMembers(_ context.Context, serverID, roleID uuid.UUID, search string, limit, offset int) ([]model.Member, int, error) {
 	f.roleMembersCalls++
 	f.gotRoleMembers.serverID, f.gotRoleMembers.roleID = serverID, roleID
+	f.gotRoleMembers.withoutRole, f.gotRoleMembers.search = false, search
 	f.gotRoleMembers.limit, f.gotRoleMembers.offset = limit, offset
 	return f.roleMembers, f.roleMembersTotal, nil
+}
+
+func (f *fakeMembers) ListMembersWithoutRole(ctx context.Context, serverID, roleID uuid.UUID, search string, limit, offset int) ([]model.Member, int, error) {
+	members, total, err := f.ListRoleMembers(ctx, serverID, roleID, search, limit, offset)
+	f.gotRoleMembers.withoutRole = true
+	return members, total, err
 }
 
 func (f *fakeMembers) MemberStanding(_ context.Context, _ uuid.UUID, _ string) (role.Standing, error) {
