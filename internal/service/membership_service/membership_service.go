@@ -82,5 +82,5 @@ func (s *MembershipService) ListMembers(ctx context.Context, p ListMembersParams
 	}
 
 	limit, offset := model.ClampMemberPage(p.Limit, p.Offset)
-	return s.members.ListMembers(ctx, p.ServerID, limit, offset)
+	return s.members.ListMembers(ctx, p.ServerID, p.Search, limit, offset)
 }

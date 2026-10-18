@@ -41,7 +41,8 @@ type Repo interface {
 type Members interface {
 	service.StandingReader
 	HasRole(ctx context.Context, serverID uuid.UUID, userID string, roleID uuid.UUID) (bool, error)
-	ListRoleMembers(ctx context.Context, serverID, roleID uuid.UUID, limit, offset int) ([]model.Member, int, error)
+	ListRoleMembers(ctx context.Context, serverID, roleID uuid.UUID, search string, limit, offset int) ([]model.Member, int, error)
+	ListMembersWithoutRole(ctx context.Context, serverID, roleID uuid.UUID, search string, limit, offset int) ([]model.Member, int, error)
 }
 
 type RoleService struct {
@@ -148,15 +149,18 @@ func (s *RoleService) GetRole(ctx context.Context, roleID uuid.UUID, userID stri
 }
 
 type ListRoleMembersParams struct {
-	RoleID uuid.UUID
-	UserID string
-	Limit  int
-	Offset int
+	RoleID      uuid.UUID
+	UserID      string
+	WithoutRole bool
+	Search      string
+	Limit       int
+	Offset      int
 }
 
-// ListRoleMembers lists who holds a role (#58), to audit who can do what.
-// Requires MANAGE_ROLES, like the rest of role management. For @everyone it
-// is every member.
+// ListRoleMembers lists who holds a role (#58), to audit who can do what, or
+// with WithoutRole who doesn't, to pick whom to assign it to. Requires
+// MANAGE_ROLES, like the rest of role management. For @everyone it is every
+// member (and nobody WithoutRole).
 func (s *RoleService) ListRoleMembers(ctx context.Context, p ListRoleMembersParams) ([]model.Member, int, error) {
 	if p.UserID == "" {
 		return nil, 0, model.ErrUnauthorized
@@ -177,7 +181,10 @@ func (s *RoleService) ListRoleMembers(ctx context.Context, p ListRoleMembersPara
 		return nil, 0, err
 	}
 	limit, offset := model.ClampMemberPage(p.Limit, p.Offset)
-	return s.members.ListRoleMembers(ctx, rl.ServerID, rl.ID, limit, offset)
+	if p.WithoutRole {
+		return s.members.ListMembersWithoutRole(ctx, rl.ServerID, rl.ID, p.Search, limit, offset)
+	}
+	return s.members.ListRoleMembers(ctx, rl.ServerID, rl.ID, p.Search, limit, offset)
 }
 
 // UpdateRolePermissionsParams. Permissions == nil means "leave the existing

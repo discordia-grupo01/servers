@@ -57,7 +57,8 @@ func (h *Handler) LeaveServer(c *gin.Context) {
 // @Produce      json
 // @Security     BearerAuth
 // @Param        serverId  path   string  true   "Server ID"
-// @Param        limit     query  int     false  "Page size" default(50)
+// @Param        q         query  string  false  "Keep only members whose name contains this, ignoring case and accents. Members without a visible profile never match."
+// @Param        limit     query  int     false  "Page size" default(20)
 // @Param        offset    query  int     false  "Items to skip" default(0)
 // @Success      200  {object}  model.MemberListResponse
 // @Failure      400  {object}  apierr.ErrorResponse  "invalid limit/offset"
@@ -83,6 +84,7 @@ func (h *Handler) ListMembers(c *gin.Context) {
 	members, total, err := h.uc.ListMembers(c.Request.Context(), membership_service.ListMembersParams{
 		ServerID:    serverID,
 		ActorUserID: middleware.UserID(c),
+		Search:      c.Query("q"),
 		Limit:       limit,
 		Offset:      offset,
 	})

@@ -40,6 +40,7 @@ type fakeMembers struct {
 	listResult []model.Member
 	listTotal  int
 	listErr    error
+	gotSearch  string
 	gotLimit   int
 	gotOffset  int
 }
@@ -63,7 +64,8 @@ func (f *fakeMembers) IsMember(context.Context, uuid.UUID, string) (bool, error)
 	return f.isMember, nil
 }
 
-func (f *fakeMembers) ListMembers(_ context.Context, _ uuid.UUID, limit, offset int) ([]model.Member, int, error) {
+func (f *fakeMembers) ListMembers(_ context.Context, _ uuid.UUID, search string, limit, offset int) ([]model.Member, int, error) {
+	f.gotSearch = search
 	f.gotLimit = limit
 	f.gotOffset = offset
 	if f.listErr != nil {

@@ -11,6 +11,7 @@ type LeaveParams struct {
 type ListMembersParams struct {
 	ServerID    uuid.UUID
 	ActorUserID string
+	Search      string
 	Limit       int
 	Offset      int
 }

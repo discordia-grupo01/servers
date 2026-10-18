@@ -15,5 +15,5 @@ type Servers = service.ServerGetter
 type Members interface {
 	service.MemberChecker
 	RemoveMember(ctx context.Context, serverID uuid.UUID, userID string, memberLeftEvent outbox.Event) (bool, error)
-	ListMembers(ctx context.Context, serverID uuid.UUID, limit, offset int) ([]model.Member, int, error)
+	ListMembers(ctx context.Context, serverID uuid.UUID, search string, limit, offset int) ([]model.Member, int, error)
 }

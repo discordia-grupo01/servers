@@ -74,3 +74,16 @@ func TestListRoleMembers_UnknownRoleAndNoUser(t *testing.T) {
 		t.Errorf("no user: err = %v", err)
 	}
 }
+
+func TestListRoleMembers_WithoutRoleAndSearch(t *testing.T) {
+	svc, members, rl := roleMembersFixture(role.Standing{IsMember: true, Permissions: role.PermManageRoles})
+
+	if _, _, err := svc.ListRoleMembers(context.Background(), role_service.ListRoleMembersParams{
+		RoleID: rl.ID, UserID: "mod-1", WithoutRole: true, Search: "ana",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if !members.gotRoleMembers.withoutRole || members.gotRoleMembers.search != "ana" {
+		t.Errorf("repo got %+v, want the members without the role matching ana", members.gotRoleMembers)
+	}
+}
