@@ -34,7 +34,6 @@ type Repo interface {
 type IconStore interface {
 	Save(id string, data []byte) (url string, err error)
 	Delete(id string) error
-	GenerateDefault() (data []byte, err error)
 }
 
 type Service struct {
@@ -121,20 +120,13 @@ func (s *Service) CreateServer(ctx context.Context, p CreateServerParams) (model
 		},
 	}
 
-	iconData := p.Icon
-	if len(iconData) == 0 {
-		generated, err := s.icons.GenerateDefault()
+	if len(p.Icon) > 0 {
+		url, err := s.icons.Save(id.String(), p.Icon)
 		if err != nil {
 			return model.Server{}, err
 		}
-		iconData = generated
+		srv.IconURL = &url
 	}
-
-	url, err := s.icons.Save(id.String(), iconData)
-	if err != nil {
-		return model.Server{}, err
-	}
-	srv.IconURL = &url
 
 	memberJoinedEvent, err := outbox.New(membership.RoutingKeyMemberJoined, membership.MemberJoined{
 		Meta:     envelope.Meta{EventID: uuid.NewString(), OccurredAt: now},
@@ -161,8 +153,10 @@ func (s *Service) CreateServer(ctx context.Context, p CreateServerParams) (model
 	}
 
 	if err := s.repo.CreateServer(ctx, srv, categories, channels, outboxEvents); err != nil {
-		if hash, ok := iconstore.HashFromURL(url); ok {
-			_ = s.icons.Delete(iconstore.StorageKey(id.String(), hash))
+		if srv.IconURL != nil {
+			if hash, ok := iconstore.HashFromURL(*srv.IconURL); ok {
+				_ = s.icons.Delete(iconstore.StorageKey(id.String(), hash))
+			}
 		}
 		return model.Server{}, err
 	}

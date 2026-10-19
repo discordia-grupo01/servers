@@ -60,11 +60,11 @@ func TestCreate_WithValidPNG_Returns201AndIconURL(t *testing.T) {
 	}
 }
 
-func TestCreate_WithoutIcon_GetsARandomDefaultIcon(t *testing.T) {
+func TestCreate_WithoutIcon_ReturnsNullIconURL(t *testing.T) {
 	r, _ := newRouter(t, oneMB, nil)
 	s := decodeServer(t, postCreate(t, r, testUser, "Sin Icono", nil))
-	if s.IconURL == nil || !strings.Contains(*s.IconURL, "/icon?v=") {
-		t.Errorf("icon_url = %v, want a generated default icon's URL", s.IconURL)
+	if s.IconURL != nil {
+		t.Errorf("icon_url = %v, want nil", s.IconURL)
 	}
 }
 
