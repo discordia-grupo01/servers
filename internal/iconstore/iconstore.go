@@ -46,7 +46,6 @@ type Store interface {
 	Save(id string, data []byte) (url string, err error)
 	Delete(key string) error
 	Get(key string) (data []byte, contentType string, err error)
-	GenerateDefault() (data []byte, err error)
 }
 
 func contentHash(data []byte) string {
