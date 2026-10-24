@@ -20,6 +20,8 @@ type Member struct {
 	Profile *userprofile.Profile
 	// MutedUntil is when the member's active mute ends, nil if not muted.
 	MutedUntil *time.Time
+	// RoleIDs are the ids of the roles the member holds, @everyone included.
+	RoleIDs []string
 }
 
 type MemberResponse struct {
@@ -33,6 +35,10 @@ type MemberResponse struct {
 	// MutedUntil is when the member's mute ends (they can't send messages or
 	// speak until then), null if they aren't muted.
 	MutedUntil *time.Time `json:"muted_until"`
+	// RoleIDs are the roles the member holds, @everyone included, so clients
+	// can resolve them against GET /v1/servers/{id}/roles without a request
+	// per member.
+	RoleIDs []string `json:"role_ids"`
 }
 
 // MemberProfileResponse is the public profile of a member, as last published
@@ -70,7 +76,15 @@ func NewMemberResponse(m Member) MemberResponse {
 		UserID: m.UserID, IsOwner: m.IsOwner, JoinedAt: m.JoinedAt,
 		Profile:    NewMemberProfileResponse(m.Profile),
 		MutedUntil: m.MutedUntil,
+		RoleIDs:    nonNilStrings(m.RoleIDs),
 	}
+}
+
+func nonNilStrings(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }
 
 // ClampMemberPage applies the member list's default and maximum page size.

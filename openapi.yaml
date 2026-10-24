@@ -3048,6 +3048,17 @@ components:
             identify yet; clients can fall back to GET /v1/users/{id} then. It is also
 
             null for a member suspended at platform level, who stays listed.
+        role_ids:
+          description: >-
+            RoleIDs are the roles the member holds, @everyone included, so
+            clients
+
+            can resolve them against GET /v1/servers/{id}/roles without a request
+
+            per member.
+          items:
+            type: string
+          type: array
         user_id:
           type: string
       type: object

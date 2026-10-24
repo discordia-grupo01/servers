@@ -140,6 +140,40 @@ func TestMemberRepo_AssignRole_ThenListRolesForMember_ReturnsIt(t *testing.T) {
 	}
 }
 
+func TestMemberRepo_ListMembers_ReturnsRoleIDsPerMember(t *testing.T) {
+	members, servers, roles, pool := newRepo(t)
+	ctx := context.Background()
+	srv, member := seedServerWithMember(ctx, t, servers, pool)
+	rl := seedRole(ctx, t, roles, srv.ID, "Moderator")
+	if err := members.AssignRole(ctx, srv.ID, member, rl.ID); err != nil {
+		t.Fatalf("AssignRole: %v", err)
+	}
+
+	all, _, err := members.ListMembers(ctx, srv.ID, "", 10, 0)
+	if err != nil {
+		t.Fatalf("ListMembers error = %v", err)
+	}
+	var found bool
+	for _, m := range all {
+		if m.UserID != member {
+			continue
+		}
+		found = true
+		var hasRole bool
+		for _, id := range m.RoleIDs {
+			if id == rl.ID.String() {
+				hasRole = true
+			}
+		}
+		if !hasRole {
+			t.Errorf("RoleIDs = %v, want it to contain %v", m.RoleIDs, rl.ID)
+		}
+	}
+	if !found {
+		t.Fatalf("member %q not listed", member)
+	}
+}
+
 func TestMemberRepo_AssignRole_Idempotent_NoDuplicateNoError(t *testing.T) {
 	members, servers, roles, pool := newRepo(t)
 	ctx := context.Background()
