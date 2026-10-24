@@ -151,10 +151,6 @@ type fakeIconsHelper struct {
 	savedData    []byte
 	deleteCalled bool
 	deletedKeys  []string
-
-	generateCalls int
-	generateData  []byte
-	generateErr   error
 }
 
 func (f *fakeIconsHelper) Save(id string, data []byte) (string, error) {
@@ -169,17 +165,6 @@ func (f *fakeIconsHelper) Delete(key string) error {
 	f.deleteCalled = true
 	f.deletedKeys = append(f.deletedKeys, key)
 	return nil
-}
-
-func (f *fakeIconsHelper) GenerateDefault() ([]byte, error) {
-	f.generateCalls++
-	if f.generateErr != nil {
-		return nil, f.generateErr
-	}
-	if f.generateData != nil {
-		return f.generateData, nil
-	}
-	return []byte("generated-default-icon"), nil
 }
 
 func create(t *testing.T, p service.CreateServerParams) (model.Server, error, *fakeRepoHelper, *fakeIconsHelper) {

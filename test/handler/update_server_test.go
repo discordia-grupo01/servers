@@ -255,13 +255,13 @@ func TestGetBanner_InvalidServerID_Returns400(t *testing.T) {
 	}
 }
 
-// GET /icon must also be reachable without credentials.
+// GET /icon remains public even when the server has no uploaded icon.
 func TestGetIcon_NoAuth_IsStillServed(t *testing.T) {
 	r, _ := newRouter(t, oneMB, nil)
-	s := decodeServer(t, postCreate(t, r, testUser, "Con Default", nil))
+	s := decodeServer(t, postCreate(t, r, testUser, "Sin Icono", nil))
 
 	w := getAsUser(t, r, "", "/v1/servers/"+s.ID+"/icon")
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200 (icon must be public)", w.Code)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404 for a server without an icon", w.Code)
 	}
 }

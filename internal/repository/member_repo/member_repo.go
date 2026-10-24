@@ -154,6 +154,8 @@ func (r *MemberRepository) listMembers(ctx context.Context, f memberFilter, limi
 
 	rows, err := r.pool.Query(ctx, `
 		SELECT sm.user_id, sm.is_owner, sm.joined_at, mu.until_at,
+		       COALESCE((SELECT array_agg(mr.role_id::text) FROM member_roles mr
+		                  WHERE mr.server_id = sm.server_id AND mr.user_id = sm.user_id), '{}'),
 		       p.user_id, p.name, p.avatar_url, p.description, p.status_text, p.status_emoji, p.version`+
 		memberFromSQL+`
 		  LEFT JOIN server_mutes mu
@@ -176,7 +178,7 @@ func (r *MemberRepository) listMembers(ctx context.Context, f memberFilter, limi
 			name, avatarURL, description, statusText, statusEmoji *string
 			version                                               *int64
 		)
-		if err := rows.Scan(&m.UserID, &m.IsOwner, &m.JoinedAt, &m.MutedUntil,
+		if err := rows.Scan(&m.UserID, &m.IsOwner, &m.JoinedAt, &m.MutedUntil, &m.RoleIDs,
 			&profileUserID, &name, &avatarURL, &description, &statusText, &statusEmoji, &version,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scan member: %w", err)
