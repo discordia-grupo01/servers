@@ -3038,6 +3038,14 @@ components:
 
             speak until then), null if they aren't muted.
           type: string
+        role_ids:
+          description: >-
+            RoleIDs are the roles the member holds, @everyone included, so
+            clients can resolve them against GET /v1/servers/{id}/roles without
+            a request per member.
+          items:
+            type: string
+          type: array
         profile:
           allOf:
             - $ref: "#/components/schemas/model.MemberProfileResponse"
