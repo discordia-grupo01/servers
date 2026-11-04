@@ -65,6 +65,7 @@ func newRepo(t *testing.T) (*repository.ServerRepository, *pgxpool.Pool) {
 		"../../migrations/0014_drop_default_kind.up.sql",
 		"../../migrations/0015_role_positions.up.sql",
 		"../../migrations/0019_everyone_role.up.sql",
+		"../../migrations/0028_server_moderation.up.sql",
 	} {
 		schema, err := os.ReadFile(path)
 		if err != nil {
@@ -563,5 +564,47 @@ func TestRepo_UpdateServer_NameTaken_PublishesNothing(t *testing.T) {
 
 	if got := countServerUpdated(ctx, t, pool, b.ID); got != 1 {
 		t.Errorf("server_updated = %d, want only the one from creation", got)
+	}
+}
+
+// ListForUser reports when the staff suspended a server, and keeps listing it.
+func TestRepo_ListForUser_ReportsSuspendedServers(t *testing.T) {
+	repo, pool := newRepo(t)
+	ctx := context.Background()
+	owner := "owner-" + uuid.NewString()
+
+	active, activeCh := serverFixture("Activo", owner)
+	suspended, suspendedCh := serverFixture("Suspendido", owner)
+	for _, s := range []struct {
+		srv model.Server
+		ch  []model.Channel
+	}{{active, activeCh}, {suspended, suspendedCh}} {
+		if err := repo.CreateServer(ctx, s.srv, nil, s.ch, []outbox.Event{testOutboxEvent()}); err != nil {
+			t.Fatalf("CreateServer %s: %v", s.srv.Name, err)
+		}
+	}
+	when := time.Date(2026, 11, 4, 12, 30, 0, 0, time.UTC)
+	if _, err := pool.Exec(ctx, `UPDATE servers SET suspended_at = $2, moderation_version = 1 WHERE id = $1`, suspended.ID, when); err != nil {
+		t.Fatalf("suspend: %v", err)
+	}
+
+	got, err := repo.ListForUser(ctx, owner)
+	if err != nil {
+		t.Fatalf("ListForUser: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %d servers, want both (a suspended server stays in the list)", len(got))
+	}
+	for _, s := range got {
+		switch s.ID {
+		case suspended.ID:
+			if s.SuspendedAt == nil || !s.SuspendedAt.Equal(when) {
+				t.Errorf("suspended server: SuspendedAt = %v, want %v", s.SuspendedAt, when)
+			}
+		case active.ID:
+			if s.SuspendedAt != nil {
+				t.Errorf("active server: SuspendedAt = %v, want nil", s.SuspendedAt)
+			}
+		}
 	}
 }

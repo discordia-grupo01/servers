@@ -45,12 +45,16 @@ type serverHandler struct {
 }
 
 type serverResponse struct {
-	ID         string                  `json:"id"`
-	Name       string                  `json:"name"`
-	IconURL    *string                 `json:"icon_url"`
-	BannerURL  *string                 `json:"banner_url"`
-	OwnerID    string                  `json:"owner_id"`
-	CreatedAt  time.Time               `json:"created_at"`
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	IconURL   *string   `json:"icon_url"`
+	BannerURL *string   `json:"banner_url"`
+	OwnerID   string    `json:"owner_id"`
+	CreatedAt time.Time `json:"created_at"`
+	// Suspended is true when the platform staff suspended the server. It is only
+	// ever true in the list of my servers: every other route answers 403
+	// SERVER_SUSPENDED for it.
+	Suspended  bool                    `json:"suspended"`
 	Channels   []channelview.Response  `json:"channels"`
 	Categories []categoryview.Response `json:"categories"`
 }
@@ -66,7 +70,7 @@ func toServerResponse(s model.Server) serverResponse {
 	}
 	return serverResponse{
 		ID: s.ID.String(), Name: s.Name, IconURL: s.IconURL, BannerURL: s.BannerURL, OwnerID: s.OwnerID,
-		CreatedAt: s.CreatedAt, Channels: chs, Categories: cats,
+		CreatedAt: s.CreatedAt, Suspended: s.Suspended(), Channels: chs, Categories: cats,
 	}
 }
 

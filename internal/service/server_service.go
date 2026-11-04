@@ -181,9 +181,19 @@ func (s *Service) ListMyServers(ctx context.Context, userID string) ([]model.Ser
 		return servers, err
 	}
 
+	// A suspended server shows nothing of its content, only that it is
+	// suspended: the member can't open it anyway, and there is no visibility to
+	// work out for it.
 	ids := make([]uuid.UUID, 0, len(servers))
-	for _, srv := range servers {
+	for i, srv := range servers {
+		if srv.Suspended() {
+			servers[i].Channels, servers[i].Categories = []model.Channel{}, nil
+			continue
+		}
 		ids = append(ids, srv.ID)
+	}
+	if len(ids) == 0 {
+		return servers, nil
 	}
 	standings, err := s.visibility.MemberStandings(ctx, userID, ids)
 	if err != nil {
@@ -194,6 +204,9 @@ func (s *Service) ListMyServers(ctx context.Context, userID string) ([]model.Ser
 		return nil, err
 	}
 	for i, srv := range servers {
+		if srv.Suspended() {
+			continue
+		}
 		st := standings[srv.ID]
 		if srv.OwnerID == userID {
 			st = role.Standing{IsMember: true, IsOwner: true}

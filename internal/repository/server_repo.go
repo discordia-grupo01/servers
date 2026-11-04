@@ -230,7 +230,7 @@ func (r *ServerRepository) categoriesByServerIDs(ctx context.Context, serverIDs 
 
 func (r *ServerRepository) ListForUser(ctx context.Context, userID string) ([]model.Server, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT s.id, s.name, s.name_key, s.icon_url, s.banner_url, s.owner_id, s.created_at,
+		SELECT s.id, s.name, s.name_key, s.icon_url, s.banner_url, s.owner_id, s.created_at, s.suspended_at,
 		       c.id, c.name, c.kind, c.position, c.category_id, c.topic, c.created_at
 		  FROM servers s
 		  JOIN server_members m ON m.server_id = s.id
@@ -255,7 +255,7 @@ func (r *ServerRepository) ListForUser(ctx context.Context, userID string) ([]mo
 		var chCreatedAt *time.Time
 
 		if err := rows.Scan(
-			&s.ID, &s.Name, &s.NameKey, &s.IconURL, &s.BannerURL, &s.OwnerID, &s.CreatedAt,
+			&s.ID, &s.Name, &s.NameKey, &s.IconURL, &s.BannerURL, &s.OwnerID, &s.CreatedAt, &s.SuspendedAt,
 			&chID, &chName, &chKind, &chPosition, &chCategoryID, &chTopic, &chCreatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scan server row: %w", err)
