@@ -22,6 +22,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/repository/moderation_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/ownership_transfer_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/role_repo"
+	"github.com/discordia-grupo01/servers/internal/repository/server_moderation_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/suspension_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/user_profile_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/word_filter_repo"
@@ -101,12 +102,16 @@ func main() {
 	go outbox.NewPoller(pool, publisher).Start(ctx)
 	suspensionRepo := suspension_repo.NewSuspensionRepository(pool)
 	suspensionGuard := middleware.NewSuspensionGuard(suspensionRepo, middleware.DefaultSuspensionCacheTTL)
+	serverModerationRepo := server_moderation_repo.NewRepository(pool)
+	serverSuspensionGuard := middleware.NewServerSuspensionGuard(serverModerationRepo, middleware.DefaultSuspensionCacheTTL)
 	if cfg.RabbitMQURL != "" {
 		go profile_consumer.New(cfg.RabbitMQURL, user_profile_repo.NewUserProfileRepository(pool)).Start(ctx)
-		go admin_consumer.New(cfg.RabbitMQURL, cfg.AdminEventsHMACSecret, admin_consumer.WithInvalidation(suspensionRepo, suspensionGuard)).Start(ctx)
+		go admin_consumer.New(cfg.RabbitMQURL, cfg.AdminEventsHMACSecret, admin_consumer.WithInvalidation(suspensionRepo, suspensionGuard)).
+			WithServerModeration(admin_consumer.ServerHandlers{Store: serverModerationRepo, Deleter: svc, Cache: serverSuspensionGuard}).
+			Start(ctx)
 	} else {
 		log.Printf("profile_consumer: RABBITMQ_URL not set, member profiles won't be replicated")
-		log.Printf("admin_consumer: RABBITMQ_URL not set, platform suspensions won't be applied")
+		log.Printf("admin_consumer: RABBITMQ_URL not set, platform suspensions and server moderation won't be applied")
 	}
 	invSvc := invitation.NewService(repository.NewInvitationRepository(pool), serverRepo, memberRepo)
 	categorySvc := category_service.New(serverRepo, categoryRepo, memberRepo)
@@ -134,7 +139,9 @@ func main() {
 		Mentions:           mentionSvc,
 		Auth:               middleware.AuthConfig{UserIDHeader: cfg.UserIDHeader},
 		RejectSuspended:    suspensionGuard.RejectSuspended(),
-		DB:                 pool,
+
+		RejectSuspendedServer: serverSuspensionGuard.RejectSuspendedServer(),
+		DB:                    pool,
 	})
 
 	addr := cfg.Host + ":" + cfg.Port
