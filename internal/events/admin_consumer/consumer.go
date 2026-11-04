@@ -58,13 +58,43 @@ func (s invalidatingStore) Apply(ctx context.Context, userID string, suspended b
 }
 
 type Consumer struct {
-	url    string
-	secret string
-	store  Store
+	url     string
+	secret  string
+	store   Store
+	servers *ServerHandlers
 }
 
 func New(url, secret string, store Store) *Consumer {
 	return &Consumer{url: url, secret: secret, store: store}
+}
+
+// WithServerModeration makes the consumer also bind and process
+// admin.server_suspended, admin.server_reactivated and
+// admin.server_deletion_requested on the same queue. Without it only the user
+// events are consumed, as before.
+func (c *Consumer) WithServerModeration(h ServerHandlers) *Consumer {
+	c.servers = &h
+	return c
+}
+
+func (c *Consumer) routingKeys() []string {
+	keys := []string{admin.RoutingKeyUserSuspended, admin.RoutingKeyUserReactivated}
+	if c.servers != nil {
+		keys = append(keys, serverRoutingKeys...)
+	}
+	return keys
+}
+
+// shouldRequeue routes a delivery to the user or the server event processing.
+func (c *Consumer) shouldRequeue(ctx context.Context, routingKey string, body []byte) bool {
+	if isServerRoutingKey(routingKey) {
+		if c.servers == nil {
+			log.Printf("admin_consumer: %q received but server moderation is not enabled, dropping message", routingKey)
+			return false
+		}
+		return ShouldRequeueServerEvent(ctx, *c.servers, c.secret, routingKey, body)
+	}
+	return ShouldRequeue(ctx, c.store, c.secret, routingKey, body)
 }
 
 // Start consumes until ctx is cancelled, reconnecting with exponential
@@ -113,7 +143,7 @@ func (c *Consumer) consumeOnce(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	for _, key := range []string{admin.RoutingKeyUserSuspended, admin.RoutingKeyUserReactivated} {
+	for _, key := range c.routingKeys() {
 		if err := ch.QueueBind(queue.Name, key, broker.ExchangeName, false, nil); err != nil {
 			return err
 		}
@@ -135,7 +165,7 @@ func (c *Consumer) consumeOnce(ctx context.Context) error {
 			if !ok {
 				return errors.New("consume channel closed")
 			}
-			if ShouldRequeue(ctx, c.store, c.secret, delivery.RoutingKey, delivery.Body) {
+			if c.shouldRequeue(ctx, delivery.RoutingKey, delivery.Body) {
 				_ = delivery.Nack(false, true)
 			} else {
 				_ = delivery.Ack(false)
