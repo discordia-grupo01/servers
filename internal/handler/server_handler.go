@@ -236,7 +236,7 @@ func (h *serverHandler) deleteServer(c *gin.Context) {
 
 // listMyServers godoc
 // @Summary      List my servers
-// @Description  Servers the caller is a member of, each with only the channels the caller can see (channels where an override takes VIEW_CHANNELS away from them are left out; the owner and administrators see all).
+// @Description  Servers the caller is a member of, each with only the channels the caller can see (channels where an override takes VIEW_CHANNELS away from them are left out; the owner and administrators see all). A server suspended by the platform staff is still listed, with suspended=true and no channels or categories; every other route answers 403 SERVER_SUSPENDED for it.
 // @Tags         servers
 // @Produce      json
 // @Security     BearerAuth
