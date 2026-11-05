@@ -101,6 +101,7 @@ func TestUpdateServer_NameOnlyChange_DoesNotDeleteTheIcon(t *testing.T) {
 
 func TestUpdateServer_BannerChange_SavesUnderDistinctKey(t *testing.T) {
 	srv := serverToUpdate()
+	srv.BoostLevel = model.BoostLevelBanner
 	repo, icons := &fakeRepoHelper{getResult: srv}, &fakeIconsHelper{}
 	data := []byte("new-banner-bytes")
 
@@ -274,5 +275,68 @@ func TestUpdateServer_StandingLookupError_Propagates(t *testing.T) {
 	})
 	if !errors.Is(err, boom) {
 		t.Errorf("err = %v, want %v", err, boom)
+	}
+}
+
+func TestUpdateServer_BoostPerks(t *testing.T) {
+	gif := append([]byte("GIF89a"), make([]byte, 32)...)
+	png := []byte("\x89PNG\r\n\x1a\n0000")
+	tests := []struct {
+		name     string
+		level    int
+		params   service.UpdateServerParams
+		required int
+		invalid  bool
+	}{
+		{name: "GIF icon at level 0", level: 0, params: service.UpdateServerParams{Icon: gif}, required: 1},
+		{name: "GIF icon at level 1", level: 1, params: service.UpdateServerParams{Icon: gif}},
+		{name: "banner at level 1", level: 1, params: service.UpdateServerParams{Banner: png}, required: 2},
+		{name: "banner at level 2", level: 2, params: service.UpdateServerParams{Banner: png}},
+		{name: "GIF banner at level 2", level: 2, params: service.UpdateServerParams{Banner: gif}, invalid: true},
+		{name: "PNG icon at level 0", level: 0, params: service.UpdateServerParams{Icon: png}},
+		{name: "removing a banner at level 0", level: 0, params: service.UpdateServerParams{RemoveBanner: true}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := serverToUpdate()
+			srv.BoostLevel = tt.level
+			repo, icons := &fakeRepoHelper{getResult: srv}, &fakeIconsHelper{}
+			p := tt.params
+			p.ServerID, p.ActorUserID = srv.ID, testOwner
+
+			_, err := update(t, repo, icons, p)
+
+			var levelErr *model.BoostLevelRequiredError
+			switch {
+			case tt.required != 0:
+				if !errors.As(err, &levelErr) || levelErr.Required != tt.required {
+					t.Fatalf("err = %v, want level %d required", err, tt.required)
+				}
+				if repo.updateCalls != 0 {
+					t.Error("the server was updated without the level")
+				}
+			case tt.invalid:
+				if !errors.Is(err, model.ErrIconUnsupportedType) {
+					t.Fatalf("err = %v", err)
+				}
+			case err != nil:
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestUpdateServer_RemembersIfTheIconIsAnimated(t *testing.T) {
+	srv := serverToUpdate()
+	srv.BoostLevel = 1
+	repo, icons := &fakeRepoHelper{getResult: srv}, &fakeIconsHelper{}
+	got, err := update(t, repo, icons, service.UpdateServerParams{
+		ServerID: srv.ID, ActorUserID: testOwner, Icon: append([]byte("GIF89a"), make([]byte, 32)...),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !got.IconAnimated {
+		t.Error("icon_animated = false after uploading a GIF")
 	}
 }

@@ -591,3 +591,52 @@ func TestJoin_RedeemRaceAlreadyMember_DoesNotPublish(t *testing.T) {
 		t.Errorf("gotOutboxEvent.RoutingKey = %q, want empty", repo.gotOutboxEvent.RoutingKey)
 	}
 }
+
+func TestJoin_VanityCode_MakesTheUserAMember(t *testing.T) {
+	serverID := uuid.New()
+	repo := &fakeInviteRepo{exists: true, vanityServer: serverID}
+	got, err := newInviteService(repo).JoinServer(context.Background(), invitation.JoinParams{Code: "Mi-Servidor", UserID: joinerID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ServerID != serverID || got.AlreadyMember {
+		t.Errorf("result = %+v", got)
+	}
+	if repo.vanityCode != "mi-servidor" {
+		t.Errorf("looked up %q, want it in lowercase", repo.vanityCode)
+	}
+	if repo.joinCalls != 1 || repo.joinEvent.RoutingKey != membership.RoutingKeyMemberJoined {
+		t.Errorf("joinCalls=%d event=%q", repo.joinCalls, repo.joinEvent.RoutingKey)
+	}
+}
+
+func TestJoin_VanityCode_UnknownOrLocked(t *testing.T) {
+	repo := &fakeInviteRepo{exists: true}
+	_, err := newInviteService(repo).JoinServer(context.Background(), invitation.JoinParams{Code: "nada", UserID: joinerID})
+	if !errors.Is(err, model.ErrInvitationNotFound) {
+		t.Errorf("err = %v", err)
+	}
+}
+
+func TestJoin_VanityCode_BannedCantJoin(t *testing.T) {
+	repo := &fakeInviteRepo{exists: true, vanityServer: uuid.New(), banned: true}
+	_, err := newInviteService(repo).JoinServer(context.Background(), invitation.JoinParams{Code: "mi-servidor", UserID: joinerID})
+	if !errors.Is(err, model.ErrUserBanned) {
+		t.Errorf("err = %v", err)
+	}
+	if repo.joinCalls != 0 {
+		t.Error("a banned user was added")
+	}
+}
+
+func TestJoin_VanityCode_AlreadyMember(t *testing.T) {
+	serverID := uuid.New()
+	repo := &fakeInviteRepo{exists: true, vanityServer: serverID, joinErr: model.ErrAlreadyMember}
+	got, err := newInviteService(repo).JoinServer(context.Background(), invitation.JoinParams{Code: "mi-servidor", UserID: joinerID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.AlreadyMember || got.ServerID != serverID {
+		t.Errorf("result = %+v", got)
+	}
+}

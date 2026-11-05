@@ -24,7 +24,7 @@ var migrations = []string{
 	"0001_init", "0002_invitations", "0003_roles", "0004_member_roles", "0005_default_role",
 	"0007_categories", "0009_server_banner", "0010_native_categories", "0011_outbox_events",
 	"0012_category_name_key", "0013_unassigned_category", "0014_drop_default_kind",
-	"0015_role_positions", "0019_everyone_role", "0028_server_moderation",
+	"0015_role_positions", "0019_everyone_role", "0028_server_moderation", "0031_server_boosts",
 }
 
 func newRepo(t *testing.T) (*server_moderation_repo.Repository, *pgxpool.Pool) {
@@ -47,7 +47,7 @@ func newRepo(t *testing.T) (*server_moderation_repo.Repository, *pgxpool.Pool) {
 	}
 	t.Cleanup(pool.Close)
 	drop := func() {
-		_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS outbox_events, member_roles, roles, server_bans, invitations, server_members, categories, channels, servers CASCADE`)
+		_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS server_boosts, outbox_events, member_roles, roles, server_bans, invitations, server_members, categories, channels, servers CASCADE`)
 	}
 	t.Cleanup(drop)
 	drop()
@@ -240,5 +240,19 @@ func TestSuspendedLookups_DatabaseErrorsAreReturned(t *testing.T) {
 	when := time.Now()
 	if _, err := repo.ApplyServerModeration(context.Background(), uuid.New(), &when, 1); err == nil {
 		t.Error("ApplyServerModeration err = nil, want an error from a closed pool")
+	}
+}
+
+func TestSuspendedByInvite_AlsoFindsVanityCodes(t *testing.T) {
+	repo, pool := newRepo(t)
+	ctx := context.Background()
+	f := seedServer(t, pool)
+	if _, err := pool.Exec(ctx, `UPDATE servers SET vanity_code = 'mi-servidor', suspended_at = now() WHERE id = $1`, f.serverID); err != nil {
+		t.Fatal(err)
+	}
+
+	suspended, found, err := repo.SuspendedByInvite(ctx, "Mi-Servidor")
+	if err != nil || !found || !suspended {
+		t.Errorf("suspended=%v found=%v err=%v, want true/true/nil", suspended, found, err)
 	}
 }

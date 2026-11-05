@@ -38,7 +38,7 @@ func New(uc UseCases, images ImageReader) *Handler {
 
 // Create godoc
 // @Summary      Add a custom emoji to a server
-// @Description  Requires MANAGE_SERVER (the owner and administrators hold it implicitly). Multipart form with name (2 to 32 letters, numbers or underscores, unique in the server ignoring case) and image (PNG, WebP or GIF, at most 5 MB, detected from the file's content). A GIF creates an animated emoji. A server has 50 slots; deleted emojis free theirs.
+// @Description  Requires MANAGE_SERVER (the owner and administrators hold it implicitly). Multipart form with name (2 to 32 letters, numbers or underscores, unique in the server ignoring case) and image (PNG, WebP or GIF, at most 5 MB, detected from the file's content). A GIF creates an animated emoji. A server has 50 slots, 70 from boost level 1; deleted emojis free theirs. A server that drops a level keeps the emojis it has, but can't add more until it is under the limit.
 // @Tags         emojis
 // @Accept       multipart/form-data
 // @Produce      json

@@ -13,6 +13,7 @@ import (
 
 const (
 	BaseSlots           = 50
+	BoostSlots          = 20
 	MaxImageBytes int64 = 5 << 20
 )
 
@@ -22,6 +23,15 @@ var imageExtensions = map[string]string{
 	"image/png":  ".png",
 	"image/webp": ".webp",
 	"image/gif":  ".gif",
+}
+
+// Slots is how many emojis a server of that boost level can have. Dropping a
+// level keeps the emojis it already has: it just can't add new ones.
+func Slots(boostLevel int) int {
+	if boostLevel >= model.BoostLevelEmojiSlots {
+		return BaseSlots + BoostSlots
+	}
+	return BaseSlots
 }
 
 type Emoji struct {

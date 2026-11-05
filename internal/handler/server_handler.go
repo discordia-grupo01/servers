@@ -54,7 +54,12 @@ type serverResponse struct {
 	// Suspended is true when the platform staff suspended the server. It is only
 	// ever true in the list of my servers: every other route answers 403
 	// SERVER_SUSPENDED for it.
-	Suspended  bool                    `json:"suspended"`
+	Suspended bool `json:"suspended"`
+	// BoostCount and BoostLevel come from the boosts billing charged for. The
+	// images and vanity code a level no longer unlocks are returned as null.
+	BoostCount int                     `json:"boost_count"`
+	BoostLevel int                     `json:"boost_level"`
+	VanityCode *string                 `json:"vanity_code"`
 	Channels   []channelview.Response  `json:"channels"`
 	Categories []categoryview.Response `json:"categories"`
 }
@@ -69,8 +74,9 @@ func toServerResponse(s model.Server) serverResponse {
 		cats = append(cats, categoryview.ToResponse(cat))
 	}
 	return serverResponse{
-		ID: s.ID.String(), Name: s.Name, IconURL: s.IconURL, BannerURL: s.BannerURL, OwnerID: s.OwnerID,
-		CreatedAt: s.CreatedAt, Suspended: s.Suspended(), Channels: chs, Categories: cats,
+		ID: s.ID.String(), Name: s.Name, IconURL: s.VisibleIconURL(), BannerURL: s.VisibleBannerURL(), OwnerID: s.OwnerID,
+		CreatedAt: s.CreatedAt, Suspended: s.Suspended(), BoostCount: s.BoostCount, BoostLevel: s.BoostLevel,
+		VanityCode: s.VisibleVanityCode(), Channels: chs, Categories: cats,
 	}
 }
 
@@ -136,7 +142,7 @@ func (h *serverHandler) createServer(c *gin.Context) {
 
 // updateServer godoc
 // @Summary      Edit a server
-// @Description  Administrators only (the owner, or a member with ADMINISTRATOR). Multipart form, all fields optional: rename, replace the icon/banner, or remove the banner.
+// @Description  Administrators only (the owner, or a member with ADMINISTRATOR). Multipart form, all fields optional: rename, replace the icon/banner, or remove the banner. A GIF icon needs boost level 1 and a banner needs boost level 2; otherwise it answers 403 with details.reason boost_level_required and details.required_level. A banner can't be a GIF.
 // @Tags         servers
 // @Accept       multipart/form-data
 // @Produce      json
@@ -144,7 +150,7 @@ func (h *serverHandler) createServer(c *gin.Context) {
 // @Param        serverId       path      string  true   "Server ID"
 // @Param        name           formData  string  false  "New server name"
 // @Param        icon           formData  file    false  "New icon image"
-// @Param        banner         formData  file    false  "New banner image"
+// @Param        banner         formData  file    false  "New banner image (boost level 2)"
 // @Param        remove_banner  formData  string  false  "Pass \"true\" to remove the current banner"
 // @Success      200  {object}  serverResponse
 // @Failure      400  {object}  apierr.ErrorResponse

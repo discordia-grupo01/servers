@@ -40,7 +40,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/service/membership_service"
 )
 
-const moderationTables = `channel_permission_overrides, user_profiles, suspended_users, outbox_events, member_roles, roles, server_mutes, ownership_transfers, categories, server_bans, invitations, server_members, channels, servers`
+const moderationTables = `server_boosts, channel_permission_overrides, user_profiles, suspended_users, outbox_events, member_roles, roles, server_mutes, ownership_transfers, categories, server_bans, invitations, server_members, channels, servers`
 
 // moderationEnv is the real service wired the way main.go does it -- the admin
 // consumer with server moderation, the guard, the outbox poller and the router --
@@ -73,7 +73,9 @@ func setupModeration(t *testing.T) *moderationEnv {
 		t.Fatalf("NewPool: %v", err)
 	}
 	t.Cleanup(pool.Close)
-	drop := func() { _, _ = pool.Exec(context.Background(), `DROP TABLE IF EXISTS `+moderationTables+` CASCADE`) }
+	drop := func() {
+		_, _ = pool.Exec(context.Background(), `DROP TABLE IF EXISTS server_boosts, `+moderationTables+` CASCADE`)
+	}
 	t.Cleanup(drop)
 	drop()
 	for _, f := range []string{
@@ -87,6 +89,7 @@ func setupModeration(t *testing.T) *moderationEnv {
 		"0016_server_bans_banned_by.up.sql", "0017_user_profiles.up.sql",
 		"0019_everyone_role.up.sql", "0020_channel_permission_overrides.up.sql",
 		"0021_server_mutes.up.sql", "0027_suspended_users.up.sql", "0028_server_moderation.up.sql",
+		"0031_server_boosts.up.sql",
 	} {
 		schema, err := os.ReadFile("../../migrations/" + f)
 		if err != nil {

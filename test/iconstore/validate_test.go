@@ -50,8 +50,21 @@ func TestValidateIcon_RejectsEmptyData(t *testing.T) {
 	}
 }
 
-func TestValidateIcon_RejectsGIF(t *testing.T) {
-	if _, _, err := iconstore.ValidateIcon(gif(64), max); !errors.Is(err, model.ErrIconUnsupportedType) {
+func TestValidateIcon_AcceptsGIF(t *testing.T) {
+	ext, contentType, err := iconstore.ValidateIcon(gif(64), max)
+	if err != nil {
+		t.Fatalf("err = %v", err)
+	}
+	if ext != ".gif" || contentType != "image/gif" {
+		t.Errorf("ext=%q contentType=%q", ext, contentType)
+	}
+	if !iconstore.IsGIF(gif(64)) {
+		t.Error("IsGIF = false for a GIF")
+	}
+}
+
+func TestValidateIcon_RejectsOtherTypes(t *testing.T) {
+	if _, _, err := iconstore.ValidateIcon(pad([]byte("BM"), 64), max); !errors.Is(err, model.ErrIconUnsupportedType) {
 		t.Fatalf("err = %v", err)
 	}
 }
