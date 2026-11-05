@@ -66,6 +66,7 @@ func newRepo(t *testing.T) (*repository.ServerRepository, *pgxpool.Pool) {
 		"../../migrations/0015_role_positions.up.sql",
 		"../../migrations/0019_everyone_role.up.sql",
 		"../../migrations/0028_server_moderation.up.sql",
+		"../../migrations/0031_server_boosts.up.sql",
 	} {
 		schema, err := os.ReadFile(path)
 		if err != nil {
@@ -82,7 +83,7 @@ func newRepo(t *testing.T) (*repository.ServerRepository, *pgxpool.Pool) {
 // packages might have created, so a test run leaves the database exactly as
 // clean as it found it -- both before it starts and after it finishes.
 func dropAllTestTables(ctx context.Context, pool *pgxpool.Pool) {
-	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS outbox_events, member_roles, roles, server_bans, invitations, server_members, categories, channels, servers CASCADE`)
+	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS server_boosts, outbox_events, member_roles, roles, server_bans, invitations, server_members, categories, channels, servers CASCADE`)
 }
 
 func serverFixture(name, owner string) (model.Server, []model.Channel) {
@@ -384,7 +385,7 @@ func TestRepo_UpdateServer_ChangesNameIconAndBanner(t *testing.T) {
 	}
 
 	iconURL, bannerURL := "/v1/servers/"+srv.ID.String()+"/icon", "/v1/servers/"+srv.ID.String()+"/banner"
-	if err := repo.UpdateServer(ctx, srv.ID, "After Update", "after update", &iconURL, &bannerURL); err != nil {
+	if err := repo.UpdateServer(ctx, srv.ID, "After Update", "after update", &iconURL, &bannerURL, false); err != nil {
 		t.Fatalf("UpdateServer: %v", err)
 	}
 
@@ -411,11 +412,11 @@ func TestRepo_UpdateServer_BannerNil_ClearsIt(t *testing.T) {
 		t.Fatalf("create: %v", err)
 	}
 	bannerURL := "/v1/servers/" + srv.ID.String() + "/banner"
-	if err := repo.UpdateServer(ctx, srv.ID, srv.Name, srv.NameKey, srv.IconURL, &bannerURL); err != nil {
+	if err := repo.UpdateServer(ctx, srv.ID, srv.Name, srv.NameKey, srv.IconURL, &bannerURL, false); err != nil {
 		t.Fatalf("set banner: %v", err)
 	}
 
-	if err := repo.UpdateServer(ctx, srv.ID, srv.Name, srv.NameKey, srv.IconURL, nil); err != nil {
+	if err := repo.UpdateServer(ctx, srv.ID, srv.Name, srv.NameKey, srv.IconURL, nil, false); err != nil {
 		t.Fatalf("clear banner: %v", err)
 	}
 
@@ -431,7 +432,7 @@ func TestRepo_UpdateServer_BannerNil_ClearsIt(t *testing.T) {
 func TestRepo_UpdateServer_UnknownID_ReturnsNotFound(t *testing.T) {
 	repo, _ := newRepo(t)
 	name := "Name"
-	err := repo.UpdateServer(context.Background(), uuid.New(), name, name, nil, nil)
+	err := repo.UpdateServer(context.Background(), uuid.New(), name, name, nil, nil, false)
 	if !errors.Is(err, model.ErrServerNotFound) {
 		t.Errorf("err = %v, want ErrServerNotFound", err)
 	}
@@ -451,7 +452,7 @@ func TestRepo_UpdateServer_NameKeyCollisionWithAnotherOwnedServer_ReturnsNameTak
 		t.Fatalf("create B: %v", err)
 	}
 
-	err := repo.UpdateServer(ctx, b.ID, "Server A", a.NameKey, b.IconURL, nil)
+	err := repo.UpdateServer(ctx, b.ID, "Server A", a.NameKey, b.IconURL, nil, false)
 	if !errors.Is(err, model.ErrNameTaken) {
 		t.Errorf("err = %v, want ErrNameTaken", err)
 	}
@@ -503,7 +504,7 @@ func TestRepo_UpdateServer_RenamePublishesServerUpdatedWithTheNewName(t *testing
 		t.Fatalf("server_updated after create = %d, want 1", got)
 	}
 
-	if err := repo.UpdateServer(ctx, srv.ID, "After Rename", "after rename", srv.IconURL, nil); err != nil {
+	if err := repo.UpdateServer(ctx, srv.ID, "After Rename", "after rename", srv.IconURL, nil, false); err != nil {
 		t.Fatalf("UpdateServer: %v", err)
 	}
 
@@ -533,7 +534,7 @@ func TestRepo_UpdateServer_OnlyIconOrBannerPublishesNothing(t *testing.T) {
 	}
 	iconURL, bannerURL := "/v1/servers/"+srv.ID.String()+"/icon", "/v1/servers/"+srv.ID.String()+"/banner"
 
-	if err := repo.UpdateServer(ctx, srv.ID, srv.Name, srv.NameKey, &iconURL, &bannerURL); err != nil {
+	if err := repo.UpdateServer(ctx, srv.ID, srv.Name, srv.NameKey, &iconURL, &bannerURL, false); err != nil {
 		t.Fatalf("UpdateServer: %v", err)
 	}
 
@@ -557,7 +558,7 @@ func TestRepo_UpdateServer_NameTaken_PublishesNothing(t *testing.T) {
 		}
 	}
 
-	err := repo.UpdateServer(ctx, b.ID, "Server A", a.NameKey, b.IconURL, nil)
+	err := repo.UpdateServer(ctx, b.ID, "Server A", a.NameKey, b.IconURL, nil, false)
 	if !errors.Is(err, model.ErrNameTaken) {
 		t.Fatalf("err = %v, want ErrNameTaken", err)
 	}
@@ -606,5 +607,38 @@ func TestRepo_ListForUser_ReportsSuspendedServers(t *testing.T) {
 				t.Errorf("active server: SuspendedAt = %v, want nil", s.SuspendedAt)
 			}
 		}
+	}
+}
+
+func TestRepo_VisibleImageURLs_FollowTheBoostLevel(t *testing.T) {
+	repo, pool := newRepo(t)
+	ctx := context.Background()
+	srv, chans := serverFixture("Con Imagenes", "owner-"+uuid.NewString())
+	if err := repo.CreateServer(ctx, srv, nil, chans, nil); err != nil {
+		t.Fatalf("CreateServer: %v", err)
+	}
+	icon, banner := "/icon?v=1", "/banner?v=1"
+	if err := repo.UpdateServer(ctx, srv.ID, srv.Name, srv.NameKey, &icon, &banner, true); err != nil {
+		t.Fatalf("UpdateServer: %v", err)
+	}
+
+	gotIcon, gotBanner, err := repo.VisibleImageURLs(ctx, srv.ID)
+	if err != nil || gotIcon != nil || gotBanner != nil {
+		t.Errorf("level 0: icon=%v banner=%v err=%v", gotIcon, gotBanner, err)
+	}
+	if storedIcon, storedBanner, err := repo.IconURLs(ctx, srv.ID); err != nil || storedIcon == nil || storedBanner == nil {
+		t.Errorf("what is stored must stay: icon=%v banner=%v err=%v", storedIcon, storedBanner, err)
+	}
+
+	if _, err := pool.Exec(ctx, `UPDATE servers SET boost_level = 2 WHERE id = $1`, srv.ID); err != nil {
+		t.Fatal(err)
+	}
+	gotIcon, gotBanner, err = repo.VisibleImageURLs(ctx, srv.ID)
+	if err != nil || gotIcon == nil || gotBanner == nil {
+		t.Errorf("level 2: icon=%v banner=%v err=%v", gotIcon, gotBanner, err)
+	}
+
+	if _, _, err := repo.VisibleImageURLs(ctx, uuid.New()); !errors.Is(err, model.ErrServerNotFound) {
+		t.Errorf("missing server: err = %v", err)
 	}
 }

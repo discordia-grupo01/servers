@@ -106,6 +106,7 @@ type fixture struct {
 	svc      *emoji_service.Service
 	repo     *fakeRepo
 	images   *fakeImages
+	servers  *fakeServers
 	serverID uuid.UUID
 }
 
@@ -113,7 +114,7 @@ func newFixture() *fixture {
 	id := uuid.New()
 	repo, images := &fakeRepo{}, &fakeImages{}
 	servers := &fakeServers{server: model.Server{ID: id, OwnerID: ownerID}}
-	return &fixture{svc: emoji_service.New(servers, fakeStandings{}, repo, images), repo: repo, images: images, serverID: id}
+	return &fixture{svc: emoji_service.New(servers, fakeStandings{}, repo, images), repo: repo, images: images, servers: servers, serverID: id}
 }
 
 func TestCreatePublishesTheWholeEmoji(t *testing.T) {
@@ -279,5 +280,30 @@ func TestServerNotFound(t *testing.T) {
 	}
 	if _, err := svc.List(context.Background(), emoji_service.ListParams{ServerID: uuid.New(), ActorUserID: ownerID}); !errors.Is(err, model.ErrServerNotFound) {
 		t.Errorf("List error = %v", err)
+	}
+}
+
+func TestList_MaxEmojisFollowsTheBoostLevel(t *testing.T) {
+	f := newFixture()
+	f.servers.server.BoostLevel = 1
+	page, err := f.svc.List(context.Background(), emoji_service.ListParams{ServerID: f.serverID, ActorUserID: ownerID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.MaxEmojis != 70 {
+		t.Errorf("max_emojis = %d, want 70", page.MaxEmojis)
+	}
+}
+
+func TestCreate_UsesTheSlotsOfTheBoostLevel(t *testing.T) {
+	f := newFixture()
+	f.servers.server.BoostLevel = 1
+	if _, err := f.svc.Create(context.Background(), emoji_service.CreateParams{
+		ServerID: f.serverID, ActorUserID: managerID, Name: "party", Image: gifBytes,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if f.repo.maxEmojis != 70 {
+		t.Errorf("maxEmojis = %d, want 70", f.repo.maxEmojis)
 	}
 }

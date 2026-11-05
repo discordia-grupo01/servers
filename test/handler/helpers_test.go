@@ -94,7 +94,7 @@ func (f *fakeRepo) IconURLs(_ context.Context, _ uuid.UUID) (*string, *string, e
 	return f.getResult.IconURL, f.getResult.BannerURL, nil
 }
 
-func (f *fakeRepo) UpdateServer(_ context.Context, _ uuid.UUID, name, nameKey string, iconURL, bannerURL *string) error {
+func (f *fakeRepo) UpdateServer(_ context.Context, _ uuid.UUID, name, nameKey string, iconURL, bannerURL *string, _ bool) error {
 	f.updateCalls++
 	if f.updateErr != nil {
 		return f.updateErr
@@ -240,4 +240,8 @@ func decodeError(t *testing.T, w *httptest.ResponseRecorder) errJSON {
 		t.Error("error.details must be an object, not null")
 	}
 	return e
+}
+
+func (f *fakeRepo) VisibleImageURLs(ctx context.Context, id uuid.UUID) (*string, *string, error) {
+	return f.IconURLs(ctx, id)
 }

@@ -95,6 +95,9 @@ var (
 	ErrEmojiImageTooLarge    = errors.New("emoji image is too large (max 5 MB)")
 	ErrEmojiImageUnsupported = errors.New("emoji image must be PNG, WebP or GIF")
 
+	ErrVanityCodeInvalid = errors.New("vanity code must be 3 to 32 lowercase letters, numbers or hyphens, and can't start or end with a hyphen")
+	ErrVanityCodeTaken   = errors.New("that vanity code is already in use")
+
 	ErrMemberNotFound     = errors.New("member not found")
 	ErrMemberRoleNotFound = errors.New("member does not have this role")
 

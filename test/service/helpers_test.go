@@ -123,7 +123,7 @@ func (f *fakeRepoHelper) IconURLs(_ context.Context, _ uuid.UUID) (*string, *str
 	return f.getResult.IconURL, f.getResult.BannerURL, nil
 }
 
-func (f *fakeRepoHelper) UpdateServer(_ context.Context, _ uuid.UUID, name, nameKey string, iconURL, bannerURL *string) error {
+func (f *fakeRepoHelper) UpdateServer(_ context.Context, _ uuid.UUID, name, nameKey string, iconURL, bannerURL *string, _ bool) error {
 	f.updateCalls++
 	if f.updateErr != nil {
 		return f.updateErr
@@ -213,4 +213,8 @@ func findOutboxEvent(t *testing.T, events []outbox.Event, routingKey string) out
 	}
 	t.Fatalf("no outbox event with routing key %q among %v", routingKey, events)
 	return outbox.Event{}
+}
+
+func (f *fakeRepoHelper) VisibleImageURLs(ctx context.Context, id uuid.UUID) (*string, *string, error) {
+	return f.IconURLs(ctx, id)
 }

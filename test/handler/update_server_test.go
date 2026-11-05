@@ -2,6 +2,7 @@ package handler_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -164,9 +165,9 @@ func TestUpdateServer_UnsupportedIconType_Returns400(t *testing.T) {
 	r, repo := newRouter(t, oneMB, nil)
 	id := uuid.New()
 	repo.getResult = model.Server{ID: id, Name: "Original", OwnerID: testUser}
-	gif := append([]byte("GIF87a"), make([]byte, 32)...)
+	bmp := append([]byte("BM"), make([]byte, 32)...)
 
-	w := patchServer(t, r, testUser, id.String(), nil, map[string][]byte{"icon": gif})
+	w := patchServer(t, r, testUser, id.String(), nil, map[string][]byte{"icon": bmp})
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
 	}
@@ -195,7 +196,7 @@ func TestUpdateServer_DuplicateName_Returns409(t *testing.T) {
 func TestUpdateServer_BannerUpload_IsServedBackPublicly(t *testing.T) {
 	r, repo := newRouter(t, oneMB, nil)
 	id := uuid.New()
-	repo.getResult = model.Server{ID: id, Name: "Con Banner", OwnerID: testUser}
+	repo.getResult = model.Server{ID: id, Name: "Con Banner", OwnerID: testUser, BoostLevel: model.BoostLevelBanner}
 
 	w := patchServer(t, r, testUser, id.String(), nil, map[string][]byte{"banner": pngBytes()})
 	if w.Code != http.StatusOK {
@@ -215,7 +216,7 @@ func TestUpdateServer_BannerUpload_IsServedBackPublicly(t *testing.T) {
 func TestUpdateServer_RemoveBanner_ClearsItAndDeletesFromStore(t *testing.T) {
 	r, repo := newRouter(t, oneMB, nil)
 	id := uuid.New()
-	repo.getResult = model.Server{ID: id, Name: "Con Banner", OwnerID: testUser}
+	repo.getResult = model.Server{ID: id, Name: "Con Banner", OwnerID: testUser, BoostLevel: model.BoostLevelBanner}
 	if w := patchServer(t, r, testUser, id.String(), nil, map[string][]byte{"banner": pngBytes()}); w.Code != http.StatusOK {
 		t.Fatalf("setup: code=%d", w.Code)
 	}
@@ -263,5 +264,62 @@ func TestGetIcon_NoAuth_IsStillServed(t *testing.T) {
 	w := getAsUser(t, r, "", "/v1/servers/"+s.ID+"/icon")
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404 for a server without an icon", w.Code)
+	}
+}
+
+func TestUpdateServer_BannerWithoutLevel_Returns403(t *testing.T) {
+	r, repo := newRouter(t, oneMB, nil)
+	id := uuid.New()
+	repo.getResult = model.Server{ID: id, Name: "Sin Nivel", OwnerID: testUser, BoostLevel: 1}
+
+	w := patchServer(t, r, testUser, id.String(), nil, map[string][]byte{"banner": pngBytes()})
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
+	}
+	e := decodeError(t, w)
+	if e.Error.Details["reason"] != "boost_level_required" {
+		t.Errorf("reason = %v", e.Error.Details["reason"])
+	}
+	if e.Error.Details["required_level"] != float64(model.BoostLevelBanner) {
+		t.Errorf("required_level = %v", e.Error.Details["required_level"])
+	}
+}
+
+// A level the server lost hides what it stored, without erasing it.
+func TestGetServer_HidesWhatTheLevelNoLongerUnlocks(t *testing.T) {
+	r, repo := newRouter(t, oneMB, nil)
+	id := uuid.New()
+	icon, banner, vanity := "/icon?v=1", "/banner?v=1", "mi-servidor"
+	repo.getResult = model.Server{
+		ID: id, Name: "Bajo de nivel", OwnerID: testUser, BoostCount: 2,
+		IconURL: &icon, IconAnimated: true, BannerURL: &banner, VanityCode: &vanity,
+	}
+
+	w := getAsUser(t, r, testUser, "/v1/servers/"+id.String())
+	if w.Code != http.StatusOK {
+		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
+	}
+	var got map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range []string{"icon_url", "banner_url", "vanity_code"} {
+		if got[field] != nil {
+			t.Errorf("%s = %v, want null", field, got[field])
+		}
+	}
+	if got["boost_count"] != float64(2) || got["boost_level"] != float64(0) {
+		t.Errorf("boost_count=%v boost_level=%v", got["boost_count"], got["boost_level"])
+	}
+
+	repo.getResult.BoostLevel = 3
+	w = getAsUser(t, r, testUser, "/v1/servers/"+id.String())
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	for field, want := range map[string]string{"icon_url": icon, "banner_url": banner, "vanity_code": vanity} {
+		if got[field] != want {
+			t.Errorf("%s = %v, want %q at level 3", field, got[field], want)
+		}
 	}
 }

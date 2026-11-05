@@ -130,8 +130,8 @@ func TestCreate_NameWithTab_Returns400(t *testing.T) {
 
 func TestCreate_UnsupportedIconType_Returns400(t *testing.T) {
 	r, repo := newRouter(t, oneMB, nil)
-	gif := append([]byte("GIF87a"), make([]byte, 32)...)
-	w := postCreate(t, r, testUser, "Con Gif", gif)
+	bmp := append([]byte("BM"), make([]byte, 32)...)
+	w := postCreate(t, r, testUser, "Con Bmp", bmp)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
 	}
@@ -140,6 +140,22 @@ func TestCreate_UnsupportedIconType_Returns400(t *testing.T) {
 	}
 	if repo.calls != 0 {
 		t.Error("server was created with an invalid icon")
+	}
+}
+
+// A new server has no boosts, so it can't start with a GIF icon.
+func TestCreate_GIFIcon_NeedsBoostLevel(t *testing.T) {
+	r, repo := newRouter(t, oneMB, nil)
+	gif := append([]byte("GIF87a"), make([]byte, 32)...)
+	w := postCreate(t, r, testUser, "Con Gif", gif)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
+	}
+	if e := decodeError(t, w); e.Error.Details["reason"] != "boost_level_required" {
+		t.Errorf("reason = %v", e.Error.Details["reason"])
+	}
+	if repo.calls != 0 {
+		t.Error("server was created with a GIF icon")
 	}
 }
 

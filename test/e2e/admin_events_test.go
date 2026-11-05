@@ -59,7 +59,7 @@ func setupAdminReplica(t *testing.T, onApplied admin_consumer.Invalidator) (*amq
 		t.Fatalf("NewPool: %v", err)
 	}
 	t.Cleanup(pool.Close)
-	drop := func() { _, _ = pool.Exec(context.Background(), `DROP TABLE IF EXISTS suspended_users`) }
+	drop := func() { _, _ = pool.Exec(context.Background(), `DROP TABLE IF EXISTS server_boosts, suspended_users`) }
 	t.Cleanup(drop)
 	drop()
 	schema, err := os.ReadFile("../../migrations/0027_suspended_users.up.sql")
@@ -225,9 +225,9 @@ func TestAdminEvents_SuspendedUserIsRejectedAndVoiceAccessDenied(t *testing.T) {
 	ch, pool := setupAdminReplica(t, late)
 	ctx := context.Background()
 
-	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS channel_permission_overrides, user_profiles, outbox_events, member_roles, roles, server_mutes, ownership_transfers, categories, server_bans, invitations, server_members, channels, servers CASCADE`)
+	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS server_boosts, channel_permission_overrides, user_profiles, outbox_events, member_roles, roles, server_mutes, ownership_transfers, categories, server_bans, invitations, server_members, channels, servers CASCADE`)
 	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(), `DROP TABLE IF EXISTS channel_permission_overrides, user_profiles, outbox_events, member_roles, roles, server_mutes, ownership_transfers, categories, server_bans, invitations, server_members, channels, servers CASCADE`)
+		_, _ = pool.Exec(context.Background(), `DROP TABLE IF EXISTS server_boosts, channel_permission_overrides, user_profiles, outbox_events, member_roles, roles, server_mutes, ownership_transfers, categories, server_bans, invitations, server_members, channels, servers CASCADE`)
 	})
 	for _, f := range []string{
 		"0001_init.up.sql", "0002_invitations.up.sql",
@@ -240,6 +240,7 @@ func TestAdminEvents_SuspendedUserIsRejectedAndVoiceAccessDenied(t *testing.T) {
 		"0016_server_bans_banned_by.up.sql", "0017_user_profiles.up.sql",
 		"0019_everyone_role.up.sql", "0020_channel_permission_overrides.up.sql",
 		"0021_server_mutes.up.sql",
+		"0031_server_boosts.up.sql",
 	} {
 		schema, err := os.ReadFile("../../migrations/" + f)
 		if err != nil {

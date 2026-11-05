@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/discordia-grupo01/servers/internal/apierr"
+	"github.com/discordia-grupo01/servers/internal/handler/boost_handler"
 	"github.com/discordia-grupo01/servers/internal/handler/category_handler"
 	"github.com/discordia-grupo01/servers/internal/handler/channel_handler"
 	"github.com/discordia-grupo01/servers/internal/handler/channelperm_handler"
@@ -43,6 +44,7 @@ type Deps struct {
 	Reports            report_handler.UseCases
 	Emojis             emoji_handler.UseCases
 	EmojiImages        emoji_handler.ImageReader // only set when images aren't publicly hosted
+	Boosts             boost_handler.UseCases
 	ChannelPermissions channelperm_handler.UseCases
 	VoiceAccess        voice_access_handler.UseCases
 	Mentions           mention_handler.UseCases
@@ -67,6 +69,7 @@ func NewRouter(d Deps) *gin.Engine {
 	wordFilterH := word_filter_handler.New(d.WordFilter)
 	reportH := report_handler.New(d.Reports)
 	emojiH := emoji_handler.New(d.Emojis, d.EmojiImages)
+	boostH := boost_handler.New(d.Boosts)
 	channelPermH := channelperm_handler.New(d.ChannelPermissions)
 	voiceAccessH := voice_access_handler.New(d.VoiceAccess)
 	mentionH := mention_handler.New(d.Mentions)
@@ -166,6 +169,8 @@ func NewRouter(d Deps) *gin.Engine {
 	v1.POST("/servers/:serverId/emojis", emojiH.Create)
 	v1.GET("/servers/:serverId/emojis", emojiH.List)
 	v1.DELETE("/servers/:serverId/emojis/:emojiId", emojiH.Delete)
+	v1.GET("/servers/:serverId/boosts", boostH.Summary)
+	v1.PATCH("/servers/:serverId/vanity", boostH.SetVanity)
 
 	invitation.NewHandler(d.Invitations).Register(v1)
 

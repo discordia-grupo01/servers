@@ -86,12 +86,27 @@ func TestLoad_RabbitMQWithAdminSecret(t *testing.T) {
 	setDB(t)
 	t.Setenv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
 	t.Setenv("ADMIN_EVENTS_HMAC_SECRET", "s3cret")
+	t.Setenv("BILLING_EVENTS_HMAC_SECRET", "b1lling")
 	c, err := config.Load()
 	if err != nil {
 		t.Fatalf("err = %v", err)
 	}
 	if c.AdminEventsHMACSecret != "s3cret" {
 		t.Errorf("AdminEventsHMACSecret = %q", c.AdminEventsHMACSecret)
+	}
+	if c.BillingEventsHMACSecret != "b1lling" {
+		t.Errorf("BillingEventsHMACSecret = %q", c.BillingEventsHMACSecret)
+	}
+}
+
+func TestLoad_RabbitMQWithoutBillingSecretFails(t *testing.T) {
+	setDB(t)
+	t.Setenv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
+	t.Setenv("ADMIN_EVENTS_HMAC_SECRET", "s3cret")
+	t.Setenv("BILLING_EVENTS_HMAC_SECRET", "")
+	_, err := config.Load()
+	if err == nil || !strings.Contains(err.Error(), "BILLING_EVENTS_HMAC_SECRET") {
+		t.Fatalf("expected error mentioning BILLING_EVENTS_HMAC_SECRET, got: %v", err)
 	}
 }
 

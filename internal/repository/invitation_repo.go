@@ -142,74 +142,99 @@ func (r *InvitationRepository) RedeemInvitation(ctx context.Context, code, userI
 			return fmt.Errorf("consume invitation use: %w", err)
 		}
 
-		// The service already checked the ban, but a ban can commit between
-		// that check and this insert. The ban locks the server row FOR NO KEY
-		// UPDATE, which conflicts with FOR SHARE: once we hold it, a ban is
-		// either fully committed (and visible to the next statement) or
-		// waits for us to finish.
-		if _, err := tx.Exec(ctx, `SELECT 1 FROM servers WHERE id = $1 FOR SHARE`, serverID); err != nil {
-			return fmt.Errorf("lock server: %w", err)
-		}
-		var banned bool
-		if err := tx.QueryRow(ctx,
-			`SELECT EXISTS (SELECT 1 FROM server_bans WHERE server_id = $1 AND user_id = $2)`,
-			serverID, userID,
-		).Scan(&banned); err != nil {
-			return fmt.Errorf("check ban: %w", err)
-		}
-		if banned {
-			return model.ErrUserBanned
-		}
-
-		ct, err := tx.Exec(ctx, `
-			INSERT INTO server_members (server_id, user_id, is_owner, joined_at)
-			VALUES ($1, $2, FALSE, $3)
-			ON CONFLICT (server_id, user_id) DO NOTHING`, serverID, userID, now,
-		)
-		if err != nil {
-			return fmt.Errorf("insert membership: %w", err)
-		}
-		if ct.RowsAffected() == 0 {
-			return model.ErrAlreadyMember
-		}
-
-		var defaultRoleID *uuid.UUID
-		if err := tx.QueryRow(ctx,
-			`SELECT default_role_id FROM servers WHERE id = $1`, serverID,
-		).Scan(&defaultRoleID); err != nil {
-			return fmt.Errorf("select default role: %w", err)
-		}
-		if defaultRoleID != nil {
-			if _, err := tx.Exec(ctx, `
-				INSERT INTO member_roles (server_id, user_id, role_id, assigned_at)
-				VALUES ($1, $2, $3, $4)
-				ON CONFLICT (server_id, user_id, role_id) DO NOTHING`,
-				serverID, userID, *defaultRoleID, now,
-			); err != nil {
-				return fmt.Errorf("assign default role: %w", err)
-			}
-		}
-
-		if _, err := tx.Exec(ctx, `
-			INSERT INTO member_roles (server_id, user_id, role_id, assigned_at)
-			SELECT $1, $2, r.id, $3 FROM roles r WHERE r.server_id = $1 AND r.is_everyone
-			ON CONFLICT (server_id, user_id, role_id) DO NOTHING`,
-			serverID, userID, now,
-		); err != nil {
-			return fmt.Errorf("assign everyone role: %w", err)
-		}
-
-		evt, err := buildEvent(serverID)
-		if err != nil {
-			return fmt.Errorf("build member joined event: %w", err)
-		}
-		if err := outbox.Insert(ctx, tx, evt); err != nil {
-			return err
-		}
-		return PublishMemberRoles(ctx, tx, serverID, userID)
+		return addMember(ctx, tx, serverID, userID, now, buildEvent)
 	})
 	if err != nil {
 		return uuid.Nil, err
 	}
 	return serverID, nil
+}
+
+// ServerByVanity only finds the server while its boost level unlocks the code.
+func (r *InvitationRepository) ServerByVanity(ctx context.Context, code string) (uuid.UUID, error) {
+	var serverID uuid.UUID
+	err := r.pool.QueryRow(ctx,
+		`SELECT id FROM servers WHERE vanity_code = $1 AND boost_level >= $2`, code, model.BoostLevelVanity,
+	).Scan(&serverID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return uuid.Nil, model.ErrInvitationNotFound
+	}
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("select server by vanity code: %w", err)
+	}
+	return serverID, nil
+}
+
+func (r *InvitationRepository) JoinByVanity(ctx context.Context, serverID uuid.UUID, userID string, now time.Time, buildEvent func(serverID uuid.UUID) (outbox.Event, error)) error {
+	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+		return addMember(ctx, tx, serverID, userID, now, buildEvent)
+	})
+}
+
+func addMember(ctx context.Context, tx pgx.Tx, serverID uuid.UUID, userID string, now time.Time, buildEvent func(serverID uuid.UUID) (outbox.Event, error)) error {
+	// The service already checked the ban, but a ban can commit between
+	// that check and this insert. The ban locks the server row FOR NO KEY
+	// UPDATE, which conflicts with FOR SHARE: once we hold it, a ban is
+	// either fully committed (and visible to the next statement) or
+	// waits for us to finish.
+	if _, err := tx.Exec(ctx, `SELECT 1 FROM servers WHERE id = $1 FOR SHARE`, serverID); err != nil {
+		return fmt.Errorf("lock server: %w", err)
+	}
+	var banned bool
+	if err := tx.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM server_bans WHERE server_id = $1 AND user_id = $2)`,
+		serverID, userID,
+	).Scan(&banned); err != nil {
+		return fmt.Errorf("check ban: %w", err)
+	}
+	if banned {
+		return model.ErrUserBanned
+	}
+
+	ct, err := tx.Exec(ctx, `
+		INSERT INTO server_members (server_id, user_id, is_owner, joined_at)
+		VALUES ($1, $2, FALSE, $3)
+		ON CONFLICT (server_id, user_id) DO NOTHING`, serverID, userID, now,
+	)
+	if err != nil {
+		return fmt.Errorf("insert membership: %w", err)
+	}
+	if ct.RowsAffected() == 0 {
+		return model.ErrAlreadyMember
+	}
+
+	var defaultRoleID *uuid.UUID
+	if err := tx.QueryRow(ctx,
+		`SELECT default_role_id FROM servers WHERE id = $1`, serverID,
+	).Scan(&defaultRoleID); err != nil {
+		return fmt.Errorf("select default role: %w", err)
+	}
+	if defaultRoleID != nil {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO member_roles (server_id, user_id, role_id, assigned_at)
+			VALUES ($1, $2, $3, $4)
+			ON CONFLICT (server_id, user_id, role_id) DO NOTHING`,
+			serverID, userID, *defaultRoleID, now,
+		); err != nil {
+			return fmt.Errorf("assign default role: %w", err)
+		}
+	}
+
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO member_roles (server_id, user_id, role_id, assigned_at)
+		SELECT $1, $2, r.id, $3 FROM roles r WHERE r.server_id = $1 AND r.is_everyone
+		ON CONFLICT (server_id, user_id, role_id) DO NOTHING`,
+		serverID, userID, now,
+	); err != nil {
+		return fmt.Errorf("assign everyone role: %w", err)
+	}
+
+	evt, err := buildEvent(serverID)
+	if err != nil {
+		return fmt.Errorf("build member joined event: %w", err)
+	}
+	if err := outbox.Insert(ctx, tx, evt); err != nil {
+		return err
+	}
+	return PublishMemberRoles(ctx, tx, serverID, userID)
 }

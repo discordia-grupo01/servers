@@ -189,7 +189,7 @@ func TestLocalStore_DeleteIsIdempotent(t *testing.T) {
 
 func TestLocalStore_InvalidSaveWritesNoFile(t *testing.T) {
 	st := newStore(t)
-	if _, err := st.Save("srv2", gif(64)); !errors.Is(err, model.ErrIconUnsupportedType) {
+	if _, err := st.Save("srv2", pad([]byte("BM"), 64)); !errors.Is(err, model.ErrIconUnsupportedType) {
 		t.Fatalf("err = %v", err)
 	}
 	if _, _, err := st.Get("srv2"); !errors.Is(err, model.ErrIconNotFound) {

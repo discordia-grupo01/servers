@@ -78,12 +78,16 @@ func (r *Repository) SuspendedByRole(ctx context.Context, roleID uuid.UUID) (sus
 }
 
 // SuspendedByInvite is SuspendedByServer for the server an invitation code
-// belongs to, whatever the invitation's own state (revoked, expired...).
+// or vanity code belongs to, whatever the invitation's own state (revoked,
+// expired...). The vanity code is compared as joining does, in lowercase.
 func (r *Repository) SuspendedByInvite(ctx context.Context, code string) (suspended, found bool, err error) {
 	return r.lookup(ctx, `
 		SELECT s.suspended_at IS NOT NULL
 		  FROM invitations i JOIN servers s ON s.id = i.server_id
-		 WHERE i.code = $1`, code)
+		 WHERE i.code = $1
+		UNION ALL
+		SELECT suspended_at IS NOT NULL FROM servers WHERE vanity_code = lower($1)
+		LIMIT 1`, code)
 }
 
 func (r *Repository) lookup(ctx context.Context, query string, arg any) (suspended, found bool, err error) {
