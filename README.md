@@ -418,6 +418,24 @@ permisos en el resto del servidor (HU #57). Se guardan en la tabla
   mayúsculas ni tildes, solo palabras completas). Nadie queda exento, y los
   mensajes ya enviados no se tocan (HU de filtro automático).
 
+- **Emojis personalizados** (`POST`, `GET` y `DELETE` en
+  `/v1/servers/{serverId}/emojis`): crear y borrar pide `MANAGE_SERVER` (el
+  dueño y los administradores lo tienen implícito); listar, ser miembro. El
+  alta es multipart con `name` (2 a 32 letras, números o guiones bajos, único en
+  el servidor sin distinguir mayúsculas) e `image` (PNG, WebP o GIF, hasta 5 MB,
+  detectado por el contenido del archivo y no por su nombre). Un GIF crea un
+  emoji animado; usarlo en mensajes requiere Premium, y eso lo controla
+  `messaging`. Cada servidor tiene 50 lugares, y `max_emojis` en el listado
+  indica cuántos son. Borrar es lógico: el emoji deja de listarse y libera su
+  lugar y su nombre, pero la fila y la imagen se conservan para que los mensajes
+  y reacciones que ya lo usan lo sigan mostrando. Cada alta y cada baja encolan
+  `servers.emoji_created` o `servers.emoji_deleted` en la misma transacción. Las
+  imágenes van al mismo bucket que los íconos, bajo `emojis/<serverId>/`, así que
+  el bucket tiene que aceptar `image/gif`. En desarrollo se guardan en
+  `ICON_DIR` y se sirven en `GET /v1/servers/{serverId}/emojis/{key}/image`; en
+  producción esa ruta no existe porque el bucket es público. Al borrar un
+  servidor se borran sus filas, pero sus imágenes quedan en el bucket.
+
 - **Reportes** (`POST /v1/servers/{serverId}/reports`): cualquier miembro
   puede reportar un mensaje (`kind: "message"`, `channel_id` y `message_id`) o
   a otro miembro (`kind: "user"`, `user_id`), siempre con un `reason` de hasta

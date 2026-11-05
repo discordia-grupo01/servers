@@ -1615,6 +1615,169 @@ paths:
       summary: Set the server's default role
       tags:
         - roles
+  "/v1/servers/{serverId}/emojis":
+    get:
+      description: Any member of the server. Oldest first, without the deleted ones.
+        max_emojis is the number of slots the server has.
+      parameters:
+        - description: Server ID
+          in: path
+          name: serverId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/emoji.ListResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "403":
+          description: not a member of the server
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "404":
+          description: server not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+      security:
+        - BearerAuth: []
+      summary: List a server's custom emojis
+      tags:
+        - emojis
+    post:
+      description: Requires MANAGE_SERVER (the owner and administrators hold it
+        implicitly). Multipart form with name (2 to 32 letters, numbers or
+        underscores, unique in the server ignoring case) and image (PNG, WebP or
+        GIF, at most 5 MB, detected from the file's content). A GIF creates an
+        animated emoji. A server has 50 slots; deleted emojis free theirs.
+      parameters:
+        - description: Server ID
+          in: path
+          name: serverId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                name:
+                  description: Emoji name
+                  type: string
+                image:
+                  description: Emoji image
+                  type: string
+                  format: binary
+              required:
+                - name
+                - image
+        required: true
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/emoji.Response"
+        "400":
+          description: invalid name, or image missing, too large or of an unsupported type
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "403":
+          description: missing MANAGE_SERVER
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "404":
+          description: server not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "409":
+          description: emoji_name_taken or emoji_limit_reached
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+      security:
+        - BearerAuth: []
+      summary: Add a custom emoji to a server
+      tags:
+        - emojis
+  "/v1/servers/{serverId}/emojis/{emojiId}":
+    delete:
+      description: Requires MANAGE_SERVER. The emoji can't be used in new messages or
+        reactions and its slot and name become free, but its image is kept so
+        the messages and reactions that already use it still show it.
+      parameters:
+        - description: Server ID
+          in: path
+          name: serverId
+          required: true
+          schema:
+            type: string
+        - description: Emoji ID
+          in: path
+          name: emojiId
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: deleted
+        "400":
+          description: invalid id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "403":
+          description: missing MANAGE_SERVER
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "404":
+          description: server or emoji not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+      security:
+        - BearerAuth: []
+      summary: Delete a custom emoji
+      tags:
+        - emojis
   "/v1/servers/{serverId}/icon":
     get:
       description: Public (no JWT required) -- binary image, so a plain `<img src>`
@@ -3085,6 +3248,39 @@ components:
         server_id:
           type: string
         topic:
+          type: string
+      type: object
+    emoji.ListResponse:
+      properties:
+        emojis:
+          items:
+            $ref: "#/components/schemas/emoji.Response"
+          type: array
+        max_emojis:
+          example: 50
+          type: integer
+      type: object
+    emoji.Response:
+      properties:
+        animated:
+          example: true
+          type: boolean
+        created_at:
+          type: string
+        created_by:
+          example: a3f1c0de-1111-4222-8333-444455556666
+          type: string
+        id:
+          example: 2f4e6a8c-1b3d-4f5a-9c7e-8d6b4a2c0e1f
+          type: string
+        image_url:
+          example: https://storage.example.com/emojis/2f4e6a8c.gif
+          type: string
+        name:
+          example: party
+          type: string
+        server_id:
+          example: 0b6f1c8e-7a2d-4e3f-9c1b-5d4a3e2f1a0b
           type: string
       type: object
     handler.deleteServerRequest:

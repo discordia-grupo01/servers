@@ -11,6 +11,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/events/admin_consumer"
 	"github.com/discordia-grupo01/servers/internal/events/profile_consumer"
 	"github.com/discordia-grupo01/servers/internal/handler"
+	"github.com/discordia-grupo01/servers/internal/handler/emoji_handler"
 	"github.com/discordia-grupo01/servers/internal/iconstore"
 	"github.com/discordia-grupo01/servers/internal/middleware"
 	"github.com/discordia-grupo01/servers/internal/outbox"
@@ -18,6 +19,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/repository/category_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/channel_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/channelperm_repo"
+	"github.com/discordia-grupo01/servers/internal/repository/emoji_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/member_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/moderation_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/ownership_transfer_repo"
@@ -31,6 +33,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/service/category_service"
 	"github.com/discordia-grupo01/servers/internal/service/channel_service"
 	"github.com/discordia-grupo01/servers/internal/service/channelperm_service"
+	"github.com/discordia-grupo01/servers/internal/service/emoji_service"
 	"github.com/discordia-grupo01/servers/internal/service/invitation"
 	"github.com/discordia-grupo01/servers/internal/service/member_role_service"
 	"github.com/discordia-grupo01/servers/internal/service/membership_service"
@@ -71,18 +74,22 @@ func main() {
 	defer pool.Close()
 
 	var icons iconstore.Store
+	var emojiStore emoji_service.ImageStore
+	var emojiImages emoji_handler.ImageReader
 	switch {
 	case cfg.UseSupabaseStorage():
-		icons = iconstore.NewSupabaseStore(
+		store := iconstore.NewSupabaseStore(
 			cfg.SupabaseStorageURL, cfg.SupabaseStorageBucket, cfg.SupabaseServiceKey, cfg.IconMaxBytes,
 		)
+		icons, emojiStore = store, store
 	case cfg.IsProduction():
 		log.Fatalf("iconstore: SUPABASE_STORAGE_URL, SUPABASE_STORAGE_BUCKET and SUPABASE_SERVICE_KEY are required in production")
 	default:
-		icons, err = iconstore.NewLocalStore(cfg.IconDir, cfg.IconMaxBytes)
+		store, err := iconstore.NewLocalStore(cfg.IconDir, cfg.IconMaxBytes)
 		if err != nil {
 			log.Fatalf("iconstore: %v", err)
 		}
+		icons, emojiStore, emojiImages = store, store, store
 	}
 
 	publisher := events.NewAMQPPublisher(cfg.RabbitMQURL)
@@ -123,6 +130,7 @@ func main() {
 	go moderation_service.NewMuteExpirer(moderationRepo).Start(ctx)
 	wordFilterSvc := word_filter_service.New(serverRepo, memberRepo, word_filter_repo.NewRepository(pool))
 	reportSvc := report_service.New(serverRepo, memberRepo, channelPermRepo, report_repo.NewRepository(pool))
+	emojiSvc := emoji_service.New(serverRepo, memberRepo, emoji_repo.NewRepository(pool), emojiStore)
 	channelPermSvc := channelperm_service.New(serverRepo, channelRepo, roleRepo, memberRepo, channelPermRepo)
 	mentionSvc := mention_service.New(serverRepo, channelRepo, memberRepo, roleRepo)
 
@@ -139,6 +147,8 @@ func main() {
 		Moderation:         moderationSvc,
 		WordFilter:         wordFilterSvc,
 		Reports:            reportSvc,
+		Emojis:             emojiSvc,
+		EmojiImages:        emojiImages,
 		ChannelPermissions: channelPermSvc,
 		VoiceAccess:        channelSvc,
 		Mentions:           mentionSvc,
