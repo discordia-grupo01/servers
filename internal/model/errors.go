@@ -87,6 +87,14 @@ var (
 	ErrReportNotPending      = errors.New("report was already closed")
 	ErrReportStatusInvalid   = errors.New("status must be 'resolved' or 'dismissed'")
 
+	ErrEmojiNameInvalid      = errors.New("emoji name must be 2 to 32 letters, numbers or underscores")
+	ErrEmojiNameTaken        = errors.New("this server already has an emoji with that name")
+	ErrEmojiLimitReached     = errors.New("this server has no emoji slots left")
+	ErrEmojiNotFound         = errors.New("emoji not found")
+	ErrEmojiImageRequired    = errors.New("emoji image must be provided")
+	ErrEmojiImageTooLarge    = errors.New("emoji image is too large (max 5 MB)")
+	ErrEmojiImageUnsupported = errors.New("emoji image must be PNG, WebP or GIF")
+
 	ErrMemberNotFound     = errors.New("member not found")
 	ErrMemberRoleNotFound = errors.New("member does not have this role")
 

@@ -238,6 +238,20 @@ func WriteDomainError(c *gin.Context, err error) {
 		RespondError(c, http.StatusConflict, err.Error(), map[string]any{"reason": "report_not_pending"})
 	case errors.Is(err, model.ErrReportStatusInvalid):
 		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("status", "status_invalid"))
+	case errors.Is(err, model.ErrEmojiNameInvalid):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("name", "emoji_name_invalid"))
+	case errors.Is(err, model.ErrEmojiNameTaken):
+		RespondError(c, http.StatusConflict, err.Error(), FieldErr("name", "emoji_name_taken"))
+	case errors.Is(err, model.ErrEmojiLimitReached):
+		RespondError(c, http.StatusConflict, err.Error(), map[string]any{"reason": "emoji_limit_reached"})
+	case errors.Is(err, model.ErrEmojiNotFound):
+		RespondError(c, http.StatusNotFound, err.Error(), map[string]any{"reason": "emoji_not_found"})
+	case errors.Is(err, model.ErrEmojiImageRequired):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("image", "emoji_image_required"))
+	case errors.Is(err, model.ErrEmojiImageTooLarge):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("image", "emoji_image_too_large"))
+	case errors.Is(err, model.ErrEmojiImageUnsupported):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("image", "emoji_image_unsupported"))
 	case errors.Is(err, moderation.ErrBannedWordEmpty):
 		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("words", "word_empty"))
 	case errors.Is(err, moderation.ErrBannedWordTooLong):

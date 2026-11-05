@@ -10,6 +10,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/handler/category_handler"
 	"github.com/discordia-grupo01/servers/internal/handler/channel_handler"
 	"github.com/discordia-grupo01/servers/internal/handler/channelperm_handler"
+	"github.com/discordia-grupo01/servers/internal/handler/emoji_handler"
 	"github.com/discordia-grupo01/servers/internal/handler/invitation"
 	"github.com/discordia-grupo01/servers/internal/handler/member_role_handler"
 	"github.com/discordia-grupo01/servers/internal/handler/membership_handler"
@@ -40,6 +41,8 @@ type Deps struct {
 	Moderation         moderation_handler.UseCases
 	WordFilter         word_filter_handler.UseCases
 	Reports            report_handler.UseCases
+	Emojis             emoji_handler.UseCases
+	EmojiImages        emoji_handler.ImageReader // only set when images aren't publicly hosted
 	ChannelPermissions channelperm_handler.UseCases
 	VoiceAccess        voice_access_handler.UseCases
 	Mentions           mention_handler.UseCases
@@ -63,6 +66,7 @@ func NewRouter(d Deps) *gin.Engine {
 	moderationH := moderation_handler.New(d.Moderation)
 	wordFilterH := word_filter_handler.New(d.WordFilter)
 	reportH := report_handler.New(d.Reports)
+	emojiH := emoji_handler.New(d.Emojis, d.EmojiImages)
 	channelPermH := channelperm_handler.New(d.ChannelPermissions)
 	voiceAccessH := voice_access_handler.New(d.VoiceAccess)
 	mentionH := mention_handler.New(d.Mentions)
@@ -86,6 +90,9 @@ func NewRouter(d Deps) *gin.Engine {
 	v1Public := r.Group("/v1")
 	v1Public.GET("/servers/:serverId/icon", h.getIcon)
 	v1Public.GET("/servers/:serverId/banner", h.getBanner)
+	if d.EmojiImages != nil {
+		v1Public.GET("/servers/:serverId/emojis/:imageKey/image", emojiH.GetImage)
+	}
 
 	v1 := r.Group("/v1")
 	v1.Use(middleware.Auth(d.Auth))
@@ -156,6 +163,9 @@ func NewRouter(d Deps) *gin.Engine {
 	v1.POST("/servers/:serverId/reports", reportH.Create)
 	v1.GET("/servers/:serverId/reports", reportH.List)
 	v1.PATCH("/servers/:serverId/reports/:reportId", reportH.Close)
+	v1.POST("/servers/:serverId/emojis", emojiH.Create)
+	v1.GET("/servers/:serverId/emojis", emojiH.List)
+	v1.DELETE("/servers/:serverId/emojis/:emojiId", emojiH.Delete)
 
 	invitation.NewHandler(d.Invitations).Register(v1)
 

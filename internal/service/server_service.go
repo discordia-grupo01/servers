@@ -4,6 +4,7 @@ package service
 import (
 	"context"
 	"errors"
+	"log"
 	"strings"
 	"time"
 	"unicode"
@@ -35,6 +36,7 @@ type Repo interface {
 type IconStore interface {
 	Save(id string, data []byte) (url string, err error)
 	Delete(id string) error
+	DeleteServerEmojis(serverID string) error
 }
 
 type Service struct {
@@ -448,5 +450,8 @@ func (s *Service) removeImages(srv model.Server) {
 		if hash, ok := iconstore.HashFromURL(*srv.BannerURL); ok {
 			_ = s.icons.Delete(iconstore.StorageKey(BannerObjectID(srv.ID), hash))
 		}
+	}
+	if err := s.icons.DeleteServerEmojis(srv.ID.String()); err != nil {
+		log.Printf("server %s deleted, but its emoji images remain: %v", srv.ID, err)
 	}
 }
