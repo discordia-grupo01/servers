@@ -59,7 +59,7 @@ Con `docker compose up` se levanta también el servicio (`api`) contra la base.
 | SUPABASE_STORAGE_BUCKET | - (vacio) | Nombre del bucket de Storage. |
 | SUPABASE_SERVICE_KEY | - (vacio) | `service_role` key del proyecto (Project Settings > API) -- nunca la `anon` key, esta se salta las políticas RLS del bucket. |
 | RABBITMQ_URL | - (vacio) | Conexion al broker para publicar eventos de dominio y consumir `users.profile_updated` (exchange `discordia.events`, ver ADR-07). Vacia = publisher en no-op y sin réplica de perfiles (`profile: null` en `GET /members`); el servicio funciona igual sin RabbitMQ. |
-| ADMIN_EVENTS_HMAC_SECRET | - (vacio) | Secreto compartido con `discordia-admin` para verificar la firma HMAC de `admin.user_suspended` / `admin.user_reactivated`. **Obligatoria si `RABBITMQ_URL` está seteada** (si falta, el servicio no arranca); sin RabbitMQ no se aplican suspensiones. Los eventos sin firma o con firma inválida se descartan con un `warn` y no cambian ningún estado. |
+| ADMIN_EVENTS_HMAC_SECRET | - (vacio) | Secreto compartido con `discordia-admin` para verificar la firma HMAC de `admin.user_suspended` / `admin.user_reactivated` y de `admin.server_suspended` / `admin.server_reactivated` / `admin.server_deletion_requested`. **Obligatoria si `RABBITMQ_URL` está seteada** (si falta, el servicio no arranca); sin RabbitMQ no se aplican suspensiones. Los eventos sin firma o con firma inválida se descartan con un `warn` y no cambian ningún estado. |
 
 Publicar un evento nunca pasa directo por RabbitMQ desde el request: el
 handler escribe una fila en `outbox_events` en la misma transacción que el
@@ -375,6 +375,12 @@ permisos en el resto del servidor (HU #57). Se guardan en la tabla
   mensajes al consumir `servers.server_deleted`, y `identify-service` actualiza
   sus "servidores en común" con los `member_left` de siempre.
 - Respuesta `204` sin cuerpo; el mismo pedido otra vez da `404`. No es reversible.
+- **Por pedido del staff de la plataforma** (HU #68): el backoffice no llama a este
+  endpoint; `discordia-admin` publica `admin.server_deletion_requested` y este
+  servicio lo ejecuta con `DeleteServerByStaff`, que hace exactamente lo mismo en
+  la misma transacción y publica los mismos eventos, sin exigir ser el owner ni el
+  nombre (esa confirmación ya la pidió admin). Ver "Servidores suspendidos o
+  eliminados por la plataforma".
 
 ## Moderación
 - **Banear** (`POST /v1/servers/{serverId}/bans`, `user_id` y `reason`
@@ -505,6 +511,57 @@ motivo en `details.error_code`:
   figurando, pero con `profile: null`: no se devuelven su nombre ni su avatar
   mientras dure la suspensión. Reactivar levanta todo con el siguiente evento.
 - Rutas públicas (`/livez`, `/readyz`, íconos y banners) no se ven afectadas.
+
+## Servidores suspendidos o eliminados por la plataforma
+
+El staff modera servidores desde el backoffice (HU #68 y #69). `discordia-admin`
+registra la decisión y la publica firmada (`ADMIN_EVENTS_HMAC_SECRET`); este
+servicio la ejecuta. El consumidor es el mismo de arriba (cola
+`servers.admin_events`, a la que se suman tres bindings) y descarta, sin cambiar
+nada, todo evento con firma ausente o inválida, `server_id` que no sea un UUID o
+`version < 1`.
+
+| Evento | Qué hace este servicio |
+|---|---|
+| `admin.server_suspended` | guarda `servers.suspended_at` (el `occurred_at` del evento) si su `version` es mayor a `moderation_version` |
+| `admin.server_reactivated` | pone `suspended_at` en `NULL` con la misma regla de versión |
+| `admin.server_deletion_requested` | borra el servidor (cascada de la HU #40) y publica `servers.server_deleted`. No compara versión: es irreversible y es idempotente, el segundo pedido ya no encuentra el servidor |
+
+**Servidor suspendido.** El middleware `RejectSuspendedServer` corre después de
+`Auth` y de `RejectSuspended` y toma el servidor del primer parámetro de la ruta
+entre `serverId`, `channelId`, `categoryId`, `roleId` y `code` (invitación). Si está
+suspendido responde, **también al owner**:
+
+```json
+{ "error": { "code": 403, "message": "server suspended", "details": { "error_code": "SERVER_SUSPENDED" } } }
+```
+
+- Cubre todo: ver el servidor, membresía, miembros, invitar y unirse (la invitación
+  no se consume), editar, transferir, eliminar, roles, canales, categorías, permisos,
+  moderación y `GET /v1/channels/{id}/voice-access`, así que nadie obtiene un token
+  de voz de un servidor suspendido. Un test recorre **todas** las rutas del router y
+  falla si alguna nueva queda sin protección.
+- **Excepciones:** `POST` y `GET /v1/servers` (no nombran ningún servidor) y que un
+  miembro se **abandone** a sí mismo (`DELETE /v1/servers/{id}/members/{su id}`).
+  Sacar a otro sigue bloqueado. Los íconos y banners públicos no llevan JWT.
+- **El owner no puede irse:** abandonar un servidor siendo owner ya daba
+  `409 owner_must_transfer_or_delete`, y transferir y eliminar están bloqueados,
+  así que no tiene salida hasta que el staff reactive o elimine. Es a propósito:
+  durante la investigación nadie puede borrar evidencia.
+- `GET /v1/servers` sigue listándolo, con `suspended: true` y **sin canales ni
+  categorías**. En el resto de las respuestas `suspended` es siempre `false`.
+- La caché es por recurso (5 s) y se vacía entera cuando esta instancia aplica un
+  evento; las demás instancias se enteran dentro de esos 5 s. Si la base no responde,
+  `503`: nunca deja pasar. Un id mal formado o un recurso que no existe pasa al
+  handler, que contesta `400` o `404`.
+- Los trabajos en segundo plano (vencimiento de transferencias y de silencios) no
+  distinguen servidores suspendidos.
+
+**Despliegue.** Todas las instancias comparten la cola, así que una instancia
+anterior a este cambio descartaría `admin.server_*` ("routing key desconocida").
+Desplegar `servers` completo **antes** que `admin`. Una suspensión perdida se
+recupera con `make republish-suspensions` en admin; una eliminación perdida se
+repite desde el backoffice (el servidor sigue visible).
 
 ## Endpoints
 Ver [`openapi.yaml`](openapi.yaml) -- **generado automáticamente y actualizado

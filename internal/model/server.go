@@ -45,7 +45,13 @@ type Server struct {
 	Channels      []Channel
 	Categories    []Category
 	DefaultRoleID *uuid.UUID
+	// SuspendedAt is when the platform staff suspended the server, nil if it is
+	// active. Only ListForUser fills it.
+	SuspendedAt *time.Time
 }
+
+// Suspended reports whether the platform staff suspended the server.
+func (s Server) Suspended() bool { return s.SuspendedAt != nil }
 
 type Channel struct {
 	ID         uuid.UUID

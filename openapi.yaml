@@ -8,6 +8,8 @@ info:
     All /v1/** routes require identity: the JWT is validated by Kong at the gateway, and this service takes the user id from the X-User-Id header (or from the "sub" claim of the token Kong forwards).
 
     A user suspended at platform level gets 403 with details.error_code ACCOUNT_SUSPENDED on every /v1/** route (including GET /v1/channels/{channelId}/voice-access) until reactivated.
+
+    A server suspended by the platform staff answers 403 with details.error_code SERVER_SUSPENDED, to everyone including its owner, on every /v1/** route that acts on it, its channels, categories, roles or invitations (including GET /v1/channels/{channelId}/voice-access). The only exceptions are POST and GET /v1/servers and a member leaving the server (DELETE /v1/servers/{serverId}/members/{their own id}). GET /v1/servers keeps listing it, with suspended=true and no channels or categories.
   title: Discordia - Servers
   version: 1.0.0
 paths:
@@ -802,7 +804,10 @@ paths:
     get:
       description: Servers the caller is a member of, each with only the channels the
         caller can see (channels where an override takes VIEW_CHANNELS away from
-        them are left out; the owner and administrators see all).
+        them are left out; the owner and administrators see all). A server
+        suspended by the platform staff is still listed, with suspended=true and
+        no channels or categories; every other route answers 403
+        SERVER_SUSPENDED for it.
       responses:
         "200":
           description: OK
@@ -2912,6 +2917,15 @@ components:
           type: string
         owner_id:
           type: string
+        suspended:
+          description: >-
+            Suspended is true when the platform staff suspended the server. It
+            is only
+
+            ever true in the list of my servers: every other route answers 403
+
+            SERVER_SUSPENDED for it.
+          type: boolean
       type: object
     member_role_handler.assignRoleRequest:
       properties:

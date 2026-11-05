@@ -3,6 +3,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 	"unicode"
@@ -180,9 +181,19 @@ func (s *Service) ListMyServers(ctx context.Context, userID string) ([]model.Ser
 		return servers, err
 	}
 
+	// A suspended server shows nothing of its content, only that it is
+	// suspended: the member can't open it anyway, and there is no visibility to
+	// work out for it.
 	ids := make([]uuid.UUID, 0, len(servers))
-	for _, srv := range servers {
+	for i, srv := range servers {
+		if srv.Suspended() {
+			servers[i].Channels, servers[i].Categories = []model.Channel{}, nil
+			continue
+		}
 		ids = append(ids, srv.ID)
+	}
+	if len(ids) == 0 {
+		return servers, nil
 	}
 	standings, err := s.visibility.MemberStandings(ctx, userID, ids)
 	if err != nil {
@@ -193,6 +204,9 @@ func (s *Service) ListMyServers(ctx context.Context, userID string) ([]model.Ser
 		return nil, err
 	}
 	for i, srv := range servers {
+		if srv.Suspended() {
+			continue
+		}
 		st := standings[srv.ID]
 		if srv.OwnerID == userID {
 			st = role.Standing{IsMember: true, IsOwner: true}
@@ -353,13 +367,53 @@ func (s *Service) DeleteServer(ctx context.Context, p DeleteServerParams) error 
 		return model.ErrDeleteConfirmationMismatch
 	}
 
-	buildEvents := func(memberIDs []string, channelIDs []uuid.UUID) ([]outbox.Event, error) {
+	if err := s.repo.DeleteServer(ctx, p.ServerID, deletionEvents(p.ServerID)); err != nil {
+		return err
+	}
+
+	s.removeImages(srv)
+	return nil
+}
+
+// DeleteServerByStaff borra el servidor por pedido de la plataforma
+// (admin.server_deletion_requested). Hace lo mismo que DeleteServer, con la
+// misma transaccion y los mismos eventos, pero sin pedir ser el owner ni
+// confirmar el nombre: esa confirmacion ya la hizo el staff en admin.
+//
+// Es idempotente: si el servidor ya no existe (un pedido repetido, o el owner
+// lo borro antes) devuelve nil y no publica nada.
+func (s *Service) DeleteServerByStaff(ctx context.Context, serverID uuid.UUID) error {
+	iconURL, bannerURL, err := s.repo.IconURLs(ctx, serverID)
+	if errors.Is(err, model.ErrServerNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	err = s.repo.DeleteServer(ctx, serverID, deletionEvents(serverID))
+	if errors.Is(err, model.ErrServerNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	s.removeImages(model.Server{ID: serverID, IconURL: iconURL, BannerURL: bannerURL})
+	return nil
+}
+
+// deletionEvents arma los eventos de borrar un servidor: un member_left por
+// miembro y servers.server_deleted. Los comparten DeleteServer y
+// DeleteServerByStaff para que sean identicos sin importar quien lo pidio.
+func deletionEvents(serverID uuid.UUID) func(memberIDs []string, channelIDs []uuid.UUID) ([]outbox.Event, error) {
+	return func(memberIDs []string, channelIDs []uuid.UUID) ([]outbox.Event, error) {
 		now := time.Now().UTC()
 		events := make([]outbox.Event, 0, len(memberIDs)+1)
 		for _, userID := range memberIDs {
 			evt, err := outbox.New(membership.RoutingKeyMemberLeft, membership.MemberLeft{
 				Meta:     envelope.Meta{EventID: uuid.NewString(), OccurredAt: now},
-				ServerID: p.ServerID.String(),
+				ServerID: serverID.String(),
 				UserID:   userID,
 			})
 			if err != nil {
@@ -374,7 +428,7 @@ func (s *Service) DeleteServer(ctx context.Context, p DeleteServerParams) error 
 		}
 		deleted, err := outbox.New(serverevents.RoutingKeyServerDeleted, serverevents.ServerDeleted{
 			Meta:       envelope.Meta{EventID: uuid.NewString(), OccurredAt: now},
-			ServerID:   p.ServerID.String(),
+			ServerID:   serverID.String(),
 			ChannelIDs: ids,
 		})
 		if err != nil {
@@ -382,13 +436,6 @@ func (s *Service) DeleteServer(ctx context.Context, p DeleteServerParams) error 
 		}
 		return append(events, deleted), nil
 	}
-
-	if err := s.repo.DeleteServer(ctx, p.ServerID, buildEvents); err != nil {
-		return err
-	}
-
-	s.removeImages(srv)
-	return nil
 }
 
 func (s *Service) removeImages(srv model.Server) {

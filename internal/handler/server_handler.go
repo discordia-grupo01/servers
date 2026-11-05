@@ -45,12 +45,16 @@ type serverHandler struct {
 }
 
 type serverResponse struct {
-	ID         string                  `json:"id"`
-	Name       string                  `json:"name"`
-	IconURL    *string                 `json:"icon_url"`
-	BannerURL  *string                 `json:"banner_url"`
-	OwnerID    string                  `json:"owner_id"`
-	CreatedAt  time.Time               `json:"created_at"`
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	IconURL   *string   `json:"icon_url"`
+	BannerURL *string   `json:"banner_url"`
+	OwnerID   string    `json:"owner_id"`
+	CreatedAt time.Time `json:"created_at"`
+	// Suspended is true when the platform staff suspended the server. It is only
+	// ever true in the list of my servers: every other route answers 403
+	// SERVER_SUSPENDED for it.
+	Suspended  bool                    `json:"suspended"`
 	Channels   []channelview.Response  `json:"channels"`
 	Categories []categoryview.Response `json:"categories"`
 }
@@ -66,7 +70,7 @@ func toServerResponse(s model.Server) serverResponse {
 	}
 	return serverResponse{
 		ID: s.ID.String(), Name: s.Name, IconURL: s.IconURL, BannerURL: s.BannerURL, OwnerID: s.OwnerID,
-		CreatedAt: s.CreatedAt, Channels: chs, Categories: cats,
+		CreatedAt: s.CreatedAt, Suspended: s.Suspended(), Channels: chs, Categories: cats,
 	}
 }
 
@@ -232,7 +236,7 @@ func (h *serverHandler) deleteServer(c *gin.Context) {
 
 // listMyServers godoc
 // @Summary      List my servers
-// @Description  Servers the caller is a member of, each with only the channels the caller can see (channels where an override takes VIEW_CHANNELS away from them are left out; the owner and administrators see all).
+// @Description  Servers the caller is a member of, each with only the channels the caller can see (channels where an override takes VIEW_CHANNELS away from them are left out; the owner and administrators see all). A server suspended by the platform staff is still listed, with suspended=true and no channels or categories; every other route answers 403 SERVER_SUSPENDED for it.
 // @Tags         servers
 // @Produce      json
 // @Security     BearerAuth

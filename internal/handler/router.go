@@ -43,7 +43,11 @@ type Deps struct {
 	Mentions           mention_handler.UseCases
 	Auth               middleware.AuthConfig
 	RejectSuspended    gin.HandlerFunc // after Auth on every authenticated route; optional
-	DB                 Pinger
+	// RejectSuspendedServer runs after RejectSuspended and answers 403
+	// SERVER_SUSPENDED to anything done on a server the platform suspended
+	// (leaving it excepted); optional.
+	RejectSuspendedServer gin.HandlerFunc
+	DB                    Pinger
 }
 
 func NewRouter(d Deps) *gin.Engine {
@@ -84,6 +88,9 @@ func NewRouter(d Deps) *gin.Engine {
 	v1.Use(middleware.Auth(d.Auth))
 	if d.RejectSuspended != nil {
 		v1.Use(d.RejectSuspended)
+	}
+	if d.RejectSuspendedServer != nil {
+		v1.Use(d.RejectSuspendedServer)
 	}
 	v1.POST("/servers", h.createServer)
 	v1.GET("/servers", h.listMyServers)
