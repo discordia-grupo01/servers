@@ -418,6 +418,39 @@ permisos en el resto del servidor (HU #57). Se guardan en la tabla
   mayúsculas ni tildes, solo palabras completas). Nadie queda exento, y los
   mensajes ya enviados no se tocan (HU de filtro automático).
 
+- **Reportes** (`POST /v1/servers/{serverId}/reports`): cualquier miembro
+  puede reportar un mensaje (`kind: "message"`, `channel_id` y `message_id`) o
+  a otro miembro (`kind: "user"`, `user_id`), siempre con un `reason` de hasta
+  512 caracteres que es obligatorio. El canal tiene que ser de texto, del
+  servidor y visible para quien reporta (si no, 404, igual que el resto de los
+  endpoints de canales); el usuario reportado tiene que ser miembro y no uno
+  mismo. `servers` no puede comprobar que el mensaje exista, porque el
+  contenido es de `messaging`: guarda el canal y el id que mandó el cliente.
+  Un reporte nace `pending` y se cierra una sola vez como `resolved` (el
+  moderador actuó) o `dismissed` (no había nada que hacer) con
+  `PATCH /v1/servers/{serverId}/reports/{reportId}`; queda guardado quién y
+  cuándo. No dispara ninguna acción por sí solo: para borrar el mensaje,
+  expulsar o banear se usan los endpoints que ya existen.
+  - **Quién los ve (CA 1)**: los **moderadores**, que son quienes tienen
+    `MANAGE_MESSAGES`, `KICK_MEMBERS` y `BAN_MEMBERS` **juntos** (los
+    administradores y el dueño los tienen implícitos). Tener solo uno o dos
+    no alcanza (403 `missing_permission`). `GET /v1/servers/{serverId}/reports`
+    lista de más nuevo a más viejo; `status` filtra por `pending` (el valor por
+    defecto), `resolved`, `dismissed` o `all`, y `total` es la cantidad con ese
+    estado, así que `?status=pending&limit=1` alcanza para saber cuántos hay
+    por revisar sin bajar la lista. Cada reporte trae el perfil replicado de
+    quien reportó y del reportado (`null` hasta que llega desde identify). La
+    regla vive en un solo lugar, `service.RequireModerator`.
+  - **Duplicados (CA 2)**: un miembro no puede tener dos reportes `pending`
+    sobre el mismo mensaje o el mismo usuario (409 `report_already_pending`).
+    Lo decide la base con un índice único parcial por tipo, así que dos
+    pedidos simultáneos no se cuelan. Cuando el reporte anterior se cierra se
+    puede volver a reportar. Otro miembro sí puede reportar lo mismo.
+  - Los reportes se borran con el servidor y, los de mensajes, con su canal.
+    Si el reportado se va o lo echan, el reporte queda. No se publica ningún
+    evento: el aviso a los moderadores lo resuelve el cliente consultando el
+    `total` pendiente.
+
 Eventos que publica el servicio (exchange `discordia.events`, contratos en
 `github.com/discordia-grupo01/events-contract` y AsyncAPI en `discordia-docs`):
 `servers.member_joined`, `servers.member_left`, `servers.member_banned`,
@@ -627,6 +660,9 @@ admins lo tienen implícito); ver "Roles, permisos y jerarquía".
 | POST | `/v1/servers/{serverId}/kicks` | si (`KICK_MEMBERS`) | Expulsar a un miembro de rango menor (`user_id`). 204; 400 si es uno mismo; 403 si es el dueño o tiene rango igual o mayor; 404 si no es miembro. Puede volver con una invitación. |
 | GET | `/v1/servers/{serverId}/banned-words` | si (`MANAGE_MESSAGES`) | Lista de palabras prohibidas del server, en el orden en que se guardaron. |
 | PUT | `/v1/servers/{serverId}/banned-words` | si (`MANAGE_MESSAGES`) | Reemplazar la lista entera (`words`: hasta 100, de hasta 50 caracteres; vacía saca el filtro). 200 con la lista como quedó guardada; 400 si alguna está vacía, es muy larga o son más de 100. Ver "Moderación". |
+| POST | `/v1/servers/{serverId}/reports` | si (miembro) | Reportar un mensaje (`kind: "message"`, `channel_id`, `message_id`) o un usuario (`kind: "user"`, `user_id`) con un `reason` obligatorio de hasta 512 caracteres. 201 con el reporte (`pending`); 400 si falta algo, el canal no es de texto o es uno mismo; 403 si no es miembro; 404 si el canal no existe o no lo ve, o el usuario no es miembro; 409 `report_already_pending` si ya tiene uno pendiente sobre eso. Ver "Moderación". |
+| GET | `/v1/servers/{serverId}/reports` | si (`MANAGE_MESSAGES` + `KICK_MEMBERS` + `BAN_MEMBERS`) | Listar los reportes (paginado: `limit`, `offset`; más nuevo primero). `status`: `pending` (por defecto), `resolved`, `dismissed` o `all`. `total` es la cantidad con ese estado. |
+| PATCH | `/v1/servers/{serverId}/reports/{reportId}` | si (`MANAGE_MESSAGES` + `KICK_MEMBERS` + `BAN_MEMBERS`) | Cerrar un reporte pendiente (`status`: `resolved` o `dismissed`). 200 con el reporte; 404 si no existe; 409 `report_not_pending` si ya estaba cerrado. |
 | PUT | `/v1/channels/{channelId}/permissions/roles/{roleId}` | si (`MANAGE_ROLES`) | Crear o reemplazar el override de un rol en un canal (`allow?`, `deny?`: `VIEW_CHANNELS`, `SEND_MESSAGES`, `MANAGE_MESSAGES`, `ADD_REACTIONS`, `CONNECT`). 200 con el override; 204 si las dos listas vienen vacías (se borra). 400 si el permiso no se puede sobrescribir o está en las dos listas; 403 si el rol no está por debajo del propio (salvo `@everyone`) o se permite algo que el caller no tiene. |
 | DELETE | `/v1/channels/{channelId}/permissions/roles/{roleId}` | si (`MANAGE_ROLES`) | Quitar el override de un rol en un canal. 204; 404 `channel_override_not_found` si no había. |
 | GET | `/v1/channels/{channelId}/permissions` | si (`MANAGE_ROLES`) | Listar los overrides del canal (`@everyone` primero, después por jerarquía). |

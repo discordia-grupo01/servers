@@ -46,6 +46,8 @@ const DefaultPermissions = PermViewChannels | PermSendMessages | PermAddReaction
 // overrides_channel_scoped CHECK of migration 0025: keep them in sync.
 const ChannelScopedPermissions = PermViewChannels | PermSendMessages | PermManageMessages | PermAddReactions | PermConnect
 
+const ModeratorPermissions = PermManageMessages | PermKickMembers | PermBanMembers
+
 // AllPermissions is every permission in the catalog. PermConnect is the last
 // bit, so all bits up to and including it are set.
 const AllPermissions = PermConnect<<1 - 1

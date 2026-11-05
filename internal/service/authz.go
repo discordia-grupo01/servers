@@ -62,6 +62,10 @@ func RequirePermission(actor role.Standing, p role.Permission) error {
 	return nil
 }
 
+func RequireModerator(actor role.Standing) error {
+	return RequirePermission(actor, role.ModeratorPermissions)
+}
+
 // RequireOutranks checks that the actor is strictly above target in the role
 // hierarchy (#25 CA2: nobody can act on someone with an equal or higher role).
 func RequireOutranks(actor, target role.Standing) error {

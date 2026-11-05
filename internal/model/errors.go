@@ -75,6 +75,18 @@ var (
 	ErrCannotKickSelf             = errors.New("you cannot kick yourself; leave the server instead")
 	ErrCannotKickOwner            = errors.New("the server owner cannot be kicked")
 
+	ErrReportKindInvalid     = errors.New("kind must be 'message' or 'user'")
+	ErrReportReasonRequired  = errors.New("reason must be provided")
+	ErrReportChannelRequired = errors.New("channel_id must be provided to report a message")
+	ErrReportMessageRequired = errors.New("message_id must be provided to report a message")
+	ErrReportUserRequired    = errors.New("user_id must be provided to report a user")
+	ErrReportTextChannel     = errors.New("only messages of a text channel can be reported")
+	ErrCannotReportSelf      = errors.New("you cannot report yourself")
+	ErrReportAlreadyPending  = errors.New("you already have a pending report about this")
+	ErrReportNotFound        = errors.New("report not found")
+	ErrReportNotPending      = errors.New("report was already closed")
+	ErrReportStatusInvalid   = errors.New("status must be 'resolved' or 'dismissed'")
+
 	ErrMemberNotFound     = errors.New("member not found")
 	ErrMemberRoleNotFound = errors.New("member does not have this role")
 
