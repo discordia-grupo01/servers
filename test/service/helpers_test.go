@@ -151,6 +151,14 @@ type fakeIconsHelper struct {
 	savedData    []byte
 	deleteCalled bool
 	deletedKeys  []string
+
+	deletedEmojiServers []string
+	deleteEmojisErr     error
+}
+
+func (f *fakeIconsHelper) DeleteServerEmojis(serverID string) error {
+	f.deletedEmojiServers = append(f.deletedEmojiServers, serverID)
+	return f.deleteEmojisErr
 }
 
 func (f *fakeIconsHelper) Save(id string, data []byte) (string, error) {
