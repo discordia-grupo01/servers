@@ -2586,6 +2586,211 @@ paths:
       summary: Get the server's pending ownership transfer
       tags:
         - ownership-transfers
+  "/v1/servers/{serverId}/reports":
+    get:
+      description: "Only for moderators: MANAGE_MESSAGES, KICK_MEMBERS and BAN_MEMBERS
+        held together (the owner and administrators hold them implicitly).
+        Newest first. status filters by pending (default), resolved, dismissed
+        or all; \"total\" is the number of reports with that status, so GET
+        ?status=pending&limit=1 gives the pending count. Each report carries the
+        replicated profile of the reporter and, for a user report, of the
+        reported user (null when it hasn't arrived yet)."
+      parameters:
+        - description: Server ID
+          in: path
+          name: serverId
+          required: true
+          schema:
+            type: string
+        - description: pending (default), resolved, dismissed or all
+          in: query
+          name: status
+          schema:
+            type: string
+        - description: Page size (default 20, max 100)
+          in: query
+          name: limit
+          schema:
+            type: integer
+        - description: Reports to skip
+          in: query
+          name: offset
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/report.ListResponse"
+        "400":
+          description: invalid status, limit or offset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "403":
+          description: not a member, or not a moderator
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "404":
+          description: server not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+      security:
+        - BearerAuth: []
+      summary: List the server's reports
+      tags:
+        - reports
+    post:
+      description: "Any member of the server can report. With kind \"message\" send
+        channel_id and message_id (the channel must be a text channel of the
+        server that the reporter can see); with kind \"user\" send user_id (a
+        current member, not the reporter). The reason is required, at most 512
+        characters. Members with moderation permissions (MANAGE_MESSAGES,
+        KICK_MEMBERS and BAN_MEMBERS, held together; the owner and
+        administrators hold them implicitly) review it through GET
+        /v1/servers/{serverId}/reports. The server cannot check that the message
+        exists: messaging owns it. A reporter can't have two pending reports
+        about the same message or user (409 report_already_pending); once it is
+        closed they can report it again."
+      parameters:
+        - description: Server ID
+          in: path
+          name: serverId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/report_handler.CreateRequest"
+        description: What is reported and why
+        required: true
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/report.Response"
+        "400":
+          description: invalid kind, missing target or reason, reason too long, not a text
+            channel, or reporting yourself
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "403":
+          description: not a member of the server
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "404":
+          description: server, channel or reported user not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "409":
+          description: report_already_pending
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+      security:
+        - BearerAuth: []
+      summary: Report a message or a user
+      tags:
+        - reports
+  "/v1/servers/{serverId}/reports/{reportId}":
+    patch:
+      description: "Only for moderators (see GET /v1/servers/{serverId}/reports).
+        Marks the report as resolved (the moderator acted on it) or dismissed
+        (nothing to act on). A report is closed once: closing it again is a 409
+        report_not_pending. Acting on the reported message or user is done with
+        the existing moderation endpoints."
+      parameters:
+        - description: Server ID
+          in: path
+          name: serverId
+          required: true
+          schema:
+            type: string
+        - description: Report ID
+          in: path
+          name: reportId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/report_handler.CloseRequest"
+        description: The new status
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/report.Response"
+        "400":
+          description: status is not resolved or dismissed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "403":
+          description: not a member, or not a moderator
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "404":
+          description: server or report not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "409":
+          description: report_not_pending
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+      security:
+        - BearerAuth: []
+      summary: Close a pending report
+      tags:
+        - reports
   "/v1/servers/{serverId}/roles":
     get:
       description: Any member of the server. Ordered by hierarchy (position 1 = highest).
@@ -3140,6 +3345,80 @@ components:
         until_at:
           type: string
         user_id:
+          type: string
+      type: object
+    report.ListResponse:
+      properties:
+        limit:
+          type: integer
+        offset:
+          type: integer
+        reports:
+          items:
+            $ref: "#/components/schemas/report.Response"
+          type: array
+        total:
+          type: integer
+      type: object
+    report.Response:
+      properties:
+        channel_id:
+          type: string
+        created_at:
+          type: string
+        id:
+          type: string
+        kind:
+          type: string
+        message_id:
+          type: string
+        reason:
+          type: string
+        reported_profile:
+          $ref: "#/components/schemas/model.MemberProfileResponse"
+        reported_user_id:
+          type: string
+        reporter_id:
+          type: string
+        reporter_profile:
+          $ref: "#/components/schemas/model.MemberProfileResponse"
+        resolved_at:
+          type: string
+        resolved_by:
+          type: string
+        server_id:
+          type: string
+        status:
+          type: string
+      type: object
+    report_handler.CloseRequest:
+      properties:
+        status:
+          enum:
+            - resolved
+            - dismissed
+          example: resolved
+          type: string
+      type: object
+    report_handler.CreateRequest:
+      properties:
+        channel_id:
+          example: 0b6f6a2e-6a41-4a42-9d0a-2c6a2d1f7c11
+          type: string
+        kind:
+          enum:
+            - message
+            - user
+          example: message
+          type: string
+        message_id:
+          example: 01a1b2c3-d4e5-7f60-8a9b-0c1d2e3f4a5b
+          type: string
+        reason:
+          example: Insultos repetidos hacia otros miembros
+          type: string
+        user_id:
+          example: a3f1c0de-1111-4222-8333-444455556666
           type: string
       type: object
     role_handler.createRoleRequest:

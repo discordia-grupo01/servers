@@ -216,6 +216,28 @@ func WriteDomainError(c *gin.Context, err error) {
 		RespondError(c, http.StatusForbidden, err.Error(), map[string]any{"reason": "cannot_mute_owner"})
 	case errors.Is(err, model.ErrMuteUntilInvalid):
 		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("until_at", "mute_until_invalid"))
+	case errors.Is(err, model.ErrReportKindInvalid):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("kind", "kind_invalid"))
+	case errors.Is(err, model.ErrReportReasonRequired):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("reason", "reason_required"))
+	case errors.Is(err, model.ErrReportChannelRequired):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("channel_id", "required"))
+	case errors.Is(err, model.ErrReportMessageRequired):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("message_id", "required"))
+	case errors.Is(err, model.ErrReportUserRequired):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("user_id", "required"))
+	case errors.Is(err, model.ErrReportTextChannel):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("channel_id", "text_channel_required"))
+	case errors.Is(err, model.ErrCannotReportSelf):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("user_id", "cannot_report_self"))
+	case errors.Is(err, model.ErrReportAlreadyPending):
+		RespondError(c, http.StatusConflict, err.Error(), map[string]any{"reason": "report_already_pending"})
+	case errors.Is(err, model.ErrReportNotFound):
+		RespondError(c, http.StatusNotFound, err.Error(), map[string]any{"reason": "report_not_found"})
+	case errors.Is(err, model.ErrReportNotPending):
+		RespondError(c, http.StatusConflict, err.Error(), map[string]any{"reason": "report_not_pending"})
+	case errors.Is(err, model.ErrReportStatusInvalid):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("status", "status_invalid"))
 	case errors.Is(err, moderation.ErrBannedWordEmpty):
 		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("words", "word_empty"))
 	case errors.Is(err, moderation.ErrBannedWordTooLong):

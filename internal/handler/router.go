@@ -16,6 +16,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/handler/mention_handler"
 	"github.com/discordia-grupo01/servers/internal/handler/moderation_handler"
 	"github.com/discordia-grupo01/servers/internal/handler/ownership_transfer_handler"
+	"github.com/discordia-grupo01/servers/internal/handler/report_handler"
 	"github.com/discordia-grupo01/servers/internal/handler/role_handler"
 	"github.com/discordia-grupo01/servers/internal/handler/voice_access_handler"
 	"github.com/discordia-grupo01/servers/internal/handler/word_filter_handler"
@@ -38,6 +39,7 @@ type Deps struct {
 	Categories         category_handler.CategoryUseCases
 	Moderation         moderation_handler.UseCases
 	WordFilter         word_filter_handler.UseCases
+	Reports            report_handler.UseCases
 	ChannelPermissions channelperm_handler.UseCases
 	VoiceAccess        voice_access_handler.UseCases
 	Mentions           mention_handler.UseCases
@@ -60,6 +62,7 @@ func NewRouter(d Deps) *gin.Engine {
 	categoryH := category_handler.New(d.Categories)
 	moderationH := moderation_handler.New(d.Moderation)
 	wordFilterH := word_filter_handler.New(d.WordFilter)
+	reportH := report_handler.New(d.Reports)
 	channelPermH := channelperm_handler.New(d.ChannelPermissions)
 	voiceAccessH := voice_access_handler.New(d.VoiceAccess)
 	mentionH := mention_handler.New(d.Mentions)
@@ -150,6 +153,9 @@ func NewRouter(d Deps) *gin.Engine {
 	v1.DELETE("/servers/:serverId/mutes/:userId", moderationH.Unmute)
 	v1.GET("/servers/:serverId/banned-words", wordFilterH.List)
 	v1.PUT("/servers/:serverId/banned-words", wordFilterH.Replace)
+	v1.POST("/servers/:serverId/reports", reportH.Create)
+	v1.GET("/servers/:serverId/reports", reportH.List)
+	v1.PATCH("/servers/:serverId/reports/:reportId", reportH.Close)
 
 	invitation.NewHandler(d.Invitations).Register(v1)
 
