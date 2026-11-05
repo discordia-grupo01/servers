@@ -434,7 +434,8 @@ permisos en el resto del servidor (HU #57). Se guardan en la tabla
   el bucket tiene que aceptar `image/gif`. En desarrollo se guardan en
   `ICON_DIR` y se sirven en `GET /v1/servers/{serverId}/emojis/{key}/image`; en
   producción esa ruta no existe porque el bucket es público. Al borrar un
-  servidor se borran sus filas, pero sus imágenes quedan en el bucket.
+  servidor se borran sus filas y todas las imágenes de su carpeta, también las de
+  emojis ya borrados. 
 
 - **Reportes** (`POST /v1/servers/{serverId}/reports`): cualquier miembro
   puede reportar un mensaje (`kind: "message"`, `channel_id` y `message_id`) o
