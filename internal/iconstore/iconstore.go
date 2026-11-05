@@ -16,9 +16,16 @@ var contentTypeExt = map[string]string{
 	"image/png":  ".png",
 	"image/jpeg": ".jpg",
 	"image/webp": ".webp",
+	"image/gif":  ".gif",
 }
 
-const SupportedFormats = "PNG, JPEG, WEBP"
+const SupportedFormats = "PNG, JPEG, WEBP, GIF"
+
+// IsGIF trusts the file's magic bytes. A GIF is only valid as an icon, from
+// boost level 1: the service checks that, because it knows the level.
+func IsGIF(data []byte) bool {
+	return http.DetectContentType(data) == "image/gif"
+}
 
 func ValidateIcon(data []byte, maxBytes int64) (ext string, contentType string, err error) {
 	if len(data) == 0 {

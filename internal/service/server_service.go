@@ -4,6 +4,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"strings"
 	"time"
@@ -28,8 +29,9 @@ type Repo interface {
 	ListForUser(ctx context.Context, userID string) ([]model.Server, error)
 	GetByID(ctx context.Context, id uuid.UUID) (model.Server, error)
 	IsMember(ctx context.Context, id uuid.UUID, userID string) (bool, error)
-	UpdateServer(ctx context.Context, id uuid.UUID, name, nameKey string, iconURL, bannerURL *string) error
+	UpdateServer(ctx context.Context, id uuid.UUID, name, nameKey string, iconURL, bannerURL *string, iconAnimated bool) error
 	IconURLs(ctx context.Context, id uuid.UUID) (iconURL, bannerURL *string, err error)
+	VisibleImageURLs(ctx context.Context, id uuid.UUID) (iconURL, bannerURL *string, err error)
 	DeleteServer(ctx context.Context, id uuid.UUID, buildEvents func(memberIDs []string, channelIDs []uuid.UUID) ([]outbox.Event, error)) error
 }
 
@@ -124,6 +126,9 @@ func (s *Service) CreateServer(ctx context.Context, p CreateServerParams) (model
 	}
 
 	if len(p.Icon) > 0 {
+		if iconstore.IsGIF(p.Icon) {
+			return model.Server{}, &model.BoostLevelRequiredError{Required: model.BoostLevelAnimatedIcon}
+		}
 		url, err := s.icons.Save(id.String(), p.Icon)
 		if err != nil {
 			return model.Server{}, err
@@ -265,7 +270,7 @@ func (s *Service) CheckMembership(ctx context.Context, id uuid.UUID, userID stri
 }
 
 func (s *Service) GetServerImageURLs(ctx context.Context, id uuid.UUID) (iconURL, bannerURL *string, err error) {
-	return s.repo.IconURLs(ctx, id)
+	return s.repo.VisibleImageURLs(ctx, id)
 }
 
 type UpdateServerParams struct {
@@ -303,11 +308,16 @@ func (s *Service) UpdateServer(ctx context.Context, p UpdateServerParams) (model
 		key = NameKey(name)
 	}
 
+	if err := checkImagePerks(srv, p); err != nil {
+		return model.Server{}, err
+	}
+
 	oldIconURL, oldBannerURL := srv.IconURL, srv.BannerURL
 
-	iconURL := srv.IconURL
+	iconURL, iconAnimated := srv.IconURL, srv.IconAnimated
 	iconChanged := len(p.Icon) > 0
 	if iconChanged {
+		iconAnimated = iconstore.IsGIF(p.Icon)
 		url, err := s.icons.Save(p.ServerID.String(), p.Icon)
 		if err != nil {
 			return model.Server{}, err
@@ -328,7 +338,7 @@ func (s *Service) UpdateServer(ctx context.Context, p UpdateServerParams) (model
 		bannerURL = nil
 	}
 
-	if err := s.repo.UpdateServer(ctx, p.ServerID, name, key, iconURL, bannerURL); err != nil {
+	if err := s.repo.UpdateServer(ctx, p.ServerID, name, key, iconURL, bannerURL, iconAnimated); err != nil {
 		return model.Server{}, err
 	}
 
@@ -343,8 +353,26 @@ func (s *Service) UpdateServer(ctx context.Context, p UpdateServerParams) (model
 		}
 	}
 
-	srv.Name, srv.NameKey, srv.IconURL, srv.BannerURL = name, key, iconURL, bannerURL
+	srv.Name, srv.NameKey, srv.IconURL, srv.BannerURL, srv.IconAnimated = name, key, iconURL, bannerURL, iconAnimated
 	return srv, nil
+}
+
+// checkImagePerks runs before anything is uploaded. Removing a banner needs no
+// level: a server that dropped below it can still clear what it stored.
+func checkImagePerks(srv model.Server, p UpdateServerParams) error {
+	if iconstore.IsGIF(p.Icon) && srv.BoostLevel < model.BoostLevelAnimatedIcon {
+		return &model.BoostLevelRequiredError{Required: model.BoostLevelAnimatedIcon}
+	}
+	if len(p.Banner) == 0 {
+		return nil
+	}
+	if srv.BoostLevel < model.BoostLevelBanner {
+		return &model.BoostLevelRequiredError{Required: model.BoostLevelBanner}
+	}
+	if iconstore.IsGIF(p.Banner) {
+		return fmt.Errorf("%w: a banner can't be a GIF", model.ErrIconUnsupportedType)
+	}
+	return nil
 }
 
 type DeleteServerParams struct {

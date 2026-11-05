@@ -11,7 +11,6 @@ import (
 	"github.com/discordia-grupo01/events-contract/servers"
 	"github.com/discordia-grupo01/servers/internal/model"
 	"github.com/discordia-grupo01/servers/internal/model/emoji"
-	"github.com/discordia-grupo01/servers/internal/model/role"
 	"github.com/discordia-grupo01/servers/internal/outbox"
 	"github.com/discordia-grupo01/servers/internal/service"
 )
@@ -64,7 +63,8 @@ type DeleteParams struct {
 }
 
 func (s *Service) Create(ctx context.Context, p CreateParams) (emoji.Emoji, error) {
-	if _, err := s.authorizeManager(ctx, p.ServerID, p.ActorUserID); err != nil {
+	srv, err := s.authorizeManager(ctx, p.ServerID, p.ActorUserID)
+	if err != nil {
 		return emoji.Emoji{}, err
 	}
 	if err := emoji.ValidateName(p.Name); err != nil {
@@ -98,7 +98,7 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (emoji.Emoji, erro
 		ImageURL: created.ImageURL,
 	})
 	if err == nil {
-		err = s.repo.Create(ctx, created, emoji.BaseSlots, evt)
+		err = s.repo.Create(ctx, created, emoji.Slots(srv.BoostLevel), evt)
 	}
 	if err != nil {
 		if cleanupErr := s.images.DeleteEmoji(p.ServerID.String(), key); cleanupErr != nil {
@@ -128,7 +128,7 @@ func (s *Service) List(ctx context.Context, p ListParams) (emoji.Page, error) {
 	if err != nil {
 		return emoji.Page{}, err
 	}
-	return emoji.Page{Emojis: emojis, MaxEmojis: emoji.BaseSlots}, nil
+	return emoji.Page{Emojis: emojis, MaxEmojis: emoji.Slots(srv.BoostLevel)}, nil
 }
 
 func (s *Service) Delete(ctx context.Context, p DeleteParams) error {
@@ -148,20 +148,20 @@ func (s *Service) Delete(ctx context.Context, p DeleteParams) error {
 	})
 }
 
-func (s *Service) authorizeManager(ctx context.Context, serverID uuid.UUID, actorID string) (role.Standing, error) {
+func (s *Service) authorizeManager(ctx context.Context, serverID uuid.UUID, actorID string) (model.Server, error) {
 	if actorID == "" {
-		return role.Standing{}, model.ErrUnauthorized
+		return model.Server{}, model.ErrUnauthorized
 	}
 	srv, err := s.servers.GetByID(ctx, serverID)
 	if err != nil {
-		return role.Standing{}, err
+		return model.Server{}, err
 	}
 	actor, err := service.ResolveStanding(ctx, s.standings, srv, actorID)
 	if err != nil {
-		return role.Standing{}, err
+		return model.Server{}, err
 	}
 	if err := service.RequireManageServer(actor); err != nil {
-		return role.Standing{}, err
+		return model.Server{}, err
 	}
-	return actor, nil
+	return srv, nil
 }

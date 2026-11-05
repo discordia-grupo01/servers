@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -157,24 +158,15 @@ func (s *Service) JoinServer(ctx context.Context, p JoinParams) (JoinResult, err
 	}
 
 	inv, err := s.repo.InvitationByCode(ctx, p.Code)
+	if errors.Is(err, model.ErrInvitationNotFound) {
+		return s.joinByVanity(ctx, p)
+	}
 	if err != nil {
 		return JoinResult{}, err
 	}
 
-	banned, err := s.repo.IsBanned(ctx, inv.ServerID, p.UserID)
-	if err != nil {
-		return JoinResult{}, err
-	}
-	if banned {
-		return JoinResult{}, model.ErrUserBanned
-	}
-
-	member, err := s.repo.IsMember(ctx, inv.ServerID, p.UserID)
-	if err != nil {
-		return JoinResult{}, err
-	}
-	if member {
-		return JoinResult{ServerID: inv.ServerID, AlreadyMember: true}, nil
+	if done, result, err := s.checkCanJoin(ctx, inv.ServerID, p.UserID); done || err != nil {
+		return result, err
 	}
 
 	if err := inv.Validate(s.now()); err != nil {
@@ -182,13 +174,7 @@ func (s *Service) JoinServer(ctx context.Context, p JoinParams) (JoinResult, err
 	}
 
 	occurredAt := s.now()
-	serverID, err := s.repo.RedeemInvitation(ctx, inv.Code, p.UserID, occurredAt, func(serverID uuid.UUID) (outbox.Event, error) {
-		return outbox.New(membership.RoutingKeyMemberJoined, membership.MemberJoined{
-			Meta:     envelope.Meta{EventID: uuid.NewString(), OccurredAt: occurredAt},
-			ServerID: serverID.String(),
-			UserID:   p.UserID,
-		})
-	})
+	serverID, err := s.repo.RedeemInvitation(ctx, inv.Code, p.UserID, occurredAt, memberJoinedEvent(p.UserID, occurredAt))
 	switch {
 	case err == nil:
 		return JoinResult{ServerID: serverID, AlreadyMember: false}, nil
@@ -196,6 +182,56 @@ func (s *Service) JoinServer(ctx context.Context, p JoinParams) (JoinResult, err
 		return JoinResult{ServerID: inv.ServerID, AlreadyMember: true}, nil
 	default:
 		return JoinResult{}, err
+	}
+}
+
+func (s *Service) joinByVanity(ctx context.Context, p JoinParams) (JoinResult, error) {
+	serverID, err := s.repo.ServerByVanity(ctx, strings.ToLower(p.Code))
+	if err != nil {
+		return JoinResult{}, err
+	}
+	if done, result, err := s.checkCanJoin(ctx, serverID, p.UserID); done || err != nil {
+		return result, err
+	}
+	occurredAt := s.now()
+	err = s.repo.JoinByVanity(ctx, serverID, p.UserID, occurredAt, memberJoinedEvent(p.UserID, occurredAt))
+	switch {
+	case err == nil:
+		return JoinResult{ServerID: serverID}, nil
+	case errors.Is(err, model.ErrAlreadyMember):
+		return JoinResult{ServerID: serverID, AlreadyMember: true}, nil
+	default:
+		return JoinResult{}, err
+	}
+}
+
+// checkCanJoin rejects a banned user, and is done without an error if they
+// already are a member.
+func (s *Service) checkCanJoin(ctx context.Context, serverID uuid.UUID, userID string) (bool, JoinResult, error) {
+	banned, err := s.repo.IsBanned(ctx, serverID, userID)
+	if err != nil {
+		return false, JoinResult{}, err
+	}
+	if banned {
+		return false, JoinResult{}, model.ErrUserBanned
+	}
+	member, err := s.repo.IsMember(ctx, serverID, userID)
+	if err != nil {
+		return false, JoinResult{}, err
+	}
+	if member {
+		return true, JoinResult{ServerID: serverID, AlreadyMember: true}, nil
+	}
+	return false, JoinResult{}, nil
+}
+
+func memberJoinedEvent(userID string, occurredAt time.Time) func(uuid.UUID) (outbox.Event, error) {
+	return func(serverID uuid.UUID) (outbox.Event, error) {
+		return outbox.New(membership.RoutingKeyMemberJoined, membership.MemberJoined{
+			Meta:     envelope.Meta{EventID: uuid.NewString(), OccurredAt: occurredAt},
+			ServerID: serverID.String(),
+			UserID:   userID,
+		})
 	}
 }
 

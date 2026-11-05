@@ -120,11 +120,13 @@ func (r *ServerRepository) CreateServer(ctx context.Context, srv model.Server, c
 // the full representation).
 func (r *ServerRepository) GetByID(ctx context.Context, id uuid.UUID) (model.Server, error) {
 	row := r.pool.QueryRow(ctx, `
-		SELECT id, name, name_key, icon_url, banner_url, owner_id, created_at, default_role_id
+		SELECT id, name, name_key, icon_url, banner_url, owner_id, created_at, default_role_id,
+		       boost_count, boost_level, icon_animated, vanity_code
 		  FROM servers WHERE id = $1`, id)
 
 	var s model.Server
-	if err := row.Scan(&s.ID, &s.Name, &s.NameKey, &s.IconURL, &s.BannerURL, &s.OwnerID, &s.CreatedAt, &s.DefaultRoleID); err != nil {
+	if err := row.Scan(&s.ID, &s.Name, &s.NameKey, &s.IconURL, &s.BannerURL, &s.OwnerID, &s.CreatedAt, &s.DefaultRoleID,
+		&s.BoostCount, &s.BoostLevel, &s.IconAnimated, &s.VanityCode); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return model.Server{}, model.ErrServerNotFound
 		}
@@ -175,6 +177,21 @@ func (r *ServerRepository) IconURLs(ctx context.Context, id uuid.UUID) (iconURL,
 		return nil, nil, fmt.Errorf("select server icon urls: %w", err)
 	}
 	return iconURL, bannerURL, nil
+}
+
+// VisibleImageURLs returns the images the server's boost level lets it show.
+func (r *ServerRepository) VisibleImageURLs(ctx context.Context, id uuid.UUID) (iconURL, bannerURL *string, err error) {
+	var s model.Server
+	err = r.pool.QueryRow(ctx, `
+		SELECT icon_url, banner_url, icon_animated, boost_level FROM servers WHERE id = $1`, id,
+	).Scan(&s.IconURL, &s.BannerURL, &s.IconAnimated, &s.BoostLevel)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil, model.ErrServerNotFound
+		}
+		return nil, nil, fmt.Errorf("select visible server images: %w", err)
+	}
+	return s.VisibleIconURL(), s.VisibleBannerURL(), nil
 }
 
 func (r *ServerRepository) channelsByServerID(ctx context.Context, serverID uuid.UUID) ([]model.Channel, error) {
@@ -231,6 +248,7 @@ func (r *ServerRepository) categoriesByServerIDs(ctx context.Context, serverIDs 
 func (r *ServerRepository) ListForUser(ctx context.Context, userID string) ([]model.Server, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT s.id, s.name, s.name_key, s.icon_url, s.banner_url, s.owner_id, s.created_at, s.suspended_at,
+		       s.boost_count, s.boost_level, s.icon_animated, s.vanity_code,
 		       c.id, c.name, c.kind, c.position, c.category_id, c.topic, c.created_at
 		  FROM servers s
 		  JOIN server_members m ON m.server_id = s.id
@@ -256,6 +274,7 @@ func (r *ServerRepository) ListForUser(ctx context.Context, userID string) ([]mo
 
 		if err := rows.Scan(
 			&s.ID, &s.Name, &s.NameKey, &s.IconURL, &s.BannerURL, &s.OwnerID, &s.CreatedAt, &s.SuspendedAt,
+			&s.BoostCount, &s.BoostLevel, &s.IconAnimated, &s.VanityCode,
 			&chID, &chName, &chKind, &chPosition, &chCategoryID, &chTopic, &chCreatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scan server row: %w", err)
@@ -298,7 +317,7 @@ func (r *ServerRepository) ListForUser(ctx context.Context, userID string) ([]mo
 // read under a row lock, in the same transaction as the UPDATE, so
 // servers.server_updated is written to the outbox atomically and only when the
 // name actually changed -- an icon or banner change publishes nothing.
-func (r *ServerRepository) UpdateServer(ctx context.Context, id uuid.UUID, name, nameKey string, iconURL, bannerURL *string) error {
+func (r *ServerRepository) UpdateServer(ctx context.Context, id uuid.UUID, name, nameKey string, iconURL, bannerURL *string, iconAnimated bool) error {
 	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
 		var previousName string
 		if err := tx.QueryRow(ctx, `SELECT name FROM servers WHERE id = $1 FOR UPDATE`, id).Scan(&previousName); err != nil {
@@ -309,9 +328,9 @@ func (r *ServerRepository) UpdateServer(ctx context.Context, id uuid.UUID, name,
 		}
 
 		if _, err := tx.Exec(ctx, `
-			UPDATE servers SET name = $1, name_key = $2, icon_url = $3, banner_url = $4
-			 WHERE id = $5`,
-			name, nameKey, iconURL, bannerURL, id,
+			UPDATE servers SET name = $1, name_key = $2, icon_url = $3, banner_url = $4, icon_animated = $5
+			 WHERE id = $6`,
+			name, nameKey, iconURL, bannerURL, iconAnimated, id,
 		); err != nil {
 			var pgErr *pgconn.PgError
 			if errors.As(err, &pgErr) && pgErr.Code == pgUniqueViolation && pgErr.ConstraintName == "uq_servers_owner_name_key" {

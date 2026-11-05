@@ -41,6 +41,10 @@ type Config struct {
 	// admin.user_suspended / admin.user_reactivated events and this service
 	// drops any whose signature doesn't verify. Required when RabbitMQURL is set.
 	AdminEventsHMACSecret string
+
+	// BillingEventsHMACSecret is shared with billing: it signs the boost saga in
+	// both directions. Required when RabbitMQURL is set.
+	BillingEventsHMACSecret string
 }
 
 func Load() (Config, error) {
@@ -69,7 +73,8 @@ func Load() (Config, error) {
 
 		RabbitMQURL: os.Getenv("RABBITMQ_URL"),
 
-		AdminEventsHMACSecret: os.Getenv("ADMIN_EVENTS_HMAC_SECRET"),
+		AdminEventsHMACSecret:   os.Getenv("ADMIN_EVENTS_HMAC_SECRET"),
+		BillingEventsHMACSecret: os.Getenv("BILLING_EVENTS_HMAC_SECRET"),
 	}
 
 	var missing []string
@@ -86,6 +91,9 @@ func Load() (Config, error) {
 	}
 	if c.RabbitMQURL != "" && c.AdminEventsHMACSecret == "" {
 		missing = append(missing, "ADMIN_EVENTS_HMAC_SECRET (required when RABBITMQ_URL is set)")
+	}
+	if c.RabbitMQURL != "" && c.BillingEventsHMACSecret == "" {
+		missing = append(missing, "BILLING_EVENTS_HMAC_SECRET (required when RABBITMQ_URL is set)")
 	}
 	if len(missing) > 0 {
 		sort.Strings(missing)

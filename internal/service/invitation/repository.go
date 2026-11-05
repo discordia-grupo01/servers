@@ -21,4 +21,7 @@ type Repository interface {
 	// it (only known once the invitation row is matched, inside the
 	// transaction) -- see invitation_repo.go's doc comment on RedeemInvitation.
 	RedeemInvitation(ctx context.Context, code, userID string, now time.Time, buildEvent func(serverID uuid.UUID) (outbox.Event, error)) (uuid.UUID, error)
+	// ServerByVanity only finds servers whose boost level still unlocks the code.
+	ServerByVanity(ctx context.Context, code string) (uuid.UUID, error)
+	JoinByVanity(ctx context.Context, serverID uuid.UUID, userID string, now time.Time, buildEvent func(serverID uuid.UUID) (outbox.Event, error)) error
 }

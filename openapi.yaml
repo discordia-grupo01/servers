@@ -969,7 +969,10 @@ paths:
     patch:
       description: "Administrators only (the owner, or a member with ADMINISTRATOR).
         Multipart form, all fields optional: rename, replace the icon/banner, or
-        remove the banner."
+        remove the banner. A GIF icon needs boost level 1 and a banner needs
+        boost level 2; otherwise it answers 403 with details.reason
+        boost_level_required and details.required_level. A banner can't be a
+        GIF."
       parameters:
         - description: Server ID
           in: path
@@ -991,7 +994,7 @@ paths:
                   type: string
                   format: binary
                 banner:
-                  description: New banner image
+                  description: New banner image (boost level 2)
                   type: string
                   format: binary
                 remove_banner:
@@ -1351,6 +1354,49 @@ paths:
       summary: Revoke a ban
       tags:
         - moderation
+  "/v1/servers/{serverId}/boosts":
+    get:
+      description: "Any member of the server. next_level is null on the last level.
+        Perks: extra_emoji_slots and animated_icon from level 1 (5 boosts),
+        custom_banner and larger_attachments from level 2 (15), vanity_url and
+        boosted_badge at level 3 (30)."
+      parameters:
+        - description: Server ID
+          in: path
+          name: serverId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/boost_handler.SummaryResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "403":
+          description: not a member
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "404":
+          description: server not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+      security:
+        - BearerAuth: []
+      summary: See a server's boosts and perks
+      tags:
+        - boosts
   "/v1/servers/{serverId}/categories":
     post:
       description: Administrators only (the owner, or a member with ADMINISTRATOR).
@@ -1661,7 +1707,9 @@ paths:
         implicitly). Multipart form with name (2 to 32 letters, numbers or
         underscores, unique in the server ignoring case) and image (PNG, WebP or
         GIF, at most 5 MB, detected from the file's content). A GIF creates an
-        animated emoji. A server has 50 slots; deleted emojis free theirs.
+        animated emoji. A server has 50 slots, 70 from boost level 1; deleted
+        emojis free theirs. A server that drops a level keeps the emojis it has,
+        but can't add more until it is under the limit.
       parameters:
         - description: Server ID
           in: path
@@ -3108,6 +3156,70 @@ paths:
       summary: Reorder the server's role hierarchy
       tags:
         - roles
+  "/v1/servers/{serverId}/vanity":
+    patch:
+      description: "Requires MANAGE_SERVER. Setting a code needs boost level 3; a null
+        code clears it at any level. The code goes in POST
+        /v1/invites/{code}/join: 3 to 32 letters, numbers or hyphens, not
+        starting or ending with a hyphen, and stored in lowercase. If the server
+        drops below level 3 the code is kept but stops working, and nobody else
+        can take it."
+      parameters:
+        - description: Server ID
+          in: path
+          name: serverId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/boost_handler.VanityRequest"
+        description: The code, or null to clear it
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/boost_handler.VanityResponse"
+        "400":
+          description: invalid code or body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "403":
+          description: missing MANAGE_SERVER, or boost_level_required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "404":
+          description: server not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "409":
+          description: vanity_code_taken
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+      security:
+        - BearerAuth: []
+      summary: Set or clear a server's vanity code
+      tags:
+        - boosts
 servers:
   - url: /
 components:
@@ -3135,6 +3247,48 @@ components:
       properties:
         error:
           $ref: "#/components/schemas/apierr.ErrorDetail"
+      type: object
+    boost_handler.NextLevelResponse:
+      properties:
+        boosts_missing:
+          example: 8
+          type: integer
+        boosts_required:
+          example: 15
+          type: integer
+        level:
+          example: 2
+          type: integer
+      type: object
+    boost_handler.SummaryResponse:
+      properties:
+        boost_count:
+          example: 7
+          type: integer
+        level:
+          example: 1
+          type: integer
+        next_level:
+          $ref: "#/components/schemas/boost_handler.NextLevelResponse"
+        perks_unlocked:
+          example:
+            - extra_emoji_slots
+            - animated_icon
+          items:
+            type: string
+          type: array
+      type: object
+    boost_handler.VanityRequest:
+      properties:
+        code:
+          example: mi-servidor
+          type: string
+      type: object
+    boost_handler.VanityResponse:
+      properties:
+        vanity_code:
+          example: mi-servidor
+          type: string
       type: object
     category_handler.createCategoryRequest:
       properties:
@@ -3300,6 +3454,15 @@ components:
       properties:
         banner_url:
           type: string
+        boost_count:
+          description: >-
+            BoostCount and BoostLevel come from the boosts billing charged for.
+            The
+
+            images and vanity code a level no longer unlocks are returned as null.
+          type: integer
+        boost_level:
+          type: integer
         categories:
           items:
             $ref: "#/components/schemas/categoryview.Response"
@@ -3327,6 +3490,8 @@ components:
 
             SERVER_SUSPENDED for it.
           type: boolean
+        vanity_code:
+          type: string
       type: object
     member_role_handler.assignRoleRequest:
       properties:

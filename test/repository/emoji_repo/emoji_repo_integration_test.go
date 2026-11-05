@@ -45,6 +45,7 @@ func newRepo(t *testing.T) (*emoji_repo.Repository, *pgxpool.Pool) {
 		"../../../migrations/0001_init.up.sql",
 		"../../../migrations/0011_outbox_events.up.sql",
 		"../../../migrations/0030_server_emojis.up.sql",
+		"../../../migrations/0031_server_boosts.up.sql",
 	} {
 		schema, err := os.ReadFile(file)
 		if err != nil {
@@ -58,7 +59,7 @@ func newRepo(t *testing.T) (*emoji_repo.Repository, *pgxpool.Pool) {
 }
 
 func dropTables(ctx context.Context, pool *pgxpool.Pool) {
-	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS server_emojis, outbox_events, server_members, channels, servers CASCADE`)
+	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS server_boosts, server_emojis, outbox_events, server_members, channels, servers CASCADE`)
 }
 
 func env(k, def string) string {

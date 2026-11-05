@@ -9,6 +9,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/config"
 	"github.com/discordia-grupo01/servers/internal/events"
 	"github.com/discordia-grupo01/servers/internal/events/admin_consumer"
+	"github.com/discordia-grupo01/servers/internal/events/billing_consumer"
 	"github.com/discordia-grupo01/servers/internal/events/profile_consumer"
 	"github.com/discordia-grupo01/servers/internal/handler"
 	"github.com/discordia-grupo01/servers/internal/handler/emoji_handler"
@@ -16,6 +17,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/middleware"
 	"github.com/discordia-grupo01/servers/internal/outbox"
 	"github.com/discordia-grupo01/servers/internal/repository"
+	"github.com/discordia-grupo01/servers/internal/repository/boost_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/category_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/channel_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/channelperm_repo"
@@ -30,6 +32,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/repository/user_profile_repo"
 	"github.com/discordia-grupo01/servers/internal/repository/word_filter_repo"
 	"github.com/discordia-grupo01/servers/internal/service"
+	"github.com/discordia-grupo01/servers/internal/service/boost_service"
 	"github.com/discordia-grupo01/servers/internal/service/category_service"
 	"github.com/discordia-grupo01/servers/internal/service/channel_service"
 	"github.com/discordia-grupo01/servers/internal/service/channelperm_service"
@@ -95,6 +98,7 @@ func main() {
 	publisher := events.NewAMQPPublisher(cfg.RabbitMQURL)
 
 	serverRepo := repository.NewServerRepository(pool)
+	boostRepo := boost_repo.NewRepository(pool, cfg.BillingEventsHMACSecret)
 	roleRepo := role_repo.NewRoleRepository(pool)
 	memberRepo := member_repo.NewMemberRepository(pool)
 	transferRepo := ownership_transfer_repo.NewRepository(pool)
@@ -116,11 +120,13 @@ func main() {
 	serverSuspensionGuard := middleware.NewServerSuspensionGuard(serverModerationRepo, middleware.DefaultSuspensionCacheTTL)
 	if cfg.RabbitMQURL != "" {
 		go profile_consumer.New(cfg.RabbitMQURL, user_profile_repo.NewUserProfileRepository(pool)).Start(ctx)
+		go billing_consumer.New(cfg.RabbitMQURL, cfg.BillingEventsHMACSecret, boostRepo).Start(ctx)
 		go admin_consumer.New(cfg.RabbitMQURL, cfg.AdminEventsHMACSecret, admin_consumer.WithInvalidation(suspensionRepo, suspensionGuard)).
 			WithServerModeration(admin_consumer.ServerHandlers{Store: serverModerationRepo, Deleter: svc, Cache: serverSuspensionGuard}).
 			Start(ctx)
 	} else {
 		log.Printf("profile_consumer: RABBITMQ_URL not set, member profiles won't be replicated")
+		log.Printf("billing_consumer: RABBITMQ_URL not set, server boosts won't be applied")
 		log.Printf("admin_consumer: RABBITMQ_URL not set, platform suspensions and server moderation won't be applied")
 	}
 	invSvc := invitation.NewService(repository.NewInvitationRepository(pool), serverRepo, memberRepo)
@@ -148,6 +154,7 @@ func main() {
 		WordFilter:         wordFilterSvc,
 		Reports:            reportSvc,
 		Emojis:             emojiSvc,
+		Boosts:             boost_service.New(serverRepo, memberRepo, boostRepo),
 		EmojiImages:        emojiImages,
 		ChannelPermissions: channelPermSvc,
 		VoiceAccess:        channelSvc,

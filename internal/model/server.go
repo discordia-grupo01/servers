@@ -48,10 +48,40 @@ type Server struct {
 	// SuspendedAt is when the platform staff suspended the server, nil if it is
 	// active. Only ListForUser fills it.
 	SuspendedAt *time.Time
+
+	BoostCount   int
+	BoostLevel   int
+	IconAnimated bool
+	VanityCode   *string
 }
 
 // Suspended reports whether the platform staff suspended the server.
 func (s Server) Suspended() bool { return s.SuspendedAt != nil }
+
+// A perk's content is kept when the server drops below its level, so it comes
+// back if the level does. These are what may be shown meanwhile; IconURL,
+// BannerURL and VanityCode are what is stored.
+
+func (s Server) VisibleIconURL() *string {
+	if s.IconAnimated && s.BoostLevel < BoostLevelAnimatedIcon {
+		return nil
+	}
+	return s.IconURL
+}
+
+func (s Server) VisibleBannerURL() *string {
+	if s.BoostLevel < BoostLevelBanner {
+		return nil
+	}
+	return s.BannerURL
+}
+
+func (s Server) VisibleVanityCode() *string {
+	if s.BoostLevel < BoostLevelVanity {
+		return nil
+	}
+	return s.VanityCode
+}
 
 type Channel struct {
 	ID         uuid.UUID

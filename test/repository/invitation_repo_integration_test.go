@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/discordia-grupo01/servers/internal/model"
+	"github.com/discordia-grupo01/servers/internal/outbox"
 	"github.com/discordia-grupo01/servers/internal/repository"
 )
 
@@ -41,6 +42,7 @@ func newInviteRepo(t *testing.T) (*repository.InvitationRepository, *pgxpool.Poo
 		"0003_roles.up.sql", "0004_member_roles.up.sql", "0005_default_role.up.sql",
 		"0011_outbox_events.up.sql", "0015_role_positions.up.sql",
 		"0019_everyone_role.up.sql",
+		"0031_server_boosts.up.sql",
 	} {
 		schema, err := os.ReadFile("../../migrations/" + f)
 		if err != nil {
@@ -502,3 +504,56 @@ func TestInviteRepo_RedeemWaitsForAConcurrentBan(t *testing.T) {
 }
 
 func intPtr(n int) *int { return &n }
+
+func setVanity(t *testing.T, pool *pgxpool.Pool, serverID uuid.UUID, code string, level int) {
+	t.Helper()
+	if _, err := pool.Exec(context.Background(),
+		`UPDATE servers SET vanity_code = $1, boost_level = $2 WHERE id = $3`, code, level, serverID,
+	); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestInviteRepo_ServerByVanity_OnlyWhileTheLevelUnlocksIt(t *testing.T) {
+	repo, pool := newInviteRepo(t)
+	ctx := context.Background()
+	serverID := seedServer(t, pool, "owner-1")
+
+	setVanity(t, pool, serverID, "mi-servidor", model.BoostLevelVanity)
+	got, err := repo.ServerByVanity(ctx, "mi-servidor")
+	if err != nil || got != serverID {
+		t.Errorf("got %s err=%v", got, err)
+	}
+
+	setVanity(t, pool, serverID, "mi-servidor", model.BoostLevelVanity-1)
+	if _, err := repo.ServerByVanity(ctx, "mi-servidor"); !errors.Is(err, model.ErrInvitationNotFound) {
+		t.Errorf("below the level: err = %v", err)
+	}
+}
+
+func TestInviteRepo_JoinByVanity_AddsMemberAndEvent(t *testing.T) {
+	repo, pool := newInviteRepo(t)
+	ctx := context.Background()
+	serverID := seedServer(t, pool, "owner-1")
+	build := func(id uuid.UUID) (outbox.Event, error) {
+		return outbox.Event{RoutingKey: "servers.member_joined", Payload: []byte(`{}`)}, nil
+	}
+
+	if err := repo.JoinByVanity(ctx, serverID, "new-user", time.Now(), build); err != nil {
+		t.Fatal(err)
+	}
+	if member, err := repo.IsMember(ctx, serverID, "new-user"); err != nil || !member {
+		t.Errorf("member=%v err=%v", member, err)
+	}
+	var events int
+	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM outbox_events WHERE routing_key = 'servers.member_joined'`).Scan(&events); err != nil {
+		t.Fatal(err)
+	}
+	if events != 1 {
+		t.Errorf("%d member_joined events, want 1", events)
+	}
+
+	if err := repo.JoinByVanity(ctx, serverID, "new-user", time.Now(), build); !errors.Is(err, model.ErrAlreadyMember) {
+		t.Errorf("second join: err = %v", err)
+	}
+}

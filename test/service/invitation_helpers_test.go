@@ -21,6 +21,12 @@ const (
 // invitation service: exists/ownerID drive GetByID, member/perms drive
 // MemberStanding.
 type fakeInviteRepo struct {
+	vanityServer uuid.UUID
+	vanityCode   string
+	joinCalls    int
+	joinErr      error
+	joinEvent    outbox.Event
+
 	exists    bool
 	existsErr error
 	ownerID   string
@@ -149,4 +155,22 @@ func ptrInt(n int) *int { return &n }
 func past() *time.Time {
 	t := time.Now().UTC().Add(-time.Minute)
 	return &t
+}
+
+func (f *fakeInviteRepo) ServerByVanity(_ context.Context, code string) (uuid.UUID, error) {
+	f.vanityCode = code
+	if f.vanityServer == uuid.Nil {
+		return uuid.Nil, model.ErrInvitationNotFound
+	}
+	return f.vanityServer, nil
+}
+
+func (f *fakeInviteRepo) JoinByVanity(_ context.Context, serverID uuid.UUID, _ string, _ time.Time, buildEvent func(uuid.UUID) (outbox.Event, error)) error {
+	f.joinCalls++
+	if f.joinErr != nil {
+		return f.joinErr
+	}
+	evt, err := buildEvent(serverID)
+	f.joinEvent = evt
+	return err
 }

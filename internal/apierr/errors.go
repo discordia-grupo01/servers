@@ -89,6 +89,7 @@ func ParseBoolQuery(c *gin.Context, name string, def bool) (bool, bool) {
 // response. Unrecognized errors are logged and returned as a generic 500 so
 // driver/internal details never leak to the client.
 func WriteDomainError(c *gin.Context, err error) {
+	var levelRequired *model.BoostLevelRequiredError
 	switch {
 	case errors.Is(err, model.ErrNameRequired):
 		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("name", "name_required"))
@@ -238,6 +239,12 @@ func WriteDomainError(c *gin.Context, err error) {
 		RespondError(c, http.StatusConflict, err.Error(), map[string]any{"reason": "report_not_pending"})
 	case errors.Is(err, model.ErrReportStatusInvalid):
 		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("status", "status_invalid"))
+	case errors.As(err, &levelRequired):
+		RespondError(c, http.StatusForbidden, err.Error(), map[string]any{"reason": "boost_level_required", "required_level": levelRequired.Required})
+	case errors.Is(err, model.ErrVanityCodeInvalid):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("code", "vanity_code_invalid"))
+	case errors.Is(err, model.ErrVanityCodeTaken):
+		RespondError(c, http.StatusConflict, err.Error(), FieldErr("code", "vanity_code_taken"))
 	case errors.Is(err, model.ErrEmojiNameInvalid):
 		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("name", "emoji_name_invalid"))
 	case errors.Is(err, model.ErrEmojiNameTaken):

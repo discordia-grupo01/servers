@@ -60,6 +60,7 @@ Con `docker compose up` se levanta también el servicio (`api`) contra la base.
 | SUPABASE_SERVICE_KEY | - (vacio) | `service_role` key del proyecto (Project Settings > API) -- nunca la `anon` key, esta se salta las políticas RLS del bucket. |
 | RABBITMQ_URL | - (vacio) | Conexion al broker para publicar eventos de dominio y consumir `users.profile_updated` (exchange `discordia.events`, ver ADR-07). Vacia = publisher en no-op y sin réplica de perfiles (`profile: null` en `GET /members`); el servicio funciona igual sin RabbitMQ. |
 | ADMIN_EVENTS_HMAC_SECRET | - (vacio) | Secreto compartido con `discordia-admin` para verificar la firma HMAC de `admin.user_suspended` / `admin.user_reactivated` y de `admin.server_suspended` / `admin.server_reactivated` / `admin.server_deletion_requested`. **Obligatoria si `RABBITMQ_URL` está seteada** (si falta, el servicio no arranca); sin RabbitMQ no se aplican suspensiones. Los eventos sin firma o con firma inválida se descartan con un `warn` y no cambian ningún estado. |
+| BILLING_EVENTS_HMAC_SECRET | - (vacio) | Secreto compartido con `billing` para firmar y verificar los eventos de la saga de boosts, con el mismo valor en las dos VMs. **Obligatoria si `RABBITMQ_URL` está seteada** (si falta, el servicio no arranca). Los eventos con firma inválida se descartan con un `warn`. |
 
 Publicar un evento nunca pasa directo por RabbitMQ desde el request: el
 handler escribe una fila en `outbox_events` en la misma transacción que el
@@ -418,6 +419,19 @@ permisos en el resto del servidor (HU #57). Se guardan en la tabla
   mayúsculas ni tildes, solo palabras completas). Nadie queda exento, y los
   mensajes ya enviados no se tocan (HU de filtro automático).
 
+- **Boosts** (`GET /v1/servers/{serverId}/boosts`, para cualquier miembro): boosts
+  activos, nivel, beneficios y cuánto falta para el siguiente nivel. Los puntos los
+  cobra `billing`; este servicio decide si acepta el boost, en la cola
+  `servers.billing_events`. Un servidor suspendido o quien no es miembro reciben un
+  rechazo, y `billing` devuelve los puntos; una falla técnica reencola el evento.
+  Cada boost se guarda por `boost_id`, así un evento repetido recibe la misma
+  respuesta. Niveles: 1 con 5 boosts (+20 emojis, ícono GIF), 2 con 15 (banner,
+  adjuntos de 25 MB) y 3 con 30 (vanity, insignia). Si un servidor baja de nivel, los
+  emojis que sobran siguen funcionando pero no se suman nuevos, y el ícono GIF, el
+  banner y la vanity se guardan pero dejan de mostrarse.
+- **Vanity** (`PATCH /v1/servers/{serverId}/vanity`, pide `MANAGE_SERVER`): el código
+  se usa en `POST /v1/invites/{code}/join`. Ponerlo pide nivel 3; sacarlo, con
+  `{"code": null}`, no pide nivel.
 - **Emojis personalizados** (`POST`, `GET` y `DELETE` en
   `/v1/servers/{serverId}/emojis`): crear y borrar pide `MANAGE_SERVER` (el
   dueño y los administradores lo tienen implícito); listar, ser miembro. El
@@ -425,7 +439,7 @@ permisos en el resto del servidor (HU #57). Se guardan en la tabla
   el servidor sin distinguir mayúsculas) e `image` (PNG, WebP o GIF, hasta 5 MB,
   detectado por el contenido del archivo y no por su nombre). Un GIF crea un
   emoji animado; usarlo en mensajes requiere Premium, y eso lo controla
-  `messaging`. Cada servidor tiene 50 lugares, y `max_emojis` en el listado
+  `messaging`. Cada servidor tiene 50 lugares (70 desde el nivel 1 de boosts), y `max_emojis` en el listado
   indica cuántos son. Borrar es lógico: el emoji deja de listarse y libera su
   lugar y su nombre, pero la fila y la imagen se conservan para que los mensajes
   y reacciones que ya lo usan lo sigan mostrando. Cada alta y cada baja encolan
