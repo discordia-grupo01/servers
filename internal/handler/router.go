@@ -157,6 +157,7 @@ func NewRouter(d Deps) *gin.Engine {
 
 	v1.POST("/servers/:serverId/bans", moderationH.Ban)
 	v1.GET("/servers/:serverId/bans", moderationH.ListBans)
+	v1.GET("/servers/:serverId/moderation-audit", moderationH.ListAudit)
 	v1.DELETE("/servers/:serverId/bans/:userId", moderationH.Unban)
 	v1.POST("/servers/:serverId/kicks", moderationH.Kick)
 	v1.POST("/servers/:serverId/mutes", moderationH.Mute)

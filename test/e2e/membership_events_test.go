@@ -78,7 +78,7 @@ func setupE2E(t *testing.T) (*gin.Engine, <-chan amqp.Delivery) {
 	t.Cleanup(pool.Close)
 
 	dropTables := func() {
-		_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS server_boosts, channel_permission_overrides, user_profiles, suspended_users, outbox_events, member_roles, roles, server_mutes, ownership_transfers, categories, server_bans, invitations, server_members, channels, servers CASCADE`)
+		_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS moderation_audit_entries, server_boosts, channel_permission_overrides, user_profiles, suspended_users, outbox_events, member_roles, roles, server_mutes, ownership_transfers, categories, server_bans, invitations, server_members, channels, servers CASCADE`)
 	}
 	t.Cleanup(dropTables)
 	dropTables()
@@ -94,7 +94,7 @@ func setupE2E(t *testing.T) (*gin.Engine, <-chan amqp.Delivery) {
 		"0014_drop_default_kind.up.sql",
 		"0015_role_positions.up.sql", "0016_server_bans_banned_by.up.sql",
 		"0017_user_profiles.up.sql", "0019_everyone_role.up.sql",
-		"0020_channel_permission_overrides.up.sql", "0021_server_mutes.up.sql",
+		"0020_channel_permission_overrides.up.sql", "0021_server_mutes.up.sql", "0032_moderation_audit.up.sql",
 		"0027_suspended_users.up.sql",
 		"0031_server_boosts.up.sql",
 	} {
