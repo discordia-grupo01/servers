@@ -146,6 +146,10 @@ func (f *fakeRepo) ListBans(_ context.Context, _ uuid.UUID, limit, offset int) (
 	return f.listBans, f.listTotal, f.listErr
 }
 
+func (f *fakeRepo) ListAudit(_ context.Context, _ uuid.UUID, limit, offset int) ([]moderation.AuditEntry, int, error) {
+	return nil, 0, nil
+}
+
 func (f *fakeRepo) MuteMember(_ context.Context, mute moderation.Mute, check func(actor, target role.Standing) error, events ...outbox.Event) error {
 	f.muteCalls++
 	if f.muteErr != nil {

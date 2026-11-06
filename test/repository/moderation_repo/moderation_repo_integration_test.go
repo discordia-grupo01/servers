@@ -57,6 +57,7 @@ func newRepo(t *testing.T) (*moderation_repo.Repository, *pgxpool.Pool) {
 		"../../../migrations/0019_everyone_role.up.sql",
 		"../../../migrations/0020_channel_permission_overrides.up.sql",
 		"../../../migrations/0021_server_mutes.up.sql",
+		"../../../migrations/0032_moderation_audit.up.sql",
 	} {
 		schema, err := os.ReadFile(file)
 		if err != nil {
@@ -70,7 +71,7 @@ func newRepo(t *testing.T) (*moderation_repo.Repository, *pgxpool.Pool) {
 }
 
 func dropAllTestTables(ctx context.Context, pool *pgxpool.Pool) {
-	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS channel_permission_overrides, categories, user_profiles, outbox_events, ownership_transfers, member_roles, roles, server_mutes, server_bans, invitations, server_members, channels, servers CASCADE`)
+	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS moderation_audit_entries, channel_permission_overrides, categories, user_profiles, outbox_events, ownership_transfers, member_roles, roles, server_mutes, server_bans, invitations, server_members, channels, servers CASCADE`)
 }
 
 func env(k, def string) string {
