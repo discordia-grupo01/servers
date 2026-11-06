@@ -46,3 +46,10 @@ type ListBansParams struct {
 	Limit       int
 	Offset      int
 }
+
+type ListAuditParams struct {
+	ServerID    uuid.UUID
+	ActorUserID string
+	Limit       int
+	Offset      int
+}

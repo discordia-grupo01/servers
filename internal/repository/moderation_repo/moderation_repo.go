@@ -93,6 +93,9 @@ func (r *Repository) BanMember(ctx context.Context, ban moderation.Ban, check fu
 		}); err != nil {
 			return err
 		}
+		if err := insertContextAudit(ctx, tx, ban.ServerID); err != nil {
+			return err
+		}
 		return insertEvents(ctx, tx, events)
 	})
 }
@@ -123,6 +126,9 @@ func (r *Repository) MuteMember(ctx context.Context, mute moderation.Mute, check
 				return model.ErrAlreadyMuted
 			}
 			return fmt.Errorf("insert mute: %w", err)
+		}
+		if err := insertContextAudit(ctx, tx, mute.ServerID); err != nil {
+			return err
 		}
 		return insertEvents(ctx, tx, events)
 	})
@@ -158,6 +164,9 @@ func (r *Repository) KickMember(ctx context.Context, kick moderation.Kick, check
 		if err := repository.TrackChannelAccess(ctx, tx, kick.ServerID, repository.AccessScope{UserID: kick.UserID}, func() error {
 			return removeMember(ctx, tx, kick.ServerID, kick.UserID, kick.KickedAt)
 		}); err != nil {
+			return err
+		}
+		if err := insertContextAudit(ctx, tx, kick.ServerID); err != nil {
 			return err
 		}
 		return insertEvents(ctx, tx, events)
@@ -229,6 +238,26 @@ func insertEvents(ctx context.Context, tx pgx.Tx, events []outbox.Event) error {
 	return nil
 }
 
+func insertContextAudit(ctx context.Context, tx pgx.Tx, serverID uuid.UUID) error {
+	audit, ok := moderation.AuditFromContext(ctx)
+	if !ok {
+		return nil
+	}
+	return insertAudit(ctx, tx, &audit, serverID)
+}
+
+func insertAudit(ctx context.Context, tx pgx.Tx, audit *moderation.AuditEntry, serverID uuid.UUID) error {
+	_, err := tx.Exec(ctx, `
+		INSERT INTO moderation_audit_entries
+			(id, server_id, action, actor_user_id, target_user_id, occurred_at)
+		VALUES ($1, $2, $3, $4, $5, $6)`,
+		audit.ID, serverID, audit.Action, audit.ActorUserID, audit.TargetUserID, audit.OccurredAt)
+	if err != nil {
+		return fmt.Errorf("insert moderation audit: %w", err)
+	}
+	return nil
+}
+
 // UnbanMember revokes userID's ban on serverID and writes events to the
 // outbox in the same transaction. ErrBanNotFound if there is no ban; with two
 // concurrent unbans the second one gets it, so the event is written once.
@@ -244,6 +273,9 @@ func (r *Repository) UnbanMember(ctx context.Context, serverID uuid.UUID, userID
 		}
 		if tag.RowsAffected() == 0 {
 			return model.ErrBanNotFound
+		}
+		if err := insertContextAudit(ctx, tx, serverID); err != nil {
+			return err
 		}
 		return insertEvents(ctx, tx, events)
 	})
@@ -261,6 +293,9 @@ func (r *Repository) UnmuteMember(ctx context.Context, serverID uuid.UUID, userI
 		}
 		if tag.RowsAffected() == 0 {
 			return model.ErrMuteNotFound
+		}
+		if err := insertContextAudit(ctx, tx, serverID); err != nil {
+			return err
 		}
 		return insertEvents(ctx, tx, events)
 	})
@@ -327,6 +362,12 @@ func (r *Repository) ExpireMutes(ctx context.Context, at time.Time) (int, error)
 			if err := insertEvents(ctx, tx, []outbox.Event{event}); err != nil {
 				return err
 			}
+			if err := insertAudit(ctx, tx, &moderation.AuditEntry{
+				ID: uuid.New(), ServerID: item.serverID, Action: moderation.AuditActionUnmute,
+				ActorUserID: "system", TargetUserID: item.userID, OccurredAt: at,
+			}, item.serverID); err != nil {
+				return err
+			}
 		}
 		return nil
 	})
@@ -387,4 +428,37 @@ func (r *Repository) ListBans(ctx context.Context, serverID uuid.UUID, limit, of
 		return nil, 0, fmt.Errorf("list bans: %w", err)
 	}
 	return bans, total, nil
+}
+
+func (r *Repository) ListAudit(ctx context.Context, serverID uuid.UUID, limit, offset int) ([]moderation.AuditEntry, int, error) {
+	var total int
+	if err := r.pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM moderation_audit_entries WHERE server_id = $1`, serverID,
+	).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count moderation audit: %w", err)
+	}
+
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, server_id, action, actor_user_id, target_user_id, occurred_at
+		  FROM moderation_audit_entries
+		 WHERE server_id = $1
+		 ORDER BY occurred_at DESC, id DESC
+		 LIMIT $2 OFFSET $3`, serverID, limit, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("list moderation audit: %w", err)
+	}
+	defer rows.Close()
+
+	entries := make([]moderation.AuditEntry, 0)
+	for rows.Next() {
+		var entry moderation.AuditEntry
+		if err := rows.Scan(&entry.ID, &entry.ServerID, &entry.Action, &entry.ActorUserID, &entry.TargetUserID, &entry.OccurredAt); err != nil {
+			return nil, 0, fmt.Errorf("scan moderation audit: %w", err)
+		}
+		entries = append(entries, entry)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("list moderation audit: %w", err)
+	}
+	return entries, total, nil
 }
