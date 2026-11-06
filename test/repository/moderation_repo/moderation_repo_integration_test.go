@@ -525,6 +525,60 @@ func TestListBans_NoBans_EmptyNotNil(t *testing.T) {
 	}
 }
 
+func TestListAudit_NewestFirstAndScopedToServer(t *testing.T) {
+	repo, pool := newRepo(t)
+	ctx := context.Background()
+	serverID := seedServer(ctx, t, pool)
+	other := seedServer(ctx, t, pool)
+	base := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+
+	for i, target := range []string{"oldest", "newest"} {
+		exec(ctx, t, pool, `
+				INSERT INTO moderation_audit_entries
+					(id, server_id, action, actor_user_id, target_user_id, occurred_at)
+				VALUES ($1, $2, $3, 'mod-1', $4, $5)`,
+			uuid.New(), serverID, moderation.AuditActionBan, target, base.Add(time.Duration(i)*time.Hour))
+	}
+	exec(ctx, t, pool, `
+			INSERT INTO moderation_audit_entries
+				(id, server_id, action, actor_user_id, target_user_id, occurred_at)
+			VALUES ($1, $2, $3, 'other-mod', 'other-target', $4)`,
+		uuid.New(), other, moderation.AuditActionKick, base.Add(2*time.Hour))
+
+	entries, total, err := repo.ListAudit(ctx, serverID, 10, 0)
+	if err != nil {
+		t.Fatalf("ListAudit: %v", err)
+	}
+	if total != 2 || len(entries) != 2 || entries[0].TargetUserID != "newest" || entries[1].TargetUserID != "oldest" {
+		t.Errorf("entries = %+v total=%d", entries, total)
+	}
+}
+
+func TestBanMember_AuditIsWrittenAtomically(t *testing.T) {
+	repo, pool := newRepo(t)
+	ctx := context.Background()
+	serverID := seedServer(ctx, t, pool, "target")
+	entry := moderation.AuditEntry{
+		ID: uuid.New(), Action: moderation.AuditActionBan, ActorUserID: "mod-1",
+		TargetUserID: "target", OccurredAt: time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC),
+	}
+
+	if err := repo.BanMember(moderation.WithAudit(ctx, entry), newBan(serverID, "target"), allowAll); err != nil {
+		t.Fatalf("BanMember: %v", err)
+	}
+	var got moderation.AuditEntry
+	if err := pool.QueryRow(ctx, `
+			SELECT id, server_id, action, actor_user_id, target_user_id, occurred_at
+			FROM moderation_audit_entries WHERE server_id = $1`, serverID).
+		Scan(&got.ID, &got.ServerID, &got.Action, &got.ActorUserID, &got.TargetUserID, &got.OccurredAt); err != nil {
+		t.Fatalf("audit row: %v", err)
+	}
+	if got != (moderation.AuditEntry{ID: entry.ID, ServerID: serverID, Action: entry.Action,
+		ActorUserID: entry.ActorUserID, TargetUserID: entry.TargetUserID, OccurredAt: entry.OccurredAt}) {
+		t.Errorf("audit row = %+v, want %+v", got, entry)
+	}
+}
+
 func userIDs(bans []moderation.Ban) []string {
 	out := make([]string, len(bans))
 	for i, b := range bans {

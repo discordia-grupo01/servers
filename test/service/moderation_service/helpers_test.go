@@ -73,6 +73,10 @@ type fakeRepo struct {
 	gotLimit  int
 	gotOffset int
 
+	listAudit  []moderation.AuditEntry
+	auditTotal int
+	auditErr   error
+
 	muteErr    error
 	muteCalls  int
 	muted      moderation.Mute
@@ -147,7 +151,8 @@ func (f *fakeRepo) ListBans(_ context.Context, _ uuid.UUID, limit, offset int) (
 }
 
 func (f *fakeRepo) ListAudit(_ context.Context, _ uuid.UUID, limit, offset int) ([]moderation.AuditEntry, int, error) {
-	return nil, 0, nil
+	f.gotLimit, f.gotOffset = limit, offset
+	return f.listAudit, f.auditTotal, f.auditErr
 }
 
 func (f *fakeRepo) MuteMember(_ context.Context, mute moderation.Mute, check func(actor, target role.Standing) error, events ...outbox.Event) error {
