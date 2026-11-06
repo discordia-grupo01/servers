@@ -225,9 +225,9 @@ func TestAdminEvents_SuspendedUserIsRejectedAndVoiceAccessDenied(t *testing.T) {
 	ch, pool := setupAdminReplica(t, late)
 	ctx := context.Background()
 
-	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS server_boosts, channel_permission_overrides, user_profiles, outbox_events, member_roles, roles, server_mutes, ownership_transfers, categories, server_bans, invitations, server_members, channels, servers CASCADE`)
+	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS moderation_audit_entries, server_boosts, channel_permission_overrides, user_profiles, outbox_events, member_roles, roles, server_mutes, ownership_transfers, categories, server_bans, invitations, server_members, channels, servers CASCADE`)
 	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(), `DROP TABLE IF EXISTS server_boosts, channel_permission_overrides, user_profiles, outbox_events, member_roles, roles, server_mutes, ownership_transfers, categories, server_bans, invitations, server_members, channels, servers CASCADE`)
+		_, _ = pool.Exec(context.Background(), `DROP TABLE IF EXISTS moderation_audit_entries, server_boosts, channel_permission_overrides, user_profiles, outbox_events, member_roles, roles, server_mutes, ownership_transfers, categories, server_bans, invitations, server_members, channels, servers CASCADE`)
 	})
 	for _, f := range []string{
 		"0001_init.up.sql", "0002_invitations.up.sql",

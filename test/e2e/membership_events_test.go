@@ -78,7 +78,7 @@ func setupE2E(t *testing.T) (*gin.Engine, <-chan amqp.Delivery) {
 	t.Cleanup(pool.Close)
 
 	dropTables := func() {
-		_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS server_boosts, channel_permission_overrides, user_profiles, suspended_users, outbox_events, member_roles, roles, server_mutes, ownership_transfers, categories, server_bans, invitations, server_members, channels, servers CASCADE`)
+		_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS moderation_audit_entries, server_boosts, channel_permission_overrides, user_profiles, suspended_users, outbox_events, member_roles, roles, server_mutes, ownership_transfers, categories, server_bans, invitations, server_members, channels, servers CASCADE`)
 	}
 	t.Cleanup(dropTables)
 	dropTables()

@@ -40,7 +40,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/service/membership_service"
 )
 
-const moderationTables = `server_boosts, channel_permission_overrides, user_profiles, suspended_users, outbox_events, member_roles, roles, server_mutes, ownership_transfers, categories, server_bans, invitations, server_members, channels, servers`
+const moderationTables = `moderation_audit_entries, server_boosts, channel_permission_overrides, user_profiles, suspended_users, outbox_events, member_roles, roles, server_mutes, ownership_transfers, categories, server_bans, invitations, server_members, channels, servers`
 
 // moderationEnv is the real service wired the way main.go does it -- the admin
 // consumer with server moderation, the guard, the outbox poller and the router --
