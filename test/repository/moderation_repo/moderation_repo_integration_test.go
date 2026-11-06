@@ -573,9 +573,10 @@ func TestBanMember_AuditIsWrittenAtomically(t *testing.T) {
 		Scan(&got.ID, &got.ServerID, &got.Action, &got.ActorUserID, &got.TargetUserID, &got.OccurredAt); err != nil {
 		t.Fatalf("audit row: %v", err)
 	}
-	if got != (moderation.AuditEntry{ID: entry.ID, ServerID: serverID, Action: entry.Action,
-		ActorUserID: entry.ActorUserID, TargetUserID: entry.TargetUserID, OccurredAt: entry.OccurredAt}) {
-		t.Errorf("audit row = %+v, want %+v", got, entry)
+	want := entry
+	want.ServerID = serverID
+	if got != want {
+		t.Errorf("audit row = %+v, want %+v", got, want)
 	}
 }
 
