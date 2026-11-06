@@ -2454,6 +2454,65 @@ paths:
       summary: Resolve the mentions of a message
       tags:
         - mentions
+  "/v1/servers/{serverId}/moderation-audit":
+    get:
+      description: "Requires any moderation permission: MANAGE_MESSAGES, KICK_MEMBERS
+        or BAN_MEMBERS. Newest first, paginated."
+      parameters:
+        - description: Server ID
+          in: path
+          name: serverId
+          required: true
+          schema:
+            type: string
+        - description: Page size (max 100)
+          in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+        - description: Items to skip
+          in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/moderation.AuditPage"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "403":
+          description: missing moderation permission
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+      security:
+        - BearerAuth: []
+      summary: List the server moderation audit log
+      tags:
+        - moderation
   "/v1/servers/{serverId}/mutes":
     post:
       description: Requires MANAGE_MESSAGES. The member remains in the server and
@@ -3658,6 +3717,34 @@ components:
           type: string
         to_user_id:
           type: string
+      type: object
+    moderation.AuditEntry:
+      properties:
+        action:
+          type: string
+        actor_user_id:
+          type: string
+        id:
+          type: string
+        occurred_at:
+          type: string
+        server_id:
+          type: string
+        target_user_id:
+          type: string
+      type: object
+    moderation.AuditPage:
+      properties:
+        entries:
+          items:
+            $ref: "#/components/schemas/moderation.AuditEntry"
+          type: array
+        limit:
+          type: integer
+        offset:
+          type: integer
+        total:
+          type: integer
       type: object
     moderation.BanListResponse:
       properties:
