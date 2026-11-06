@@ -575,6 +575,11 @@ func TestBanMember_AuditIsWrittenAtomically(t *testing.T) {
 	}
 	want := entry
 	want.ServerID = serverID
+	if !got.OccurredAt.Equal(want.OccurredAt) {
+		t.Errorf("occurred_at = %v, want %v", got.OccurredAt, want.OccurredAt)
+	}
+	got.OccurredAt = time.Time{}
+	want.OccurredAt = time.Time{}
 	if got != want {
 		t.Errorf("audit row = %+v, want %+v", got, want)
 	}
