@@ -49,6 +49,11 @@ type fakeModeration struct {
 	listCalled bool
 	gotList    moderation_service.ListBansParams
 	listResult moderation.BanPage
+
+	auditErr    error
+	auditCalled bool
+	gotAudit    moderation_service.ListAuditParams
+	auditResult moderation.AuditPage
 }
 
 func (f *fakeModeration) BanMember(_ context.Context, p moderation_service.BanParams) (moderation.Ban, error) {
@@ -79,6 +84,11 @@ func (f *fakeModeration) UnmuteMember(_ context.Context, p moderation_service.Un
 func (f *fakeModeration) ListBans(_ context.Context, p moderation_service.ListBansParams) (moderation.BanPage, error) {
 	f.listCalled, f.gotList = true, p
 	return f.listResult, f.listErr
+}
+
+func (f *fakeModeration) ListAudit(_ context.Context, p moderation_service.ListAuditParams) (moderation.AuditPage, error) {
+	f.auditCalled, f.gotAudit = true, p
+	return f.auditResult, f.auditErr
 }
 
 type okPinger struct{}
@@ -241,6 +251,7 @@ func TestListBans_Returns200WithThePage(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
 	}
+
 	if f.gotList.ServerID != serverID || f.gotList.ActorUserID != testUser || f.gotList.Limit != 2 || f.gotList.Offset != 2 {
 		t.Errorf("service got %+v", f.gotList)
 	}
@@ -250,6 +261,44 @@ func TestListBans_Returns200WithThePage(t *testing.T) {
 	}
 	if len(got.Bans) != 2 || got.Bans[0].UserID != "a" || got.Total != 5 || got.Limit != 2 || got.Offset != 2 {
 		t.Errorf("body = %+v", got)
+	}
+}
+
+func TestListAudit_Returns200WithThePage(t *testing.T) {
+	serverID := uuid.New()
+	at := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
+	f := &fakeModeration{auditResult: moderation.AuditPage{
+		Entries: []moderation.AuditEntry{{
+			ID: uuid.New(), ServerID: serverID, Action: moderation.AuditActionBan,
+			ActorUserID: testUser, TargetUserID: "member-1", OccurredAt: at,
+		}},
+		Total: 1, Limit: 10, Offset: 5,
+	}}
+
+	w := do(t, newRouter(f), http.MethodGet,
+		"/v1/servers/"+serverID.String()+"/moderation-audit?limit=10&offset=5", testUser, "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
+	}
+	if !f.auditCalled || f.gotAudit.ServerID != serverID || f.gotAudit.ActorUserID != testUser ||
+		f.gotAudit.Limit != 10 || f.gotAudit.Offset != 5 {
+		t.Fatalf("service got called=%v params=%+v", f.auditCalled, f.gotAudit)
+	}
+	var got moderation.AuditPage
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Entries) != 1 || got.Entries[0].Action != moderation.AuditActionBan ||
+		got.Entries[0].ActorUserID != testUser || !got.Entries[0].OccurredAt.Equal(at) {
+		t.Fatalf("body=%+v", got)
+	}
+}
+
+func TestListAudit_MissingIdentityReturns401(t *testing.T) {
+	w := do(t, newRouter(&fakeModeration{}), http.MethodGet,
+		"/v1/servers/"+uuid.New().String()+"/moderation-audit", "", "")
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
 	}
 }
 

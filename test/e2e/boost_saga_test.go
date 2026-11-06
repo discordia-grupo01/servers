@@ -46,7 +46,7 @@ func TestBoostSaga_RequestIsAppliedAndAnswered(t *testing.T) {
 	}
 	t.Cleanup(pool.Close)
 	drop := func() {
-		_, _ = pool.Exec(context.Background(), `DROP TABLE IF EXISTS server_boosts, outbox_events, invitations, server_bans, server_members, channels, servers CASCADE`)
+		_, _ = pool.Exec(context.Background(), `DROP TABLE IF EXISTS moderation_audit_entries, server_boosts, outbox_events, invitations, server_bans, server_members, channels, servers CASCADE`)
 	}
 	t.Cleanup(drop)
 	drop()

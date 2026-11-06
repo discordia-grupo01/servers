@@ -22,6 +22,7 @@ type Repository interface {
 	KickMember(ctx context.Context, kick moderation.Kick, check func(actor, target role.Standing) error, events ...outbox.Event) error
 	UnbanMember(ctx context.Context, serverID uuid.UUID, userID string, events ...outbox.Event) error
 	ListBans(ctx context.Context, serverID uuid.UUID, limit, offset int) ([]moderation.Ban, int, error)
+	ListAudit(ctx context.Context, serverID uuid.UUID, limit, offset int) ([]moderation.AuditEntry, int, error)
 }
 
 type MuteRepository interface {

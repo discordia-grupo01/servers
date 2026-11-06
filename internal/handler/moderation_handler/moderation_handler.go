@@ -257,3 +257,42 @@ func (h *Handler) ListBans(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, resp)
 }
+
+// ListAudit godoc
+// @Summary      List the server moderation audit log
+// @Description  Requires any moderation permission: MANAGE_MESSAGES, KICK_MEMBERS or BAN_MEMBERS. Newest first, paginated.
+// @Tags         moderation
+// @Produce      json
+// @Security     BearerAuth
+// @Param        serverId path string true "Server ID"
+// @Param        limit query int false "Page size (max 100)" default(20)
+// @Param        offset query int false "Items to skip" default(0)
+// @Success      200 {object} moderation.AuditPage
+// @Failure      400 {object} apierr.ErrorResponse
+// @Failure      401 {object} apierr.ErrorResponse
+// @Failure      403 {object} apierr.ErrorResponse "missing moderation permission"
+// @Failure      404 {object} apierr.ErrorResponse
+// @Router /v1/servers/{serverId}/moderation-audit [get]
+func (h *Handler) ListAudit(c *gin.Context) {
+	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
+	if !ok {
+		return
+	}
+	limit, ok := apierr.ParseNonNegativeIntQuery(c, "limit", moderation.ListDefaultLimit)
+	if !ok {
+		return
+	}
+	offset, ok := apierr.ParseNonNegativeIntQuery(c, "offset", 0)
+	if !ok {
+		return
+	}
+
+	page, err := h.uc.ListAudit(c.Request.Context(), moderation_service.ListAuditParams{
+		ServerID: serverID, ActorUserID: middleware.UserID(c), Limit: limit, Offset: offset,
+	})
+	if err != nil {
+		apierr.WriteDomainError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, page)
+}

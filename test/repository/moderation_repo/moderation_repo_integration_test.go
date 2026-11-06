@@ -57,6 +57,7 @@ func newRepo(t *testing.T) (*moderation_repo.Repository, *pgxpool.Pool) {
 		"../../../migrations/0019_everyone_role.up.sql",
 		"../../../migrations/0020_channel_permission_overrides.up.sql",
 		"../../../migrations/0021_server_mutes.up.sql",
+		"../../../migrations/0032_moderation_audit.up.sql",
 	} {
 		schema, err := os.ReadFile(file)
 		if err != nil {
@@ -70,7 +71,7 @@ func newRepo(t *testing.T) (*moderation_repo.Repository, *pgxpool.Pool) {
 }
 
 func dropAllTestTables(ctx context.Context, pool *pgxpool.Pool) {
-	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS channel_permission_overrides, categories, user_profiles, outbox_events, ownership_transfers, member_roles, roles, server_mutes, server_bans, invitations, server_members, channels, servers CASCADE`)
+	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS moderation_audit_entries, channel_permission_overrides, categories, user_profiles, outbox_events, ownership_transfers, member_roles, roles, server_mutes, server_bans, invitations, server_members, channels, servers CASCADE`)
 }
 
 func env(k, def string) string {
@@ -521,6 +522,66 @@ func TestListBans_NoBans_EmptyNotNil(t *testing.T) {
 	bans, total, err := repo.ListBans(ctx, seedServer(ctx, t, pool), 20, 0)
 	if err != nil || total != 0 || bans == nil || len(bans) != 0 {
 		t.Fatalf("got %v, %d, %v", bans, total, err)
+	}
+}
+
+func TestListAudit_NewestFirstAndScopedToServer(t *testing.T) {
+	repo, pool := newRepo(t)
+	ctx := context.Background()
+	serverID := seedServer(ctx, t, pool)
+	other := seedServer(ctx, t, pool)
+	base := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+
+	for i, target := range []string{"oldest", "newest"} {
+		exec(ctx, t, pool, `
+				INSERT INTO moderation_audit_entries
+					(id, server_id, action, actor_user_id, target_user_id, occurred_at)
+				VALUES ($1, $2, $3, 'mod-1', $4, $5)`,
+			uuid.New(), serverID, moderation.AuditActionBan, target, base.Add(time.Duration(i)*time.Hour))
+	}
+	exec(ctx, t, pool, `
+			INSERT INTO moderation_audit_entries
+				(id, server_id, action, actor_user_id, target_user_id, occurred_at)
+			VALUES ($1, $2, $3, 'other-mod', 'other-target', $4)`,
+		uuid.New(), other, moderation.AuditActionKick, base.Add(2*time.Hour))
+
+	entries, total, err := repo.ListAudit(ctx, serverID, 10, 0)
+	if err != nil {
+		t.Fatalf("ListAudit: %v", err)
+	}
+	if total != 2 || len(entries) != 2 || entries[0].TargetUserID != "newest" || entries[1].TargetUserID != "oldest" {
+		t.Errorf("entries = %+v total=%d", entries, total)
+	}
+}
+
+func TestBanMember_AuditIsWrittenAtomically(t *testing.T) {
+	repo, pool := newRepo(t)
+	ctx := context.Background()
+	serverID := seedServer(ctx, t, pool, "target")
+	entry := moderation.AuditEntry{
+		ID: uuid.New(), Action: moderation.AuditActionBan, ActorUserID: "mod-1",
+		TargetUserID: "target", OccurredAt: time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC),
+	}
+
+	if err := repo.BanMember(moderation.WithAudit(ctx, entry), newBan(serverID, "target"), allowAll); err != nil {
+		t.Fatalf("BanMember: %v", err)
+	}
+	var got moderation.AuditEntry
+	if err := pool.QueryRow(ctx, `
+			SELECT id, server_id, action, actor_user_id, target_user_id, occurred_at
+			FROM moderation_audit_entries WHERE server_id = $1`, serverID).
+		Scan(&got.ID, &got.ServerID, &got.Action, &got.ActorUserID, &got.TargetUserID, &got.OccurredAt); err != nil {
+		t.Fatalf("audit row: %v", err)
+	}
+	want := entry
+	want.ServerID = serverID
+	if !got.OccurredAt.Equal(want.OccurredAt) {
+		t.Errorf("occurred_at = %v, want %v", got.OccurredAt, want.OccurredAt)
+	}
+	got.OccurredAt = time.Time{}
+	want.OccurredAt = time.Time{}
+	if got != want {
+		t.Errorf("audit row = %+v, want %+v", got, want)
 	}
 }
 

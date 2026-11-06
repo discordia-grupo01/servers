@@ -126,6 +126,7 @@ func (s *Service) BanMember(ctx context.Context, p BanParams) (moderation.Ban, e
 		}
 		return service.RequireOutranks(actor, target)
 	}
+	ctx = moderation.WithAudit(ctx, auditEntry(moderation.AuditActionBan, p.ActorUserID, target, now))
 	if err := s.repo.BanMember(ctx, ban, recheck, memberLeft, memberBanned); err != nil {
 		return moderation.Ban{}, err
 	}
@@ -203,6 +204,7 @@ func (s *Service) KickMember(ctx context.Context, p KickParams) error {
 		return service.RequireOutranks(actor, target)
 	}
 	kick := moderation.Kick{ServerID: p.ServerID, UserID: target, KickedBy: p.ActorUserID, KickedAt: now}
+	ctx = moderation.WithAudit(ctx, auditEntry(moderation.AuditActionKick, p.ActorUserID, target, now))
 	return s.repo.KickMember(ctx, kick, recheck, memberLeft, memberKicked)
 }
 
@@ -282,6 +284,7 @@ func (s *Service) MuteMember(ctx context.Context, p MuteParams) error {
 		}
 		return service.RequireOutranks(actor, target)
 	}
+	ctx = moderation.WithAudit(ctx, auditEntry(moderation.AuditActionMute, p.ActorUserID, target, now))
 	return s.muteRepo.MuteMember(ctx, mute, recheck, event)
 }
 
@@ -309,8 +312,9 @@ func (s *Service) UnmuteMember(ctx context.Context, p UnmuteParams) error {
 	if err := service.RequirePermission(actor, role.PermManageMessages); err != nil {
 		return err
 	}
+	now := s.now()
 	event, err := outbox.New(moderationevents.RoutingKeyMemberUnmuted, moderationevents.MemberUnmuted{
-		Meta:      envelope.Meta{EventID: uuid.NewString(), OccurredAt: s.now()},
+		Meta:      envelope.Meta{EventID: uuid.NewString(), OccurredAt: now},
 		ServerID:  p.ServerID.String(),
 		UserID:    target,
 		UnmutedBy: p.ActorUserID,
@@ -319,6 +323,7 @@ func (s *Service) UnmuteMember(ctx context.Context, p UnmuteParams) error {
 	if err != nil {
 		return err
 	}
+	ctx = moderation.WithAudit(ctx, auditEntry(moderation.AuditActionUnmute, p.ActorUserID, target, now))
 	return s.muteRepo.UnmuteMember(ctx, p.ServerID, target, event)
 }
 
@@ -347,8 +352,9 @@ func (s *Service) UnbanMember(ctx context.Context, p UnbanParams) error {
 		return err
 	}
 
+	now := s.now()
 	memberUnbanned, err := outbox.New(moderationevents.RoutingKeyMemberUnbanned, moderationevents.MemberUnbanned{
-		Meta:       envelope.Meta{EventID: uuid.NewString(), OccurredAt: s.now()},
+		Meta:       envelope.Meta{EventID: uuid.NewString(), OccurredAt: now},
 		ServerID:   p.ServerID.String(),
 		UserID:     target,
 		UnbannedBy: p.ActorUserID,
@@ -356,6 +362,7 @@ func (s *Service) UnbanMember(ctx context.Context, p UnbanParams) error {
 	if err != nil {
 		return err
 	}
+	ctx = moderation.WithAudit(ctx, auditEntry(moderation.AuditActionUnban, p.ActorUserID, target, now))
 	return s.repo.UnbanMember(ctx, p.ServerID, target, memberUnbanned)
 }
 
@@ -390,4 +397,41 @@ func (s *Service) ListBans(ctx context.Context, p ListBansParams) (moderation.Ba
 		return moderation.BanPage{}, err
 	}
 	return moderation.BanPage{Bans: bans, Total: total, Limit: limit, Offset: offset}, nil
+}
+
+func (s *Service) ListAudit(ctx context.Context, p ListAuditParams) (moderation.AuditPage, error) {
+	if p.ActorUserID == "" {
+		return moderation.AuditPage{}, model.ErrUnauthorized
+	}
+	srv, err := s.servers.GetByID(ctx, p.ServerID)
+	if err != nil {
+		return moderation.AuditPage{}, err
+	}
+	actor, err := service.ResolveStanding(ctx, s.standings, srv, p.ActorUserID)
+	if err != nil {
+		return moderation.AuditPage{}, err
+	}
+	if err := service.RequireModerator(actor); err != nil {
+		return moderation.AuditPage{}, err
+	}
+
+	limit := p.Limit
+	switch {
+	case limit <= 0:
+		limit = moderation.ListDefaultLimit
+	case limit > moderation.ListMaxLimit:
+		limit = moderation.ListMaxLimit
+	}
+	offset := max(p.Offset, 0)
+	entries, total, err := s.repo.ListAudit(ctx, p.ServerID, limit, offset)
+	if err != nil {
+		return moderation.AuditPage{}, err
+	}
+	return moderation.AuditPage{Entries: entries, Total: total, Limit: limit, Offset: offset}, nil
+}
+
+func auditEntry(action, actor, target string, at time.Time) moderation.AuditEntry {
+	return moderation.AuditEntry{
+		ID: uuid.New(), Action: action, ActorUserID: actor, TargetUserID: target, OccurredAt: at,
+	}
 }
