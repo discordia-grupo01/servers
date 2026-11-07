@@ -11,7 +11,13 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/discordia-grupo01/servers/internal/logging"
+	"github.com/discordia-grupo01/servers/internal/telemetry"
 )
 
 type Publisher interface {
@@ -62,14 +68,15 @@ func (p *Poller) publishOne(ctx context.Context) (published bool, err error) {
 		var id uuid.UUID
 		var routingKey string
 		var payload []byte
+		var traceparent *string
 		row := tx.QueryRow(ctx, `
-			SELECT id, routing_key, payload
+			SELECT id, routing_key, payload, traceparent
 			  FROM outbox_events
 			 WHERE published_at IS NULL
 			 ORDER BY created_at
 			 LIMIT 1
 			   FOR UPDATE SKIP LOCKED`)
-		if err := row.Scan(&id, &routingKey, &payload); err != nil {
+		if err := row.Scan(&id, &routingKey, &payload, &traceparent); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return nil
 			}
@@ -77,7 +84,24 @@ func (p *Poller) publishOne(ctx context.Context) (published bool, err error) {
 		}
 		published = true
 
-		if pubErr := p.publisher.PublishOrError(ctx, routingKey, json.RawMessage(payload)); pubErr != nil {
+		publishCtx := ctx
+		if traceparent != nil {
+			publishCtx = telemetry.ContextWithTraceparent(ctx, *traceparent)
+		}
+		publishCtx, span := otel.Tracer("github.com/discordia-grupo01/servers").Start(publishCtx, "outbox publish "+routingKey,
+			trace.WithSpanKind(trace.SpanKindProducer),
+			trace.WithAttributes(
+				attribute.String("messaging.system", "rabbitmq"),
+				attribute.String("messaging.destination.name", routingKey),
+			),
+		)
+		pubErr := p.publisher.PublishOrError(publishCtx, routingKey, json.RawMessage(payload))
+		if pubErr != nil {
+			span.SetStatus(codes.Error, "publish failed")
+		}
+		span.End()
+
+		if pubErr != nil {
 			logging.Warnf("outbox: publish %q (id=%s) failed, will retry next tick: %v", routingKey, id, pubErr)
 			_, err := tx.Exec(ctx, `
 				UPDATE outbox_events SET attempts = attempts + 1, last_error = $2 WHERE id = $1`,

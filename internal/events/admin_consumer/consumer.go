@@ -17,6 +17,7 @@ import (
 
 	"github.com/discordia-grupo01/servers/internal/events/deadletter"
 	"github.com/discordia-grupo01/servers/internal/logging"
+	"github.com/discordia-grupo01/servers/internal/telemetry"
 )
 
 // QueueName is owned by this consumer: no other service binds it. Another
@@ -173,7 +174,10 @@ func (c *Consumer) consumeOnce(ctx context.Context) error {
 			if !ok {
 				return errors.New("consume channel closed")
 			}
-			retrier.Settle(ctx, delivery, c.shouldRequeue(ctx, delivery.RoutingKey, delivery.Body))
+			spanCtx, end := telemetry.StartConsumer(ctx, QueueName, delivery)
+			requeue := c.shouldRequeue(spanCtx, delivery.RoutingKey, delivery.Body)
+			retrier.Settle(spanCtx, delivery, requeue)
+			end(requeue)
 		}
 	}
 }

@@ -42,6 +42,7 @@ func newRepo(t *testing.T) (*word_filter_repo.Repository, *pgxpool.Pool) {
 	for _, file := range []string{
 		"../../../migrations/0001_init.up.sql",
 		"../../../migrations/0011_outbox_events.up.sql",
+		"../../../migrations/0033_outbox_traceparent.up.sql",
 		"../../../migrations/0024_server_banned_words.up.sql",
 	} {
 		schema, err := os.ReadFile(file)
