@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"context"
-	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -10,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/discordia-grupo01/servers/internal/apierr"
+	"github.com/discordia-grupo01/servers/internal/logging"
 )
 
 // ErrorCodeAccountSuspended is the details.error_code of the 403 a suspended
@@ -82,7 +82,7 @@ func (g *SuspensionGuard) RejectSuspended() gin.HandlerFunc {
 		}
 		suspended, err := g.isSuspended(c.Request.Context(), userID)
 		if err != nil {
-			log.Printf("suspension check failed, user_id=%s: %v", userID, err)
+			logging.Errorf("suspension check failed, user_id=%s: %v", userID, err)
 			c.Abort()
 			apierr.RespondError(c, http.StatusServiceUnavailable, "could not verify account status", nil)
 			return

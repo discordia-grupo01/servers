@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 	"unicode"
@@ -18,6 +17,7 @@ import (
 	"github.com/discordia-grupo01/events-contract/membership"
 	serverevents "github.com/discordia-grupo01/events-contract/servers"
 	"github.com/discordia-grupo01/servers/internal/iconstore"
+	"github.com/discordia-grupo01/servers/internal/logging"
 	"github.com/discordia-grupo01/servers/internal/model"
 	"github.com/discordia-grupo01/servers/internal/model/channelperm"
 	"github.com/discordia-grupo01/servers/internal/model/role"
@@ -480,6 +480,6 @@ func (s *Service) removeImages(srv model.Server) {
 		}
 	}
 	if err := s.icons.DeleteServerEmojis(srv.ID.String()); err != nil {
-		log.Printf("server %s deleted, but its emoji images remain: %v", srv.ID, err)
+		logging.Warnf("server %s deleted, but its emoji images remain: %v", srv.ID, err)
 	}
 }

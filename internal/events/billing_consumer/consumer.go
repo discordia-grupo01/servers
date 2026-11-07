@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,6 +15,7 @@ import (
 	"github.com/discordia-grupo01/events-contract/boosts"
 	"github.com/discordia-grupo01/events-contract/broker"
 	"github.com/discordia-grupo01/servers/internal/events/deadletter"
+	"github.com/discordia-grupo01/servers/internal/logging"
 	"github.com/discordia-grupo01/servers/internal/model"
 )
 
@@ -48,7 +48,7 @@ func (c *Consumer) Start(ctx context.Context) {
 
 	for ctx.Err() == nil {
 		if err := c.consumeOnce(ctx); err != nil {
-			log.Printf("billing_consumer: RabbitMQ connection lost, retrying in %s: %v", backoff, err)
+			logging.Warnf("billing_consumer: RabbitMQ connection lost, retrying in %s: %v", backoff, err)
 			select {
 			case <-ctx.Done():
 				return
@@ -102,7 +102,7 @@ func (c *Consumer) consumeOnce(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	log.Printf("billing_consumer: consuming %s", QueueName)
+	logging.Infof("billing_consumer: consuming %s", QueueName)
 
 	for {
 		select {
@@ -131,38 +131,38 @@ func ShouldRequeue(ctx context.Context, store Store, secret, routingKey string, 
 	case boosts.RoutingKeyRemoved:
 		apply = store.Remove
 	default:
-		log.Printf("billing_consumer: unknown routing key %q, dropping message", routingKey)
+		logging.Warnf("billing_consumer: unknown routing key %q, dropping message", routingKey)
 		return false
 	}
 
 	var evt boosts.SagaEvent
 	if err := json.Unmarshal(body, &evt); err != nil {
-		log.Printf("billing_consumer: malformed payload, dropping message: %v", err)
+		logging.Warnf("billing_consumer: malformed payload, dropping message: %v", err)
 		return false
 	}
 	if !evt.Verify(routingKey, secret) {
-		log.Printf("billing_consumer: WARN invalid or missing signature, routing_key=%s event_id=%s boost_id=%s, dropping message", routingKey, evt.EventID, evt.BoostID)
+		logging.Warnf("billing_consumer: WARN invalid or missing signature, routing_key=%s event_id=%s boost_id=%s, dropping message", routingKey, evt.EventID, evt.BoostID)
 		return false
 	}
 	boostID, err := uuid.Parse(evt.BoostID)
 	if err != nil {
-		log.Printf("billing_consumer: invalid boost_id %q, event_id=%s, dropping message", evt.BoostID, evt.EventID)
+		logging.Warnf("billing_consumer: invalid boost_id %q, event_id=%s, dropping message", evt.BoostID, evt.EventID)
 		return false
 	}
 	serverID, err := uuid.Parse(evt.ServerID)
 	if err != nil {
-		log.Printf("billing_consumer: invalid server_id %q, event_id=%s, dropping message", evt.ServerID, evt.EventID)
+		logging.Warnf("billing_consumer: invalid server_id %q, event_id=%s, dropping message", evt.ServerID, evt.EventID)
 		return false
 	}
 	if evt.UserID == "" {
-		log.Printf("billing_consumer: empty user_id, event_id=%s, dropping message", evt.EventID)
+		logging.Warnf("billing_consumer: empty user_id, event_id=%s, dropping message", evt.EventID)
 		return false
 	}
 
 	if err := apply(ctx, model.Boost{ID: boostID, ServerID: serverID, UserID: evt.UserID}); err != nil {
-		log.Printf("billing_consumer: failed to apply %s, event_id=%s boost_id=%s, retrying: %v", routingKey, evt.EventID, boostID, err)
+		logging.Errorf("billing_consumer: failed to apply %s, event_id=%s boost_id=%s, retrying: %v", routingKey, evt.EventID, boostID, err)
 		return true
 	}
-	log.Printf("billing_consumer: applied %s, event_id=%s boost_id=%s", routingKey, evt.EventID, boostID)
+	logging.Infof("billing_consumer: applied %s, event_id=%s boost_id=%s", routingKey, evt.EventID, boostID)
 	return false
 }

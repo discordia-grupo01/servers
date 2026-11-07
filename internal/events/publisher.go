@@ -4,12 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
 	"github.com/discordia-grupo01/events-contract/broker"
 	amqp "github.com/rabbitmq/amqp091-go"
+
+	"github.com/discordia-grupo01/servers/internal/logging"
 )
 
 // dialTimeout bounds how long a connection attempt can take. Publish() may
@@ -42,11 +43,11 @@ type AMQPPublisher struct {
 func NewAMQPPublisher(url string) *AMQPPublisher {
 	p := &AMQPPublisher{url: url}
 	if url == "" {
-		log.Printf("events: RABBITMQ_URL not set, publisher disabled")
+		logging.Warnf("events: RABBITMQ_URL not set, publisher disabled")
 		return p
 	}
 	if err := p.connect(); err != nil {
-		log.Printf("events: warning: initial RabbitMQ connection failed, will retry on next publish: %v", err)
+		logging.Warnf("events: warning: initial RabbitMQ connection failed, will retry on next publish: %v", err)
 	}
 	return p
 }
@@ -78,7 +79,7 @@ func (p *AMQPPublisher) connect() error {
 
 func (p *AMQPPublisher) Publish(ctx context.Context, routingKey string, payload any) error {
 	if err := p.publish(ctx, routingKey, payload); err != nil {
-		log.Printf("events: warning: could not publish %q: %v", routingKey, err)
+		logging.Warnf("events: warning: could not publish %q: %v", routingKey, err)
 	}
 	return nil
 }

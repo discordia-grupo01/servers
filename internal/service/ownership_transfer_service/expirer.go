@@ -2,9 +2,9 @@ package ownership_transfer_service
 
 import (
 	"context"
-	"log"
 	"time"
 
+	"github.com/discordia-grupo01/servers/internal/logging"
 	"github.com/discordia-grupo01/servers/internal/model"
 )
 
@@ -47,10 +47,10 @@ func (e *Expirer) SweepOnce(ctx context.Context) {
 	now := e.now()
 	n, err := e.transfers.ExpireStalePending(ctx, now.Add(-model.OwnershipTransferTTL), now)
 	if err != nil {
-		log.Printf("ownership_transfer: expiry sweep failed: %v", err)
+		logging.Errorf("ownership_transfer: expiry sweep failed: %v", err)
 		return
 	}
 	if n > 0 {
-		log.Printf("ownership_transfer: expired %d stale pending transfer(s)", n)
+		logging.Infof("ownership_transfer: expired %d stale pending transfer(s)", n)
 	}
 }

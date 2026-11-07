@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"log"
 
 	"github.com/gin-gonic/gin"
 
@@ -14,6 +13,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/handler"
 	"github.com/discordia-grupo01/servers/internal/handler/emoji_handler"
 	"github.com/discordia-grupo01/servers/internal/iconstore"
+	"github.com/discordia-grupo01/servers/internal/logging"
 	"github.com/discordia-grupo01/servers/internal/middleware"
 	"github.com/discordia-grupo01/servers/internal/outbox"
 	"github.com/discordia-grupo01/servers/internal/repository"
@@ -60,9 +60,11 @@ import (
 // @name                        Authorization
 // @description                 Type "Bearer" followed by a space and the JWT (already validated by Kong; this service trusts the forwarded identity).
 func main() {
+	logging.MustSetup("servers")
+
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("config: %v", err)
+		logging.Fatalf("config: %v", err)
 	}
 	if cfg.IsProduction() {
 		gin.SetMode(gin.ReleaseMode)
@@ -72,7 +74,7 @@ func main() {
 
 	pool, err := repository.NewPool(ctx, cfg.PostgresDSN())
 	if err != nil {
-		log.Fatalf("postgres: %v", err)
+		logging.Fatalf("postgres: %v", err)
 	}
 	defer pool.Close()
 
@@ -86,11 +88,11 @@ func main() {
 		)
 		icons, emojiStore = store, store
 	case cfg.IsProduction():
-		log.Fatalf("iconstore: SUPABASE_STORAGE_URL, SUPABASE_STORAGE_BUCKET and SUPABASE_SERVICE_KEY are required in production")
+		logging.Fatalf("iconstore: SUPABASE_STORAGE_URL, SUPABASE_STORAGE_BUCKET and SUPABASE_SERVICE_KEY are required in production")
 	default:
 		store, err := iconstore.NewLocalStore(cfg.IconDir, cfg.IconMaxBytes)
 		if err != nil {
-			log.Fatalf("iconstore: %v", err)
+			logging.Fatalf("iconstore: %v", err)
 		}
 		icons, emojiStore, emojiImages = store, store, store
 	}
@@ -125,9 +127,9 @@ func main() {
 			WithServerModeration(admin_consumer.ServerHandlers{Store: serverModerationRepo, Deleter: svc, Cache: serverSuspensionGuard}).
 			Start(ctx)
 	} else {
-		log.Printf("profile_consumer: RABBITMQ_URL not set, member profiles won't be replicated")
-		log.Printf("billing_consumer: RABBITMQ_URL not set, server boosts won't be applied")
-		log.Printf("admin_consumer: RABBITMQ_URL not set, platform suspensions and server moderation won't be applied")
+		logging.Warnf("profile_consumer: RABBITMQ_URL not set, member profiles won't be replicated")
+		logging.Warnf("billing_consumer: RABBITMQ_URL not set, server boosts won't be applied")
+		logging.Warnf("admin_consumer: RABBITMQ_URL not set, platform suspensions and server moderation won't be applied")
 	}
 	invSvc := invitation.NewService(repository.NewInvitationRepository(pool), serverRepo, memberRepo)
 	categorySvc := category_service.New(serverRepo, categoryRepo, memberRepo)
@@ -167,6 +169,6 @@ func main() {
 	})
 
 	addr := cfg.Host + ":" + cfg.Port
-	log.Printf("listening on %s", addr)
-	log.Fatal(router.Run(addr))
+	logging.Infof("listening on %s", addr)
+	logging.Fatalf("%v", router.Run(addr))
 }

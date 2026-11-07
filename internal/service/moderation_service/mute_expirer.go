@@ -2,8 +2,9 @@ package moderation_service
 
 import (
 	"context"
-	"log"
 	"time"
+
+	"github.com/discordia-grupo01/servers/internal/logging"
 )
 
 const MuteExpirySweepInterval = time.Minute
@@ -32,8 +33,8 @@ func (e *MuteExpirer) Start(ctx context.Context) {
 
 func (e *MuteExpirer) SweepOnce(ctx context.Context) {
 	if count, err := e.mutes.ExpireMutes(ctx, e.now()); err != nil {
-		log.Printf("member_mute: expiry sweep failed: %v", err)
+		logging.Errorf("member_mute: expiry sweep failed: %v", err)
 	} else if count > 0 {
-		log.Printf("member_mute: expired %d mute(s)", count)
+		logging.Infof("member_mute: expired %d mute(s)", count)
 	}
 }
