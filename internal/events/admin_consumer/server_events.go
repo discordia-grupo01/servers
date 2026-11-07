@@ -3,7 +3,6 @@ package admin_consumer
 import (
 	"context"
 	"encoding/json"
-	"log"
 	"slices"
 	"time"
 
@@ -11,6 +10,8 @@ import (
 
 	"github.com/discordia-grupo01/events-contract/admin"
 	"github.com/discordia-grupo01/events-contract/envelope"
+
+	"github.com/discordia-grupo01/servers/internal/logging"
 )
 
 // ServerStore is where the moderation state of a server is written. Apply must
@@ -73,40 +74,40 @@ func ShouldRequeueServerEvent(ctx context.Context, h ServerHandlers, secret, rou
 	case admin.RoutingKeyServerSuspended:
 		var evt admin.ServerSuspended
 		if err := json.Unmarshal(body, &evt); err != nil {
-			log.Printf("admin_consumer: malformed payload, dropping message: %v", err)
+			logging.Warnf("admin_consumer: malformed payload, dropping message: %v", err)
 			return false
 		}
 		meta, rawID, version, verified = evt.Meta, evt.ServerID, evt.Version, evt.Verify(secret)
 	case admin.RoutingKeyServerReactivated:
 		var evt admin.ServerReactivated
 		if err := json.Unmarshal(body, &evt); err != nil {
-			log.Printf("admin_consumer: malformed payload, dropping message: %v", err)
+			logging.Warnf("admin_consumer: malformed payload, dropping message: %v", err)
 			return false
 		}
 		meta, rawID, version, verified = evt.Meta, evt.ServerID, evt.Version, evt.Verify(secret)
 	case admin.RoutingKeyServerDeletionRequested:
 		var evt admin.ServerDeletionRequested
 		if err := json.Unmarshal(body, &evt); err != nil {
-			log.Printf("admin_consumer: malformed payload, dropping message: %v", err)
+			logging.Warnf("admin_consumer: malformed payload, dropping message: %v", err)
 			return false
 		}
 		meta, rawID, version, verified = evt.Meta, evt.ServerID, evt.Version, evt.Verify(secret)
 	default:
-		log.Printf("admin_consumer: unknown routing key %q, dropping message", routingKey)
+		logging.Warnf("admin_consumer: unknown routing key %q, dropping message", routingKey)
 		return false
 	}
 
 	if !verified {
-		log.Printf("admin_consumer: WARN invalid or missing signature, routing_key=%s event_id=%s server_id=%s, dropping message", routingKey, meta.EventID, rawID)
+		logging.Warnf("admin_consumer: WARN invalid or missing signature, routing_key=%s event_id=%s server_id=%s, dropping message", routingKey, meta.EventID, rawID)
 		return false
 	}
 	serverID, err := uuid.Parse(rawID)
 	if err != nil {
-		log.Printf("admin_consumer: invalid server_id %q, event_id=%s, dropping message", rawID, meta.EventID)
+		logging.Warnf("admin_consumer: invalid server_id %q, event_id=%s, dropping message", rawID, meta.EventID)
 		return false
 	}
 	if version < 1 {
-		log.Printf("admin_consumer: invalid version %d, event_id=%s server_id=%s, dropping message", version, meta.EventID, serverID)
+		logging.Warnf("admin_consumer: invalid version %d, event_id=%s server_id=%s, dropping message", version, meta.EventID, serverID)
 		return false
 	}
 
@@ -118,10 +119,10 @@ func ShouldRequeueServerEvent(ctx context.Context, h ServerHandlers, secret, rou
 
 func deleteServer(ctx context.Context, h ServerHandlers, serverID uuid.UUID, meta envelope.Meta) bool {
 	if err := h.Deleter.DeleteServerByStaff(ctx, serverID); err != nil {
-		log.Printf("admin_consumer: failed to delete server, event_id=%s server_id=%s, retrying: %v", meta.EventID, serverID, err)
+		logging.Errorf("admin_consumer: failed to delete server, event_id=%s server_id=%s, retrying: %v", meta.EventID, serverID, err)
 		return true
 	}
-	log.Printf("admin_consumer: processed %s, event_id=%s server_id=%s", admin.RoutingKeyServerDeletionRequested, meta.EventID, serverID)
+	logging.Infof("admin_consumer: processed %s, event_id=%s server_id=%s", admin.RoutingKeyServerDeletionRequested, meta.EventID, serverID)
 	return false
 }
 
@@ -134,16 +135,16 @@ func applyModeration(ctx context.Context, h ServerHandlers, routingKey string, s
 
 	applied, err := h.Store.ApplyServerModeration(ctx, serverID, suspendedAt, version)
 	if err != nil {
-		log.Printf("admin_consumer: failed to store server moderation, event_id=%s server_id=%s, retrying: %v", meta.EventID, serverID, err)
+		logging.Errorf("admin_consumer: failed to store server moderation, event_id=%s server_id=%s, retrying: %v", meta.EventID, serverID, err)
 		return true
 	}
 	if !applied {
-		log.Printf("admin_consumer: ignored stale or unknown-server event, event_id=%s server_id=%s version=%d", meta.EventID, serverID, version)
+		logging.Debugf("admin_consumer: ignored stale or unknown-server event, event_id=%s server_id=%s version=%d", meta.EventID, serverID, version)
 		return false
 	}
 	if h.Cache != nil {
 		h.Cache.Reset()
 	}
-	log.Printf("admin_consumer: applied %s, event_id=%s server_id=%s version=%d", routingKey, meta.EventID, serverID, version)
+	logging.Infof("admin_consumer: applied %s, event_id=%s server_id=%s version=%d", routingKey, meta.EventID, serverID, version)
 	return false
 }

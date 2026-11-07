@@ -6,13 +6,13 @@ package apierr
 
 import (
 	"errors"
-	"log"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
+	"github.com/discordia-grupo01/servers/internal/logging"
 	"github.com/discordia-grupo01/servers/internal/model"
 	"github.com/discordia-grupo01/servers/internal/model/mention"
 	"github.com/discordia-grupo01/servers/internal/model/moderation"
@@ -321,7 +321,7 @@ func WriteDomainError(c *gin.Context, err error) {
 		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("category_ids", "reorder_invalid"))
 
 	default:
-		log.Printf("unmapped internal error: %v", err)
+		logging.Errorf("unmapped internal error: %v", err)
 		RespondError(c, http.StatusInternalServerError, "internal service error", nil)
 	}
 }

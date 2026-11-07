@@ -5,12 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/discordia-grupo01/servers/internal/logging"
 )
 
 type Publisher interface {
@@ -47,7 +48,7 @@ func (p *Poller) drain(ctx context.Context) {
 	for i := 0; i < batchSize; i++ {
 		published, err := p.publishOne(ctx)
 		if err != nil {
-			log.Printf("outbox: poll tick failed: %v", err)
+			logging.Errorf("outbox: poll tick failed: %v", err)
 			return
 		}
 		if !published {
@@ -77,7 +78,7 @@ func (p *Poller) publishOne(ctx context.Context) (published bool, err error) {
 		published = true
 
 		if pubErr := p.publisher.PublishOrError(ctx, routingKey, json.RawMessage(payload)); pubErr != nil {
-			log.Printf("outbox: publish %q (id=%s) failed, will retry next tick: %v", routingKey, id, pubErr)
+			logging.Warnf("outbox: publish %q (id=%s) failed, will retry next tick: %v", routingKey, id, pubErr)
 			_, err := tx.Exec(ctx, `
 				UPDATE outbox_events SET attempts = attempts + 1, last_error = $2 WHERE id = $1`,
 				id, pubErr.Error(),

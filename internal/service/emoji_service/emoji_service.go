@@ -2,13 +2,13 @@ package emoji_service
 
 import (
 	"context"
-	"log"
 	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/discordia-grupo01/events-contract/envelope"
 	"github.com/discordia-grupo01/events-contract/servers"
+	"github.com/discordia-grupo01/servers/internal/logging"
 	"github.com/discordia-grupo01/servers/internal/model"
 	"github.com/discordia-grupo01/servers/internal/model/emoji"
 	"github.com/discordia-grupo01/servers/internal/outbox"
@@ -102,7 +102,7 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (emoji.Emoji, erro
 	}
 	if err != nil {
 		if cleanupErr := s.images.DeleteEmoji(p.ServerID.String(), key); cleanupErr != nil {
-			log.Printf("emoji_service: orphaned image %s: %v", key, cleanupErr)
+			logging.Warnf("emoji_service: orphaned image %s: %v", key, cleanupErr)
 		}
 		return emoji.Emoji{}, err
 	}
