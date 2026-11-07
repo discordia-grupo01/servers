@@ -88,7 +88,7 @@ func setupE2E(t *testing.T) (*gin.Engine, <-chan amqp.Delivery) {
 		"0003_roles.up.sql", "0004_member_roles.up.sql", "0005_default_role.up.sql",
 		"0006_ownership_transfers.up.sql", "0007_categories.up.sql",
 		"0008_ownership_transfer_cancelled_status.up.sql", "0009_server_banner.up.sql",
-		"0010_native_categories.up.sql", "0011_outbox_events.up.sql",
+		"0010_native_categories.up.sql", "0011_outbox_events.up.sql", "0033_outbox_traceparent.up.sql",
 		"0012_category_name_key.up.sql",
 		"0013_unassigned_category.up.sql",
 		"0014_drop_default_kind.up.sql",

@@ -53,7 +53,7 @@ func setup(t *testing.T) (*boost_repo.Repository, *pgxpool.Pool) {
 	t.Cleanup(drop)
 	drop()
 	for _, file := range []string{
-		"0001_init.up.sql", "0002_invitations.up.sql", "0011_outbox_events.up.sql",
+		"0001_init.up.sql", "0002_invitations.up.sql", "0011_outbox_events.up.sql", "0033_outbox_traceparent.up.sql",
 		"0028_server_moderation.up.sql", "0031_server_boosts.up.sql",
 	} {
 		schema, err := os.ReadFile("../../../migrations/" + file)

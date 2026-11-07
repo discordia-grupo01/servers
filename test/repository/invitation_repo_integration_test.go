@@ -40,7 +40,7 @@ func newInviteRepo(t *testing.T) (*repository.InvitationRepository, *pgxpool.Poo
 	for _, f := range []string{
 		"0001_init.up.sql", "0002_invitations.up.sql",
 		"0003_roles.up.sql", "0004_member_roles.up.sql", "0005_default_role.up.sql",
-		"0011_outbox_events.up.sql", "0015_role_positions.up.sql",
+		"0011_outbox_events.up.sql", "0033_outbox_traceparent.up.sql", "0015_role_positions.up.sql",
 		"0019_everyone_role.up.sql",
 		"0031_server_boosts.up.sql",
 	} {

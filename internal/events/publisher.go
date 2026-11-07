@@ -11,6 +11,7 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 
 	"github.com/discordia-grupo01/servers/internal/logging"
+	"github.com/discordia-grupo01/servers/internal/telemetry"
 )
 
 // dialTimeout bounds how long a connection attempt can take. Publish() may
@@ -106,7 +107,12 @@ func (p *AMQPPublisher) publish(ctx context.Context, routingKey string, payload 
 		return fmt.Errorf("marshal payload: %w", err)
 	}
 
-	msg := amqp.Publishing{ContentType: "application/json", Body: body, DeliveryMode: amqp.Persistent}
+	msg := amqp.Publishing{
+		ContentType:  "application/json",
+		Body:         body,
+		DeliveryMode: amqp.Persistent,
+		Headers:      telemetry.InjectAMQP(ctx, nil),
+	}
 	if err := ch.PublishWithContext(ctx, broker.ExchangeName, routingKey, false, false, msg); err != nil {
 		p.dropChannel()
 		if err := p.connect(); err != nil {

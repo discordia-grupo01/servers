@@ -51,7 +51,7 @@ func TestBoostSaga_RequestIsAppliedAndAnswered(t *testing.T) {
 	t.Cleanup(drop)
 	drop()
 	for _, f := range []string{
-		"0001_init.up.sql", "0002_invitations.up.sql", "0011_outbox_events.up.sql",
+		"0001_init.up.sql", "0002_invitations.up.sql", "0011_outbox_events.up.sql", "0033_outbox_traceparent.up.sql",
 		"0028_server_moderation.up.sql", "0031_server_boosts.up.sql",
 	} {
 		schema, err := os.ReadFile("../../migrations/" + f)

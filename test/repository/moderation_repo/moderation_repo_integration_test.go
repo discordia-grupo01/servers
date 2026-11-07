@@ -51,6 +51,7 @@ func newRepo(t *testing.T) (*moderation_repo.Repository, *pgxpool.Pool) {
 		"../../../migrations/0007_categories.up.sql",
 		"../../../migrations/0008_ownership_transfer_cancelled_status.up.sql",
 		"../../../migrations/0011_outbox_events.up.sql",
+		"../../../migrations/0033_outbox_traceparent.up.sql",
 		"../../../migrations/0015_role_positions.up.sql",
 		"../../../migrations/0016_server_bans_banned_by.up.sql",
 		"../../../migrations/0017_user_profiles.up.sql",

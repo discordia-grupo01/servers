@@ -17,6 +17,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/events/deadletter"
 	"github.com/discordia-grupo01/servers/internal/logging"
 	"github.com/discordia-grupo01/servers/internal/model"
+	"github.com/discordia-grupo01/servers/internal/telemetry"
 )
 
 const QueueName = "servers.billing_events"
@@ -112,7 +113,10 @@ func (c *Consumer) consumeOnce(ctx context.Context) error {
 			if !ok {
 				return errors.New("consume channel closed")
 			}
-			retrier.Settle(ctx, delivery, ShouldRequeue(ctx, c.store, c.secret, delivery.RoutingKey, delivery.Body))
+			spanCtx, end := telemetry.StartConsumer(ctx, QueueName, delivery)
+			requeue := ShouldRequeue(spanCtx, c.store, c.secret, delivery.RoutingKey, delivery.Body)
+			retrier.Settle(spanCtx, delivery, requeue)
+			end(requeue)
 		}
 	}
 }
