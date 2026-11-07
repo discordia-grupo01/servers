@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
 
+	"github.com/discordia-grupo01/servers/internal/events/deadletter"
 	"github.com/discordia-grupo01/servers/internal/model/userprofile"
 )
 
@@ -92,6 +93,12 @@ func (c *Consumer) consumeOnce(ctx context.Context) error {
 
 	// Manual ack: a message is only confirmed once processed, so a transient
 	// database failure never loses an event.
+	retrier, err := deadletter.New(conn, queue.Name, deadletter.DefaultPolicy())
+	if err != nil {
+		return err
+	}
+	defer retrier.Close()
+
 	messages, err := ch.Consume(queue.Name, "", false, false, false, false, nil)
 	if err != nil {
 		return err
@@ -106,11 +113,7 @@ func (c *Consumer) consumeOnce(ctx context.Context) error {
 			if !ok {
 				return errors.New("consume channel closed")
 			}
-			if ShouldRequeue(ctx, c.store, delivery.RoutingKey, delivery.Body) {
-				_ = delivery.Nack(false, true)
-			} else {
-				_ = delivery.Ack(false)
-			}
+			retrier.Settle(ctx, delivery, ShouldRequeue(ctx, c.store, delivery.RoutingKey, delivery.Body))
 		}
 	}
 }

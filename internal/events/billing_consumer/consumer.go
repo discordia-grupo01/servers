@@ -15,6 +15,7 @@ import (
 
 	"github.com/discordia-grupo01/events-contract/boosts"
 	"github.com/discordia-grupo01/events-contract/broker"
+	"github.com/discordia-grupo01/servers/internal/events/deadletter"
 	"github.com/discordia-grupo01/servers/internal/model"
 )
 
@@ -91,6 +92,12 @@ func (c *Consumer) consumeOnce(ctx context.Context) error {
 		}
 	}
 
+	retrier, err := deadletter.New(conn, queue.Name, deadletter.DefaultPolicy())
+	if err != nil {
+		return err
+	}
+	defer retrier.Close()
+
 	messages, err := ch.Consume(queue.Name, "", false, false, false, false, nil)
 	if err != nil {
 		return err
@@ -105,11 +112,7 @@ func (c *Consumer) consumeOnce(ctx context.Context) error {
 			if !ok {
 				return errors.New("consume channel closed")
 			}
-			if ShouldRequeue(ctx, c.store, c.secret, delivery.RoutingKey, delivery.Body) {
-				_ = delivery.Nack(false, true)
-			} else {
-				_ = delivery.Ack(false)
-			}
+			retrier.Settle(ctx, delivery, ShouldRequeue(ctx, c.store, c.secret, delivery.RoutingKey, delivery.Body))
 		}
 	}
 }
