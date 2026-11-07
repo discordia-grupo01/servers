@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -46,6 +47,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/service/report_service"
 	"github.com/discordia-grupo01/servers/internal/service/role_service"
 	"github.com/discordia-grupo01/servers/internal/service/word_filter_service"
+	"github.com/discordia-grupo01/servers/internal/telemetry"
 )
 
 // @title        Discordia - Servers
@@ -71,6 +73,16 @@ func main() {
 	}
 
 	ctx := context.Background()
+
+	shutdownTelemetry, err := telemetry.Setup(ctx, "servers")
+	if err != nil {
+		logging.Fatalf("telemetry: %v", err)
+	}
+	defer func() {
+		flushCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = shutdownTelemetry(flushCtx)
+	}()
 
 	pool, err := repository.NewPool(ctx, cfg.PostgresDSN())
 	if err != nil {
