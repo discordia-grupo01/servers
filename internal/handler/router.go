@@ -22,7 +22,9 @@ import (
 	"github.com/discordia-grupo01/servers/internal/handler/role_handler"
 	"github.com/discordia-grupo01/servers/internal/handler/voice_access_handler"
 	"github.com/discordia-grupo01/servers/internal/handler/word_filter_handler"
+	"github.com/discordia-grupo01/servers/internal/logging"
 	"github.com/discordia-grupo01/servers/internal/middleware"
+	"github.com/discordia-grupo01/servers/internal/telemetry"
 )
 
 type Pinger interface {
@@ -75,7 +77,7 @@ func NewRouter(d Deps) *gin.Engine {
 	mentionH := mention_handler.New(d.Mentions)
 
 	r := gin.New()
-	r.Use(gin.Logger(), gin.Recovery())
+	r.Use(telemetry.Middleware(), logging.Middleware(), logging.Recovery())
 	r.MaxMultipartMemory = maxIconUploadBytes
 	r.HandleMethodNotAllowed = true
 	r.NoRoute(func(c *gin.Context) {

@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
 	"time"
 
 	"github.com/discordia-grupo01/events-contract/broker"
@@ -15,7 +14,9 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 
 	"github.com/discordia-grupo01/servers/internal/events/deadletter"
+	"github.com/discordia-grupo01/servers/internal/logging"
 	"github.com/discordia-grupo01/servers/internal/model/userprofile"
+	"github.com/discordia-grupo01/servers/internal/telemetry"
 )
 
 // QueueName is owned by this consumer: no other service binds it. Another
@@ -49,7 +50,7 @@ func (c *Consumer) Start(ctx context.Context) {
 
 	for ctx.Err() == nil {
 		if err := c.consumeOnce(ctx); err != nil {
-			log.Printf("profile_consumer: RabbitMQ connection lost, retrying in %s: %v", backoff, err)
+			logging.Warnf("profile_consumer: RabbitMQ connection lost, retrying in %s: %v", backoff, err)
 			select {
 			case <-ctx.Done():
 				return
@@ -103,7 +104,7 @@ func (c *Consumer) consumeOnce(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	log.Printf("profile_consumer: consuming %s", QueueName)
+	logging.Infof("profile_consumer: consuming %s", QueueName)
 
 	for {
 		select {
@@ -113,7 +114,10 @@ func (c *Consumer) consumeOnce(ctx context.Context) error {
 			if !ok {
 				return errors.New("consume channel closed")
 			}
-			retrier.Settle(ctx, delivery, ShouldRequeue(ctx, c.store, delivery.RoutingKey, delivery.Body))
+			spanCtx, end := telemetry.StartConsumer(ctx, QueueName, delivery)
+			requeue := ShouldRequeue(spanCtx, c.store, delivery.RoutingKey, delivery.Body)
+			retrier.Settle(spanCtx, delivery, requeue)
+			end(requeue)
 		}
 	}
 }
@@ -125,20 +129,20 @@ func (c *Consumer) consumeOnce(ctx context.Context) error {
 // write the replica is retried. A stale or duplicate version is a no-op.
 func ShouldRequeue(ctx context.Context, store Store, routingKey string, body []byte) bool {
 	if routingKey != users.RoutingKeyProfileUpdated {
-		log.Printf("profile_consumer: unknown routing key %q, dropping message", routingKey)
+		logging.Warnf("profile_consumer: unknown routing key %q, dropping message", routingKey)
 		return false
 	}
 	var evt users.ProfileUpdated
 	if err := json.Unmarshal(body, &evt); err != nil {
-		log.Printf("profile_consumer: malformed payload, dropping message: %v", err)
+		logging.Warnf("profile_consumer: malformed payload, dropping message: %v", err)
 		return false
 	}
 	if _, err := uuid.Parse(evt.UserID); err != nil {
-		log.Printf("profile_consumer: invalid user_id %q, event_id=%s, dropping message", evt.UserID, evt.EventID)
+		logging.Warnf("profile_consumer: invalid user_id %q, event_id=%s, dropping message", evt.UserID, evt.EventID)
 		return false
 	}
 	if evt.Version < 1 {
-		log.Printf("profile_consumer: invalid version %d, event_id=%s user_id=%s, dropping message", evt.Version, evt.EventID, evt.UserID)
+		logging.Warnf("profile_consumer: invalid version %d, event_id=%s user_id=%s, dropping message", evt.Version, evt.EventID, evt.UserID)
 		return false
 	}
 
@@ -152,13 +156,13 @@ func ShouldRequeue(ctx context.Context, store Store, routingKey string, body []b
 		Version:     evt.Version,
 	})
 	if err != nil {
-		log.Printf("profile_consumer: failed to store profile, event_id=%s user_id=%s, retrying: %v", evt.EventID, evt.UserID, err)
+		logging.Errorf("profile_consumer: failed to store profile, event_id=%s user_id=%s, retrying: %v", evt.EventID, evt.UserID, err)
 		return true
 	}
 	if !applied {
-		log.Printf("profile_consumer: ignored stale profile, event_id=%s user_id=%s version=%d", evt.EventID, evt.UserID, evt.Version)
+		logging.Debugf("profile_consumer: ignored stale profile, event_id=%s user_id=%s version=%d", evt.EventID, evt.UserID, evt.Version)
 		return false
 	}
-	log.Printf("profile_consumer: stored profile, event_id=%s user_id=%s version=%d", evt.EventID, evt.UserID, evt.Version)
+	logging.Infof("profile_consumer: stored profile, event_id=%s user_id=%s version=%d", evt.EventID, evt.UserID, evt.Version)
 	return false
 }

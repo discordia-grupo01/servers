@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"context"
-	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -11,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/discordia-grupo01/servers/internal/apierr"
+	"github.com/discordia-grupo01/servers/internal/logging"
 )
 
 // ErrorCodeServerSuspended is the details.error_code of the 403 anyone gets for
@@ -89,7 +89,7 @@ func (g *ServerSuspensionGuard) RejectSuspendedServer() gin.HandlerFunc {
 
 		suspended, found, err := g.isSuspended(c.Request.Context(), scope)
 		if err != nil {
-			log.Printf("server suspension check failed, %s=%s: %v", scope.kind, scope.value, err)
+			logging.Errorf("server suspension check failed, %s=%s: %v", scope.kind, scope.value, err)
 			c.Abort()
 			apierr.RespondError(c, http.StatusServiceUnavailable, "could not verify server status", nil)
 			return

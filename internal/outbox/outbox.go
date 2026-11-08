@@ -7,6 +7,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/discordia-grupo01/servers/internal/telemetry"
 )
 
 type Event struct {
@@ -24,9 +26,9 @@ func New(routingKey string, payload any) (Event, error) {
 
 func Insert(ctx context.Context, tx pgx.Tx, evt Event) error {
 	_, err := tx.Exec(ctx, `
-		INSERT INTO outbox_events (id, routing_key, payload)
-		VALUES ($1, $2, $3)`,
-		uuid.New(), evt.RoutingKey, evt.Payload,
+		INSERT INTO outbox_events (id, routing_key, payload, traceparent)
+		VALUES ($1, $2, $3, NULLIF($4, ''))`,
+		uuid.New(), evt.RoutingKey, evt.Payload, telemetry.Traceparent(ctx),
 	)
 	if err != nil {
 		return fmt.Errorf("outbox: insert event %q: %w", evt.RoutingKey, err)

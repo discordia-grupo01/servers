@@ -54,6 +54,7 @@ func newRepo(t *testing.T) (*category_repo.CategoryRepository, *repository.Serve
 		"../../../migrations/0007_categories.up.sql",
 		"../../../migrations/0010_native_categories.up.sql",
 		"../../../migrations/0011_outbox_events.up.sql",
+		"../../../migrations/0033_outbox_traceparent.up.sql",
 		"../../../migrations/0012_category_name_key.up.sql",
 		"../../../migrations/0013_unassigned_category.up.sql",
 		"../../../migrations/0014_drop_default_kind.up.sql",

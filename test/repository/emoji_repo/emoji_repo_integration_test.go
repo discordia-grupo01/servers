@@ -44,6 +44,7 @@ func newRepo(t *testing.T) (*emoji_repo.Repository, *pgxpool.Pool) {
 	for _, file := range []string{
 		"../../../migrations/0001_init.up.sql",
 		"../../../migrations/0011_outbox_events.up.sql",
+		"../../../migrations/0033_outbox_traceparent.up.sql",
 		"../../../migrations/0030_server_emojis.up.sql",
 		"../../../migrations/0031_server_boosts.up.sql",
 	} {

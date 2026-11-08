@@ -40,6 +40,7 @@ func newPool(t *testing.T) *pgxpool.Pool {
 		"../../../migrations/0004_member_roles.up.sql",
 		"../../../migrations/0007_categories.up.sql",
 		"../../../migrations/0011_outbox_events.up.sql",
+		"../../../migrations/0033_outbox_traceparent.up.sql",
 		"../../../migrations/0015_role_positions.up.sql",
 		"../../../migrations/0019_everyone_role.up.sql",
 		"../../../migrations/0020_channel_permission_overrides.up.sql",

@@ -22,7 +22,7 @@ func env(k, def string) string {
 
 var migrations = []string{
 	"0001_init", "0002_invitations", "0003_roles", "0004_member_roles", "0005_default_role",
-	"0007_categories", "0009_server_banner", "0010_native_categories", "0011_outbox_events",
+	"0007_categories", "0009_server_banner", "0010_native_categories", "0011_outbox_events", "0033_outbox_traceparent",
 	"0012_category_name_key", "0013_unassigned_category", "0014_drop_default_kind",
 	"0015_role_positions", "0019_everyone_role", "0028_server_moderation", "0031_server_boosts",
 }

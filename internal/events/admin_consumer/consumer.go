@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
 	"time"
 
 	"github.com/discordia-grupo01/events-contract/admin"
@@ -17,6 +16,8 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 
 	"github.com/discordia-grupo01/servers/internal/events/deadletter"
+	"github.com/discordia-grupo01/servers/internal/logging"
+	"github.com/discordia-grupo01/servers/internal/telemetry"
 )
 
 // QueueName is owned by this consumer: no other service binds it. Another
@@ -91,7 +92,7 @@ func (c *Consumer) routingKeys() []string {
 func (c *Consumer) shouldRequeue(ctx context.Context, routingKey string, body []byte) bool {
 	if isServerRoutingKey(routingKey) {
 		if c.servers == nil {
-			log.Printf("admin_consumer: %q received but server moderation is not enabled, dropping message", routingKey)
+			logging.Warnf("admin_consumer: %q received but server moderation is not enabled, dropping message", routingKey)
 			return false
 		}
 		return ShouldRequeueServerEvent(ctx, *c.servers, c.secret, routingKey, body)
@@ -107,7 +108,7 @@ func (c *Consumer) Start(ctx context.Context) {
 
 	for ctx.Err() == nil {
 		if err := c.consumeOnce(ctx); err != nil {
-			log.Printf("admin_consumer: RabbitMQ connection lost, retrying in %s: %v", backoff, err)
+			logging.Warnf("admin_consumer: RabbitMQ connection lost, retrying in %s: %v", backoff, err)
 			select {
 			case <-ctx.Done():
 				return
@@ -163,7 +164,7 @@ func (c *Consumer) consumeOnce(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	log.Printf("admin_consumer: consuming %s", QueueName)
+	logging.Infof("admin_consumer: consuming %s", QueueName)
 
 	for {
 		select {
@@ -173,7 +174,10 @@ func (c *Consumer) consumeOnce(ctx context.Context) error {
 			if !ok {
 				return errors.New("consume channel closed")
 			}
-			retrier.Settle(ctx, delivery, c.shouldRequeue(ctx, delivery.RoutingKey, delivery.Body))
+			spanCtx, end := telemetry.StartConsumer(ctx, QueueName, delivery)
+			requeue := c.shouldRequeue(spanCtx, delivery.RoutingKey, delivery.Body)
+			retrier.Settle(spanCtx, delivery, requeue)
+			end(requeue)
 		}
 	}
 }
@@ -196,44 +200,44 @@ func ShouldRequeue(ctx context.Context, store Store, secret, routingKey string, 
 	case admin.RoutingKeyUserSuspended:
 		var evt admin.UserSuspended
 		if err := json.Unmarshal(body, &evt); err != nil {
-			log.Printf("admin_consumer: malformed payload, dropping message: %v", err)
+			logging.Warnf("admin_consumer: malformed payload, dropping message: %v", err)
 			return false
 		}
 		meta, userID, version, verified, suspended = evt.Meta, evt.UserID, evt.Version, evt.Verify(secret), true
 	case admin.RoutingKeyUserReactivated:
 		var evt admin.UserReactivated
 		if err := json.Unmarshal(body, &evt); err != nil {
-			log.Printf("admin_consumer: malformed payload, dropping message: %v", err)
+			logging.Warnf("admin_consumer: malformed payload, dropping message: %v", err)
 			return false
 		}
 		meta, userID, version, verified, suspended = evt.Meta, evt.UserID, evt.Version, evt.Verify(secret), false
 	default:
-		log.Printf("admin_consumer: unknown routing key %q, dropping message", routingKey)
+		logging.Warnf("admin_consumer: unknown routing key %q, dropping message", routingKey)
 		return false
 	}
 
 	if !verified {
-		log.Printf("admin_consumer: WARN invalid or missing signature, routing_key=%s event_id=%s user_id=%s, dropping message", routingKey, meta.EventID, userID)
+		logging.Warnf("admin_consumer: WARN invalid or missing signature, routing_key=%s event_id=%s user_id=%s, dropping message", routingKey, meta.EventID, userID)
 		return false
 	}
 	if userID == "" {
-		log.Printf("admin_consumer: empty user_id, event_id=%s, dropping message", meta.EventID)
+		logging.Warnf("admin_consumer: empty user_id, event_id=%s, dropping message", meta.EventID)
 		return false
 	}
 	if version < 1 {
-		log.Printf("admin_consumer: invalid version %d, event_id=%s user_id=%s, dropping message", version, meta.EventID, userID)
+		logging.Warnf("admin_consumer: invalid version %d, event_id=%s user_id=%s, dropping message", version, meta.EventID, userID)
 		return false
 	}
 
 	applied, err := store.Apply(ctx, userID, suspended, version)
 	if err != nil {
-		log.Printf("admin_consumer: failed to store suspension, event_id=%s user_id=%s, retrying: %v", meta.EventID, userID, err)
+		logging.Errorf("admin_consumer: failed to store suspension, event_id=%s user_id=%s, retrying: %v", meta.EventID, userID, err)
 		return true
 	}
 	if !applied {
-		log.Printf("admin_consumer: ignored stale suspension event, event_id=%s user_id=%s version=%d", meta.EventID, userID, version)
+		logging.Debugf("admin_consumer: ignored stale suspension event, event_id=%s user_id=%s version=%d", meta.EventID, userID, version)
 		return false
 	}
-	log.Printf("admin_consumer: applied %s, event_id=%s user_id=%s version=%d", routingKey, meta.EventID, userID, version)
+	logging.Infof("admin_consumer: applied %s, event_id=%s user_id=%s version=%d", routingKey, meta.EventID, userID, version)
 	return false
 }

@@ -3,12 +3,12 @@ package invitation
 import (
 	"errors"
 	"io"
-	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 
 	"github.com/discordia-grupo01/servers/internal/apierr"
+	"github.com/discordia-grupo01/servers/internal/logging"
 	"github.com/discordia-grupo01/servers/internal/middleware"
 	"github.com/discordia-grupo01/servers/internal/model"
 	invitationsvc "github.com/discordia-grupo01/servers/internal/service/invitation"
@@ -179,7 +179,7 @@ func writeError(c *gin.Context, err error) {
 	case errors.Is(err, model.ErrUserBanned):
 		apierr.RespondError(c, http.StatusForbidden, err.Error(), map[string]any{"reason": "user_banned"})
 	default:
-		log.Printf("unmapped invitation error: %v", err)
+		logging.Errorf("unmapped invitation error: %v", err)
 		apierr.RespondError(c, http.StatusInternalServerError, "internal service error", nil)
 	}
 }
