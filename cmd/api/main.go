@@ -63,6 +63,7 @@ import (
 // @description                 Type "Bearer" followed by a space and the JWT (already validated by Kong; this service trusts the forwarded identity).
 func main() {
 	logging.MustSetup("servers")
+	defer logging.Flush()
 
 	cfg, err := config.Load()
 	if err != nil {
