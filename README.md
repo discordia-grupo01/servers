@@ -480,9 +480,11 @@ permisos en el resto del servidor (HU #57). Se guardan en la tabla
     pedidos simultáneos no se cuelan. Cuando el reporte anterior se cierra se
     puede volver a reportar. Otro miembro sí puede reportar lo mismo.
   - Los reportes se borran con el servidor y, los de mensajes, con su canal.
-    Si el reportado se va o lo echan, el reporte queda. No se publica ningún
-    evento: el aviso a los moderadores lo resuelve el cliente consultando el
-    `total` pendiente.
+    Si el reportado se va o lo echan, el reporte queda. Borrarlos no publica
+    nada: `admin` purga los suyos al recibir `servers.server_deleted`. El aviso
+    a los moderadores lo resuelve el cliente consultando el `total` pendiente.
+  - Crear y cerrar un reporte publica `servers.report_updated` (ver "Expediente
+    de investigación de admin").
 
 Eventos que publica el servicio (exchange `discordia.events`, contratos en
 `github.com/discordia-grupo01/events-contract` y AsyncAPI en `discordia-docs`):
@@ -516,6 +518,37 @@ Cada foto se escribe en el outbox en la **misma transacción** que el cambio
 consumidor puede descartar la que llegue más vieja que la que tiene. La
 migración `0022_backfill_access_events` re-publica todo lo existente: hay que
 correrla con la cola del consumidor ya creada, o repetirla después.
+
+### Expediente de investigación de admin (HU #81)
+
+Para que el staff vea reportes y moderación de un usuario o un servidor sin
+que `admin` nos llame (ADR-024), el servicio publica dos eventos más, siempre en
+la **misma transacción** que la escritura:
+
+| Evento | Se publica cuando | Lleva |
+|---|---|---|
+| `servers.report_updated` | se crea un reporte y se lo cierra | foto completa: `report_id`, `server_id`, `kind`, `reported_user_id`, `channel_id`, `message_id`, `reason`, `status`, `created_at`, `resolved_at` (los que no aplican, `null`) |
+| `servers.moderation_action_recorded` | se escribe una fila de `moderation_audit_entries` (ban, unban, kick, mute, unmute, **incluido el fin automático de un silencio**) | `action_id` (el id de la fila, clave de idempotencia), `server_id`, `action`, `target_user_id` |
+
+- Ninguno lleva a quien reportó, a quien resolvió ni al moderador que actuó
+  (minimización de datos): `admin` no los necesita.
+- `report_updated` es una foto: `admin` se queda con la de `occurred_at` más
+  nuevo (la de creación, o la de cierre cuando está cerrado).
+  `moderation_action_recorded` es inmutable.
+- `insertAudit` (`moderation_repo`) es el único lugar donde se escribe la
+  auditoría, y ahí se publica: una acción nueva no puede quedar sin evento. Es un
+  evento aparte de `member_banned`, `member_muted`, etc. a propósito: hacer el
+  backfill de esos re-ejecutaría efectos en sus consumidores (por ejemplo,
+  volver a silenciar a alguien).
+- **Backfill**: `0034_backfill_report_events` publica la foto actual de cada
+  reporte y `0035_backfill_moderation_actions` una acción por cada fila de
+  auditoría (con su fecha original). Se pueden repetir sin riesgo.
+- **Orden de despliegue**: `admin` tiene que estar desplegado **antes**. Si la
+  cola de `admin` todavía no existe cuando corren `0034` y `0035`, RabbitMQ
+  descarta esos eventos; en ese caso se vuelve a ejecutar el `INSERT` de la
+  migración a mano.
+- Un reporte de mensaje cuyo **canal** se borra desaparece de acá (CASCADE) sin
+  evento; `admin` lo conserva hasta que se borre el servidor.
 
 ## Menciones
 Los mensajes viven en `messaging`, pero quién puede mencionar a quién depende
