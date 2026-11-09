@@ -14,6 +14,7 @@ import (
 	"github.com/discordia-grupo01/servers/internal/model"
 	"github.com/discordia-grupo01/servers/internal/model/report"
 	"github.com/discordia-grupo01/servers/internal/model/userprofile"
+	"github.com/discordia-grupo01/servers/internal/outbox"
 )
 
 const pgUniqueViolation = "23505"
@@ -31,13 +32,26 @@ func NewRepository(pool *pgxpool.Pool) *Repository {
 	return &Repository{pool: pool}
 }
 
+// Create stores the report as pending and writes servers.report_updated to the
+// outbox in the same transaction: there is never a report admin doesn't hear
+// about, nor an event for a report that wasn't stored. A duplicate pending
+// report fails the INSERT, which rolls everything back, so it publishes nothing.
 func (r *Repository) Create(ctx context.Context, rep report.Report) error {
-	_, err := r.pool.Exec(ctx, `
-		INSERT INTO reports (id, server_id, kind, reporter_id, channel_id, message_id, reported_user_id, reason, status, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-		rep.ID, rep.ServerID, string(rep.Kind), rep.ReporterID, rep.ChannelID, rep.MessageID,
-		rep.ReportedUserID, rep.Reason, string(rep.Status), rep.CreatedAt,
-	)
+	event, err := UpdatedEvent(rep)
+	if err != nil {
+		return err
+	}
+	err = pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO reports (id, server_id, kind, reporter_id, channel_id, message_id, reported_user_id, reason, status, created_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+			rep.ID, rep.ServerID, string(rep.Kind), rep.ReporterID, rep.ChannelID, rep.MessageID,
+			rep.ReportedUserID, rep.Reason, string(rep.Status), rep.CreatedAt,
+		); err != nil {
+			return err
+		}
+		return outbox.Insert(ctx, tx, event)
+	})
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgUniqueViolation && pendingConstraints[pgErr.ConstraintName] {
@@ -110,26 +124,36 @@ func (r *Repository) List(ctx context.Context, serverID uuid.UUID, status *repor
 	return reports, total, nil
 }
 
+// Close moves a pending report to resolved or dismissed and writes
+// servers.report_updated with the new snapshot in the same transaction.
+// ErrReportNotFound / ErrReportNotPending publish nothing.
 func (r *Repository) Close(ctx context.Context, serverID, reportID uuid.UUID, status report.Status, by string, at time.Time) (report.Report, error) {
-	var (
-		rep  report.Report
-		kind string
-		st   string
-	)
-	err := r.pool.QueryRow(ctx, `
-		UPDATE reports
-		   SET status = $3, resolved_by = $4, resolved_at = $5
-		 WHERE id = $1 AND server_id = $2 AND status = 'pending'
-		RETURNING id, server_id, kind, reporter_id, channel_id, message_id, reported_user_id,
-		          reason, status, created_at, resolved_at, resolved_by`,
-		reportID, serverID, string(status), by, at,
-	).Scan(
-		&rep.ID, &rep.ServerID, &kind, &rep.ReporterID, &rep.ChannelID, &rep.MessageID, &rep.ReportedUserID,
-		&rep.Reason, &st, &rep.CreatedAt, &rep.ResolvedAt, &rep.ResolvedBy,
-	)
-	if err == nil {
+	var rep report.Report
+	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+		var kind, st string
+		if err := tx.QueryRow(ctx, `
+			UPDATE reports
+			   SET status = $3, resolved_by = $4, resolved_at = $5
+			 WHERE id = $1 AND server_id = $2 AND status = 'pending'
+			RETURNING id, server_id, kind, reporter_id, channel_id, message_id, reported_user_id,
+			          reason, status, created_at, resolved_at, resolved_by`,
+			reportID, serverID, string(status), by, at,
+		).Scan(
+			&rep.ID, &rep.ServerID, &kind, &rep.ReporterID, &rep.ChannelID, &rep.MessageID, &rep.ReportedUserID,
+			&rep.Reason, &st, &rep.CreatedAt, &rep.ResolvedAt, &rep.ResolvedBy,
+		); err != nil {
+			return err
+		}
 		rep.Kind = report.Kind(kind)
 		rep.Status = report.Status(st)
+
+		event, err := UpdatedEvent(rep)
+		if err != nil {
+			return err
+		}
+		return outbox.Insert(ctx, tx, event)
+	})
+	if err == nil {
 		return rep, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {

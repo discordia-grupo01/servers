@@ -246,8 +246,21 @@ func insertContextAudit(ctx context.Context, tx pgx.Tx, serverID uuid.UUID) erro
 	return insertAudit(ctx, tx, &audit, serverID)
 }
 
+// insertAudit writes the audit row and, in the same transaction, the
+// servers.moderation_action_recorded event for it. It is the only place where
+// the audit is written, so every action (ban, unban, kick, mute, unmute,
+// including the automatic unmute when a mute expires) is published here and a
+// future one can't be forgotten.
+//
+// The event is a one-to-one copy of the row, with the same id as action_id, which
+// is the idempotency key for the consumer. It carries no actor: the platform
+// admin doesn't need to know which moderator acted.
 func insertAudit(ctx context.Context, tx pgx.Tx, audit *moderation.AuditEntry, serverID uuid.UUID) error {
-	_, err := tx.Exec(ctx, `
+	event, err := auditEvent(audit, serverID)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, `
 		INSERT INTO moderation_audit_entries
 			(id, server_id, action, actor_user_id, target_user_id, occurred_at)
 		VALUES ($1, $2, $3, $4, $5, $6)`,
@@ -255,7 +268,23 @@ func insertAudit(ctx context.Context, tx pgx.Tx, audit *moderation.AuditEntry, s
 	if err != nil {
 		return fmt.Errorf("insert moderation audit: %w", err)
 	}
-	return nil
+	return outbox.Insert(ctx, tx, event)
+}
+
+func auditEvent(audit *moderation.AuditEntry, serverID uuid.UUID) (outbox.Event, error) {
+	switch audit.Action {
+	case moderationevents.ActionBan, moderationevents.ActionUnban, moderationevents.ActionKick,
+		moderationevents.ActionMute, moderationevents.ActionUnmute:
+	default:
+		return outbox.Event{}, fmt.Errorf("moderation audit: action %q has no event", audit.Action)
+	}
+	return outbox.New(moderationevents.RoutingKeyModerationActionRecorded, moderationevents.ModerationActionRecorded{
+		Meta:         envelope.Meta{EventID: uuid.NewString(), OccurredAt: audit.OccurredAt.UTC()},
+		ActionID:     audit.ID.String(),
+		ServerID:     serverID.String(),
+		Action:       audit.Action,
+		TargetUserID: audit.TargetUserID,
+	})
 }
 
 // UnbanMember revokes userID's ban on serverID and writes events to the
