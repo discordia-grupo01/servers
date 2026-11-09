@@ -3,6 +3,7 @@ package category_service_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -192,5 +193,43 @@ func TestReorderCategories_NotAdmin_ErrForbidden(t *testing.T) {
 	})
 	if !errors.Is(err, model.ErrForbiddenNotAdmin) {
 		t.Errorf("err = %v, want ErrForbiddenNotAdmin", err)
+	}
+}
+
+func TestCreateCategory_NameLength_MaxIsAllowed(t *testing.T) {
+	cases := map[string]struct {
+		length  int
+		wantErr error
+	}{
+		"exactly the max": {length: model.CategoryNameMaxLen},
+		"one over":        {length: model.CategoryNameMaxLen + 1, wantErr: model.ErrCategoryNameTooLong},
+	}
+	for label, tc := range cases {
+		t.Run(label, func(t *testing.T) {
+			srv := ownerServer()
+			svc := newService(&fakeServers{server: srv}, &fakeCategories{})
+
+			_, err := svc.CreateCategory(context.Background(), category_service.CreateCategoryParams{
+				ServerID: srv.ID, Name: strings.Repeat("á", tc.length), UserID: testOwner,
+			})
+			if !errors.Is(err, tc.wantErr) {
+				t.Errorf("err = %v, want %v", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestReorderCategories_RepoError_Propagates(t *testing.T) {
+	srv := ownerServer()
+	id1, id2 := uuid.New(), uuid.New()
+	repoErr := errors.New("db down")
+	repo := &fakeCategories{listResult: []model.Category{{ID: id1}, {ID: id2}}, reorderErr: repoErr}
+	svc := newService(&fakeServers{server: srv}, repo)
+
+	err := svc.ReorderCategories(context.Background(), category_service.ReorderCategoriesParams{
+		ServerID: srv.ID, UserID: testOwner, CategoryIDs: []uuid.UUID{id2, id1},
+	})
+	if !errors.Is(err, repoErr) {
+		t.Errorf("err = %v, want the repository error", err)
 	}
 }

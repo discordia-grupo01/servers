@@ -60,7 +60,7 @@ func Load() (Config, error) {
 		DatabasePassword: os.Getenv("DATABASE_PASSWORD"),
 		DatabaseSSLMode:  getenv("DATABASE_SSLMODE", "disable"),
 		DatabaseSchema:   os.Getenv("DATABASE_SCHEMA"),
-		DatabaseMaxConns: int(getenvInt64("DATABASE_MAX_CONNS", 0)),
+		DatabaseMaxConns: getenvInt("DATABASE_MAX_CONNS", 0),
 
 		UserIDHeader: getenv("USER_ID_HEADER", ""),
 
@@ -126,6 +126,15 @@ func (c Config) UseSupabaseStorage() bool {
 func getenv(key, def string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
+	}
+	return def
+}
+
+func getenvInt(key string, def int) int {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
 	}
 	return def
 }

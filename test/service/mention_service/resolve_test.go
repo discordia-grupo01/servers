@@ -327,3 +327,24 @@ func TestResolve_RepositoryError_IsReturned(t *testing.T) {
 		t.Errorf("err = %v, want %v", err, boom)
 	}
 }
+
+// Exactly the cap is still allowed; one more is what gets rejected.
+func TestResolve_MentionsAtTheCap_AreAllowed(t *testing.T) {
+	f := newFixture()
+
+	users := make([]string, mention.MaxUserIDs)
+	for i := range users {
+		users[i] = fmt.Sprintf("user-%d", i)
+	}
+	if _, err := f.resolve(pingerID, users, nil, false); err != nil {
+		t.Errorf("users: %d mentions must be allowed: %v", mention.MaxUserIDs, err)
+	}
+
+	roles := make([]uuid.UUID, mention.MaxRoleIDs)
+	for i := range roles {
+		roles[i] = uuid.New()
+	}
+	if _, err := f.resolve(pingerID, nil, roles, false); err != nil {
+		t.Errorf("roles: %d mentions must be allowed: %v", mention.MaxRoleIDs, err)
+	}
+}

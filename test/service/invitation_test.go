@@ -123,6 +123,10 @@ func TestGenerate_GivesUpAfterTooManyCollisions(t *testing.T) {
 	if !errors.Is(err, model.ErrInviteCodeUnavailable) {
 		t.Fatalf("err = %v, want ErrInviteCodeUnavailable", err)
 	}
+	// codeAttempts in the service.
+	if repo.createCalls != 5 {
+		t.Errorf("createCalls = %d, want 5 attempts before giving up", repo.createCalls)
+	}
 }
 
 func TestGenerate_RequiresIdentity(t *testing.T) {

@@ -50,13 +50,17 @@ func TestLocalStoreEmojiRejectsPathTraversal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, key := range []string{"..", "../secret", "a/b"} {
+	hostile := []string{"", ".", "..", "../secret", "a/b", `a\b`, ".hidden", "a\x00b", "/etc/passwd", "a b"}
+	for _, key := range hostile {
 		if _, _, err := store.GetEmoji("server-1", key); !errors.Is(err, model.ErrEmojiNotFound) {
 			t.Errorf("GetEmoji(%q) = %v", key, err)
 		}
-	}
-	if _, _, err := store.GetEmoji("..", "x.gif"); !errors.Is(err, model.ErrEmojiNotFound) {
-		t.Errorf("GetEmoji with traversal in serverID = %v", err)
+		if _, _, err := store.GetEmoji(key, "x.gif"); !errors.Is(err, model.ErrEmojiNotFound) {
+			t.Errorf("GetEmoji with %q as serverID = %v", key, err)
+		}
+		if _, err := store.SaveEmoji("server-1", key, gifBytes, "image/gif"); !errors.Is(err, model.ErrEmojiNotFound) {
+			t.Errorf("SaveEmoji(%q) = %v", key, err)
+		}
 	}
 }
 

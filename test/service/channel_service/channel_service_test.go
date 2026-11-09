@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -661,5 +662,40 @@ func TestDeleteChannel_NotAdmin_DoesNotPublish(t *testing.T) {
 	}
 	if fake.deleteCalled {
 		t.Error("repo.Delete must not be called when the actor lacks permission")
+	}
+}
+
+func TestCreateChannel_NameLength_MaxIsAllowed(t *testing.T) {
+	cases := map[string]struct {
+		length  int
+		wantErr error
+	}{
+		"exactly the max": {length: model.ChannelNameMaxLen},
+		"one over":        {length: model.ChannelNameMaxLen + 1, wantErr: model.ErrChannelNameTooLong},
+	}
+	for label, tc := range cases {
+		t.Run(label, func(t *testing.T) {
+			srv := ownerServer()
+			svc := newService(&fakeServers{server: srv}, &fakeCategories{}, &fakeChannels{})
+
+			_, err := svc.CreateChannel(context.Background(), channel_service.CreateChannelParams{
+				ServerID: srv.ID, Name: strings.Repeat("á", tc.length), Kind: "text", UserID: testOwner,
+			})
+			if !errors.Is(err, tc.wantErr) {
+				t.Errorf("err = %v, want %v", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestDeleteChannel_RepoError_Propagates(t *testing.T) {
+	srv := ownerServer()
+	ch := model.Channel{ID: uuid.New(), ServerID: srv.ID}
+	repoErr := errors.New("db down")
+	svc := newService(&fakeServers{server: srv}, &fakeCategories{}, &fakeChannels{getByIDChannel: ch, deleteErr: repoErr})
+
+	err := svc.DeleteChannel(context.Background(), channel_service.DeleteChannelParams{ChannelID: ch.ID, UserID: testOwner})
+	if !errors.Is(err, repoErr) {
+		t.Errorf("err = %v, want the repository error", err)
 	}
 }
