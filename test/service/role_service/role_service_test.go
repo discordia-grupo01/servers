@@ -218,3 +218,15 @@ func TestRoleReads_LookupErrorsPropagate(t *testing.T) {
 		t.Errorf("GetRole server: err = %v, want %v", err, boom)
 	}
 }
+
+func TestCreateRole_NameAtMaxLength_Allowed(t *testing.T) {
+	srv := ownerServer()
+	svc := newService(&fakeServers{server: srv}, &fakeRoles{})
+
+	p := validCreateParams(srv.ID)
+	p.Name = strings.Repeat("a", role.NameMaxLen)
+
+	if _, err := svc.CreateRole(context.Background(), p); err != nil {
+		t.Errorf("a name of exactly %d characters must be accepted: %v", role.NameMaxLen, err)
+	}
+}

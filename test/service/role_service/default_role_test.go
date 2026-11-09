@@ -73,3 +73,17 @@ func TestSetDefaultRole_Valid_CallsRepo(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestSetDefaultRole_RepoError_Propagates(t *testing.T) {
+	repoErr := errors.New("db down")
+	srv := ownerServer()
+	rl := existingRole(srv.ID)
+	svc := newService(&fakeServers{server: srv, setDefaultErr: repoErr}, &fakeRoles{getByIDRole: rl})
+
+	err := svc.SetDefaultRole(context.Background(), role_service.SetDefaultRoleParams{
+		ServerID: srv.ID, RoleID: rl.ID, UserID: testOwner,
+	})
+	if !errors.Is(err, repoErr) {
+		t.Errorf("err = %v, want the repository error", err)
+	}
+}

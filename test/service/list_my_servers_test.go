@@ -78,6 +78,23 @@ func TestListMyServers_SuspendedServerComesWithoutContent(t *testing.T) {
 	}
 }
 
+// A suspended server first in the list must not stop the rest from being
+// filtered: a channel hidden in the next server stays hidden.
+func TestListMyServers_ServerAfterASuspendedOneIsStillFiltered(t *testing.T) {
+	when := time.Now().UTC()
+	suspended := model.Server{ID: uuid.New(), Name: "Suspendido", OwnerID: testOwner, SuspendedAt: &when}
+	theirs, _, _, layers := hiddenStaffServer("someone-else")
+	repo := &fakeRepoHelper{listResult: []model.Server{suspended, theirs}, standing: viewer(), layers: layers}
+
+	got, err := service.New(repo, &fakeIconsHelper{}, repo, repo).ListMyServers(context.Background(), testOwner)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if n := channelNames(got[1].Channels); len(n) != 1 || n[0] != "general" {
+		t.Errorf("server after the suspended one: channels = %v, want [general]", n)
+	}
+}
+
 // When every server is suspended there is nothing to load visibility for.
 func TestListMyServers_OnlySuspendedServersSkipsTheVisibilityQueries(t *testing.T) {
 	when := time.Now().UTC()

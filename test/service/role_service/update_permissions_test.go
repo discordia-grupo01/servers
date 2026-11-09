@@ -3,6 +3,7 @@ package role_service_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -97,5 +98,46 @@ func TestUpdateRolePermissions_ValidPermissions_ReplacesMask(t *testing.T) {
 	}
 	if got.Permissions&role.PermSendMessages != 0 {
 		t.Errorf("permissions = %d, old permission should have been replaced, not merged", got.Permissions)
+	}
+}
+
+func TestUpdateRole_NameAtMaxLength_Allowed(t *testing.T) {
+	srv := ownerServer()
+	rl := existingRole(srv.ID)
+	svc := newService(&fakeServers{server: srv}, &fakeRoles{getByIDRole: rl})
+	name := strings.Repeat("a", role.NameMaxLen)
+
+	if _, err := svc.UpdateRolePermissions(context.Background(), role_service.UpdateRolePermissionsParams{
+		RoleID: rl.ID, UserID: testOwner, Name: &name,
+	}); err != nil {
+		t.Errorf("a name of exactly %d characters must be accepted: %v", role.NameMaxLen, err)
+	}
+}
+
+// @everyone keeps its automatic name and color; only its permissions can change.
+func TestUpdateRole_Everyone_OnlyPermissionsCanChange(t *testing.T) {
+	name, color := "Todos", "#00FF00"
+	cases := map[string]struct {
+		params  role_service.UpdateRolePermissionsParams
+		wantErr error
+	}{
+		"rename":             {params: role_service.UpdateRolePermissionsParams{Name: &name}, wantErr: model.ErrEveryoneRoleIsAutomatic},
+		"recolor":            {params: role_service.UpdateRolePermissionsParams{Color: &color}, wantErr: model.ErrEveryoneRoleIsAutomatic},
+		"change permissions": {params: role_service.UpdateRolePermissionsParams{Permissions: []string{"SEND_MESSAGES"}}},
+	}
+	for label, tc := range cases {
+		t.Run(label, func(t *testing.T) {
+			srv := ownerServer()
+			everyone := existingRole(srv.ID)
+			everyone.IsEveryone = true
+			svc := newService(&fakeServers{server: srv}, &fakeRoles{getByIDRole: everyone})
+
+			p := tc.params
+			p.RoleID, p.UserID = everyone.ID, testOwner
+			_, err := svc.UpdateRolePermissions(context.Background(), p)
+			if !errors.Is(err, tc.wantErr) {
+				t.Errorf("err = %v, want %v", err, tc.wantErr)
+			}
+		})
 	}
 }

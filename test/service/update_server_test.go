@@ -143,6 +143,45 @@ func TestUpdateServer_RemoveBanner_ClearsURLAndDeletesFromStore(t *testing.T) {
 	}
 }
 
+func TestUpdateServer_NameOnlyChange_DoesNotDeleteTheBanner(t *testing.T) {
+	bannerURL := "/v1/servers/srv-1/banner?v=currenthash"
+	srv := serverToUpdate()
+	srv.BannerURL = &bannerURL
+	repo, icons := &fakeRepoHelper{getResult: srv}, &fakeIconsHelper{}
+	newName := "New Name"
+
+	got, err := update(t, repo, icons, service.UpdateServerParams{
+		ServerID: srv.ID, ActorUserID: testOwner, Name: &newName,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if icons.deleteCalled {
+		t.Errorf("changing only the name must not delete anything, deleted %v", icons.deletedKeys)
+	}
+	if got.BannerURL == nil || *got.BannerURL != bannerURL {
+		t.Errorf("banner_url = %v, want it unchanged", got.BannerURL)
+	}
+}
+
+func TestUpdateServer_BannerChange_DeletesThePreviousVersion(t *testing.T) {
+	oldBannerURL := "/v1/servers/srv-1/banner?v=oldhash"
+	srv := serverToUpdate()
+	srv.BoostLevel = model.BoostLevelBanner
+	srv.BannerURL = &oldBannerURL
+	repo, icons := &fakeRepoHelper{getResult: srv}, &fakeIconsHelper{}
+
+	_, err := update(t, repo, icons, service.UpdateServerParams{
+		ServerID: srv.ID, ActorUserID: testOwner, Banner: []byte("new-banner-bytes"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !icons.deleteCalled {
+		t.Error("changing the banner must clean up the previous version (avoid orphaned files)")
+	}
+}
+
 // CA2: a non-owner cannot edit the server, and nothing is persisted.
 func TestUpdateServer_NotAdmin_Forbidden(t *testing.T) {
 	srv := serverToUpdate()
