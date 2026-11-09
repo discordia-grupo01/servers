@@ -130,6 +130,7 @@ servers/
 ## Comandos (Makefile)
 - `make run` - corre el servicio localmente.
 - `make test` - corre los tests con cobertura.
+- `make mutation` - mutation testing de `internal/service` (unos 45 minutos; ver `docs/mutation-testing`).
 - `make build` - compila el binario en `bin/api`.
 - `make db-reset` - recrea la base desde cero (borra el volumen).
 - `make migrate` - aplica `migrations/*.up.sql` en orden contra la BDD que indique `.env` (local o Supabase), vía `golang-migrate`. Trackea en la propia BDD cuales ya se aplicaron: correrlo de nuevo despues de la primera vez es seguro, solo aplica las migraciones nuevas.
@@ -139,6 +140,9 @@ servers/
 ```bash
 make test
 ```
+Mutation testing de `internal/service` (`make mutation`): ver
+[`docs/mutation-testing`](docs/mutation-testing/README.md).
+
 Cobertura mínima del proyecto: 70%. Los tests de `test/repository/**` son de
 integración: se saltean si no hay `DATABASE_HOST`. Para correrlos:
 ```bash

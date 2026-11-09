@@ -81,3 +81,15 @@ func TestDeleteRole_Valid_CallsRepo(t *testing.T) {
 		t.Errorf("Delete not called with %v (called=%v, got=%v)", rl.ID, roles.deleteCalled, roles.deletedID)
 	}
 }
+
+func TestDeleteRole_RepoError_Propagates(t *testing.T) {
+	repoErr := errors.New("db down")
+	srv := ownerServer()
+	rl := existingRole(srv.ID)
+	svc := newService(&fakeServers{server: srv}, &fakeRoles{getByIDRole: rl, deleteErr: repoErr})
+
+	err := svc.DeleteRole(context.Background(), role_service.DeleteRoleParams{RoleID: rl.ID, UserID: testOwner})
+	if !errors.Is(err, repoErr) {
+		t.Errorf("err = %v, want the repository error", err)
+	}
+}

@@ -115,3 +115,26 @@ func TestUnmuteMember_UsesDedicatedTargetError(t *testing.T) {
 		t.Fatalf("err = %v, want ErrUnmuteTargetRequired", err)
 	}
 }
+
+// The first checks pass, but inside the transaction the target already
+// outranks the moderator (or the moderator lost MANAGE_MESSAGES).
+func TestMuteMember_RechecksInsideTheTransaction(t *testing.T) {
+	until := time.Now().UTC().Add(time.Hour)
+
+	f := newMuteFixture()
+	promoted := member(rank(1), 0)
+	f.repo.txTarget = &promoted
+	if err := f.mute(moderatorID, memberID, until, nil); !errors.Is(err, model.ErrTargetOutranksActor) {
+		t.Errorf("target promoted: err = %v, want ErrTargetOutranksActor", err)
+	}
+	if f.repo.muted.UserID != "" {
+		t.Error("target promoted: the mute went through")
+	}
+
+	f = newMuteFixture()
+	demoted := member(rank(2), 0)
+	f.repo.txActor = &demoted
+	if err := f.mute(moderatorID, memberID, until, nil); !errors.Is(err, model.ErrForbiddenMissingPermission) {
+		t.Errorf("moderator lost MANAGE_MESSAGES: err = %v, want ErrForbiddenMissingPermission", err)
+	}
+}
