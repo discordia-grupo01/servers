@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 
 	"github.com/discordia-grupo01/servers/internal/model"
 )
@@ -145,11 +147,18 @@ func (s *SupabaseStore) storageJSON(method, url string, payload, out any) error 
 	return nil
 }
 
+var emojiNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
+
 func (s *LocalStore) emojiPath(serverID, key string) (string, error) {
-	if serverID != filepath.Base(serverID) || key != filepath.Base(key) || key == ".." || serverID == ".." {
+	if !emojiNamePattern.MatchString(serverID) || !emojiNamePattern.MatchString(key) {
 		return "", model.ErrEmojiNotFound
 	}
-	return filepath.Join(s.Dir, "emojis", serverID, key), nil
+	root := filepath.Join(s.Dir, "emojis")
+	path := filepath.Join(root, serverID, key)
+	if !strings.HasPrefix(path, root+string(os.PathSeparator)) {
+		return "", model.ErrEmojiNotFound
+	}
+	return path, nil
 }
 
 func (s *LocalStore) SaveEmoji(serverID, key string, data []byte, _ string) (string, error) {
