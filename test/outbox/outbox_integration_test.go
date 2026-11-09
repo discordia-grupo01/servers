@@ -190,3 +190,26 @@ func TestPollerPublishesEventsThatHaveNoTrace(t *testing.T) {
 		t.Fatal("el poller no publicó un evento sin traza")
 	}
 }
+
+func TestPollerDrainsABacklogInASingleTick(t *testing.T) {
+	tracing(t)
+	pool := newPool(t)
+	const backlog = 50
+	for i := 0; i < backlog; i++ {
+		insert(t, pool, context.Background(), "servers.backlog")
+	}
+
+	publisher := capturingPublisher{published: make(chan trace.SpanContext, backlog)}
+	pollCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go outbox.NewPoller(pool, publisher).Start(pollCtx)
+
+	deadline := time.After(outbox.PollInterval + 2*time.Second)
+	for i := 0; i < backlog; i++ {
+		select {
+		case <-publisher.published:
+		case <-deadline:
+			t.Fatalf("en el primer tick se publicaron %d de %d eventos pendientes", i, backlog)
+		}
+	}
+}

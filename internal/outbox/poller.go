@@ -26,7 +26,10 @@ type Publisher interface {
 
 const PollInterval = 2 * time.Second
 
-const batchSize = 20
+// maxPerTick bounds how many events one tick publishes. With a backlog the
+// poller keeps going instead of waiting for the next tick: a cap of 20 per 2s
+// tick limited the whole service to 10 events/s.
+const maxPerTick = 2000
 
 type Poller struct {
 	pool      *pgxpool.Pool
@@ -51,7 +54,7 @@ func (p *Poller) Start(ctx context.Context) {
 }
 
 func (p *Poller) drain(ctx context.Context) {
-	for i := 0; i < batchSize; i++ {
+	for i := 0; i < maxPerTick && ctx.Err() == nil; i++ {
 		published, err := p.publishOne(ctx)
 		if err != nil {
 			logging.Errorf("outbox: poll tick failed: %v", err)
