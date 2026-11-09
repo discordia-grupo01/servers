@@ -44,6 +44,8 @@ func newRepo(t *testing.T) (*report_repo.Repository, *pgxpool.Pool) {
 	dropTables(ctx, pool)
 	for _, file := range []string{
 		"../../../migrations/0001_init.up.sql",
+		"../../../migrations/0011_outbox_events.up.sql",
+		"../../../migrations/0033_outbox_traceparent.up.sql",
 		"../../../migrations/0017_user_profiles.up.sql",
 		"../../../migrations/0029_reports.up.sql",
 	} {
@@ -59,7 +61,7 @@ func newRepo(t *testing.T) (*report_repo.Repository, *pgxpool.Pool) {
 }
 
 func dropTables(ctx context.Context, pool *pgxpool.Pool) {
-	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS reports, user_profiles, server_members, channels, servers CASCADE`)
+	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS outbox_events, reports, user_profiles, server_members, channels, servers CASCADE`)
 }
 
 func env(k, def string) string {
