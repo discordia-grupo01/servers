@@ -48,6 +48,7 @@ func newRepo(t *testing.T) (*report_repo.Repository, *pgxpool.Pool) {
 		"../../../migrations/0033_outbox_traceparent.up.sql",
 		"../../../migrations/0017_user_profiles.up.sql",
 		"../../../migrations/0029_reports.up.sql",
+		"../../../migrations/0036_report_resolution_action.up.sql",
 	} {
 		schema, err := os.ReadFile(file)
 		if err != nil {
@@ -247,7 +248,7 @@ func TestCreate_CA2_AClosedReportAllowsReportingAgain(t *testing.T) {
 	if err := repo.Create(ctx, first); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := repo.Close(ctx, serverID, first.ID, report.StatusDismissed, "mod-1", now); err != nil {
+	if _, err := repo.Close(ctx, serverID, first.ID, report.StatusDismissed, nil, "mod-1", now); err != nil {
 		t.Fatal(err)
 	}
 	if err := repo.Create(ctx, userReport(serverID, "u1", "u2", now)); err != nil {
@@ -306,10 +307,10 @@ func TestList_FiltersByStatusAndPaginates(t *testing.T) {
 		}
 		ids = append(ids, rep.ID)
 	}
-	if _, err := repo.Close(ctx, serverID, ids[0], report.StatusResolved, "mod-1", base); err != nil {
+	if _, err := repo.Close(ctx, serverID, ids[0], report.StatusResolved, nil, "mod-1", base); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := repo.Close(ctx, serverID, ids[1], report.StatusDismissed, "mod-1", base); err != nil {
+	if _, err := repo.Close(ctx, serverID, ids[1], report.StatusDismissed, nil, "mod-1", base); err != nil {
 		t.Fatal(err)
 	}
 
@@ -382,7 +383,7 @@ func TestClose_RecordsWhoAndWhen(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := repo.Close(ctx, serverID, rep.ID, report.StatusResolved, "mod-1", closedAt)
+	got, err := repo.Close(ctx, serverID, rep.ID, report.StatusResolved, nil, "mod-1", closedAt)
 	if err != nil {
 		t.Fatalf("Close: %v", err)
 	}
@@ -391,9 +392,83 @@ func TestClose_RecordsWhoAndWhen(t *testing.T) {
 		t.Errorf("closed = %+v", got)
 	}
 
+	if got.ResolutionAction != nil {
+		t.Errorf("resolution_action = %v, want nil without an action", *got.ResolutionAction)
+	}
+
 	listed, _, _ := repo.List(ctx, serverID, nil, 20, 0)
-	if len(listed) != 1 || listed[0].Status != report.StatusResolved {
+	if len(listed) != 1 || listed[0].Status != report.StatusResolved || listed[0].ResolutionAction != nil {
 		t.Errorf("listed = %+v", listed)
+	}
+}
+
+func TestClose_StoresTheResolutionAction(t *testing.T) {
+	repo, pool := newRepo(t)
+	ctx := context.Background()
+	serverID := seedServer(ctx, t, pool)
+	channelID := seedChannel(ctx, t, pool, serverID)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+
+	msg := messageReport(serverID, channelID, "u1", now)
+	usr := userReport(serverID, "u1", "u2", now.Add(time.Second))
+	for _, rep := range []report.Report{msg, usr} {
+		if err := repo.Create(ctx, rep); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	deleteMessage, mute := report.ActionDeleteMessage, report.ActionMute
+	got, err := repo.Close(ctx, serverID, msg.ID, report.StatusResolved, &deleteMessage, "mod-1", now)
+	if err != nil {
+		t.Fatalf("Close message: %v", err)
+	}
+	if got.ResolutionAction == nil || *got.ResolutionAction != report.ActionDeleteMessage {
+		t.Errorf("message resolution_action = %v", got.ResolutionAction)
+	}
+	if _, err := repo.Close(ctx, serverID, usr.ID, report.StatusResolved, &mute, "mod-1", now); err != nil {
+		t.Fatalf("Close user: %v", err)
+	}
+
+	resolved := report.StatusResolved
+	listed, _, _ := repo.List(ctx, serverID, &resolved, 20, 0)
+	byID := map[uuid.UUID]report.Report{}
+	for _, rep := range listed {
+		byID[rep.ID] = rep
+	}
+	if a := byID[usr.ID].ResolutionAction; a == nil || *a != report.ActionMute {
+		t.Errorf("listed user resolution_action = %v", a)
+	}
+	if a := byID[msg.ID].ResolutionAction; a == nil || *a != report.ActionDeleteMessage {
+		t.Errorf("listed message resolution_action = %v", a)
+	}
+}
+
+func TestClose_DeleteMessageOnAUserReportIsRejectedAndStaysPending(t *testing.T) {
+	repo, pool := newRepo(t)
+	ctx := context.Background()
+	serverID := seedServer(ctx, t, pool)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+
+	rep := userReport(serverID, "u1", "u2", now)
+	if err := repo.Create(ctx, rep); err != nil {
+		t.Fatal(err)
+	}
+
+	deleteMessage := report.ActionDeleteMessage
+	if _, err := repo.Close(ctx, serverID, rep.ID, report.StatusResolved, &deleteMessage, "mod-1", now); !errors.Is(err, model.ErrReportActionKind) {
+		t.Fatalf("err = %v, want ErrReportActionKind", err)
+	}
+
+	pending := report.StatusPending
+	listed, total, _ := repo.List(ctx, serverID, &pending, 20, 0)
+	if total != 1 || len(listed) != 1 || listed[0].ResolvedBy != nil {
+		t.Errorf("the report should still be pending: total %d, %+v", total, listed)
+	}
+
+	var events int
+	_ = pool.QueryRow(ctx, `SELECT COUNT(*) FROM outbox_events WHERE routing_key = 'servers.report_updated'`).Scan(&events)
+	if events != 1 {
+		t.Errorf("outbox report events = %d, want 1 (only the creation)", events)
 	}
 }
 
@@ -407,10 +482,10 @@ func TestClose_AReportIsClosedOnlyOnce(t *testing.T) {
 	if err := repo.Create(ctx, rep); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := repo.Close(ctx, serverID, rep.ID, report.StatusResolved, "mod-1", now); err != nil {
+	if _, err := repo.Close(ctx, serverID, rep.ID, report.StatusResolved, nil, "mod-1", now); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := repo.Close(ctx, serverID, rep.ID, report.StatusDismissed, "mod-2", now); !errors.Is(err, model.ErrReportNotPending) {
+	if _, err := repo.Close(ctx, serverID, rep.ID, report.StatusDismissed, nil, "mod-2", now); !errors.Is(err, model.ErrReportNotPending) {
 		t.Fatalf("second close: err = %v, want ErrReportNotPending", err)
 	}
 
@@ -438,7 +513,7 @@ func TestClose_ConcurrentClosersLeaveASingleWinner(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			_, errs[i] = repo.Close(ctx, serverID, rep.ID, report.StatusResolved, "mod", now)
+			_, errs[i] = repo.Close(ctx, serverID, rep.ID, report.StatusResolved, nil, "mod", now)
 		}(i)
 	}
 	wg.Wait()
@@ -470,10 +545,10 @@ func TestClose_UnknownOrForeignReportIsNotFound(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := repo.Close(ctx, mine, uuid.New(), report.StatusResolved, "mod-1", now); !errors.Is(err, model.ErrReportNotFound) {
+	if _, err := repo.Close(ctx, mine, uuid.New(), report.StatusResolved, nil, "mod-1", now); !errors.Is(err, model.ErrReportNotFound) {
 		t.Errorf("unknown id: err = %v, want ErrReportNotFound", err)
 	}
-	if _, err := repo.Close(ctx, mine, rep.ID, report.StatusResolved, "mod-1", now); !errors.Is(err, model.ErrReportNotFound) {
+	if _, err := repo.Close(ctx, mine, rep.ID, report.StatusResolved, nil, "mod-1", now); !errors.Is(err, model.ErrReportNotFound) {
 		t.Errorf("report of another server: err = %v, want ErrReportNotFound", err)
 	}
 
@@ -539,6 +614,14 @@ func TestSchema_RejectsInconsistentRows(t *testing.T) {
 			VALUES (gen_random_uuid(), $1, 'user', 'u1', 'u2', 'x', 'resolved', now())`,
 		"pending with a closing date": `INSERT INTO reports (id, server_id, kind, reporter_id, reported_user_id, reason, resolved_at, resolved_by, created_at)
 			VALUES (gen_random_uuid(), $1, 'user', 'u1', 'u2', 'x', now(), 'mod', now())`,
+		"an action on a dismissed report": `INSERT INTO reports (id, server_id, kind, reporter_id, reported_user_id, reason, status, resolved_at, resolved_by, resolution_action, created_at)
+			VALUES (gen_random_uuid(), $1, 'user', 'u1', 'u2', 'x', 'dismissed', now(), 'mod', 'ban', now())`,
+		"an action on a pending report": `INSERT INTO reports (id, server_id, kind, reporter_id, reported_user_id, reason, resolution_action, created_at)
+			VALUES (gen_random_uuid(), $1, 'user', 'u1', 'u2', 'x', 'kick', now())`,
+		"an unknown action": `INSERT INTO reports (id, server_id, kind, reporter_id, reported_user_id, reason, status, resolved_at, resolved_by, resolution_action, created_at)
+			VALUES (gen_random_uuid(), $1, 'user', 'u1', 'u2', 'x', 'resolved', now(), 'mod', 'warn', now())`,
+		"delete_message on a user report": `INSERT INTO reports (id, server_id, kind, reporter_id, reported_user_id, reason, status, resolved_at, resolved_by, resolution_action, created_at)
+			VALUES (gen_random_uuid(), $1, 'user', 'u1', 'u2', 'x', 'resolved', now(), 'mod', 'delete_message', now())`,
 	}
 	for name, query := range bad {
 		args := []any{serverID}

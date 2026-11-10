@@ -54,6 +54,7 @@ func (f *fakeVisibility) ChannelLayers(context.Context, string, []uuid.UUID) (ma
 type closeCall struct {
 	serverID, reportID uuid.UUID
 	status             report.Status
+	action             string
 	by                 string
 }
 
@@ -86,8 +87,12 @@ func (f *fakeRepo) List(_ context.Context, _ uuid.UUID, status *report.Status, l
 	return f.listed, f.listTotal, nil
 }
 
-func (f *fakeRepo) Close(_ context.Context, serverID, reportID uuid.UUID, status report.Status, by string, _ time.Time) (report.Report, error) {
-	f.closeCalls = append(f.closeCalls, closeCall{serverID, reportID, status, by})
+func (f *fakeRepo) Close(_ context.Context, serverID, reportID uuid.UUID, status report.Status, action *report.ResolutionAction, by string, _ time.Time) (report.Report, error) {
+	var a string
+	if action != nil {
+		a = string(*action)
+	}
+	f.closeCalls = append(f.closeCalls, closeCall{serverID, reportID, status, a, by})
 	return f.closeResult, f.closeErr
 }
 
@@ -420,7 +425,7 @@ func TestClose_AModeratorClosesAPendingReport(t *testing.T) {
 		if got.ID != reportID || got.Status != report.Status(status) {
 			t.Errorf("%s: got = %+v", status, got)
 		}
-		want := closeCall{f.serverID, reportID, report.Status(status), moderatorID}
+		want := closeCall{f.serverID, reportID, report.Status(status), "", moderatorID}
 		if len(f.repo.closeCalls) != 1 || f.repo.closeCalls[0] != want {
 			t.Errorf("%s: calls = %+v, want %+v", status, f.repo.closeCalls, want)
 		}
@@ -454,6 +459,56 @@ func TestClose_Rejections(t *testing.T) {
 				t.Errorf("the report was closed: %+v", f.repo.closeCalls)
 			}
 		})
+	}
+}
+
+func TestClose_ResolvingCarriesTheAction(t *testing.T) {
+	for _, action := range []string{"delete_message", "mute", "kick", "ban"} {
+		f := newFixture()
+		reportID := uuid.New()
+		_, err := f.svc.Close(context.Background(), report_service.CloseParams{
+			ServerID: f.serverID, ReportID: reportID, ActorUserID: moderatorID, Status: "resolved", Action: action,
+		})
+		if err != nil {
+			t.Fatalf("%s: unexpected error %v", action, err)
+		}
+		want := closeCall{f.serverID, reportID, report.StatusResolved, action, moderatorID}
+		if len(f.repo.closeCalls) != 1 || f.repo.closeCalls[0] != want {
+			t.Errorf("%s: calls = %+v, want %+v", action, f.repo.closeCalls, want)
+		}
+	}
+}
+
+func TestClose_ActionRejections(t *testing.T) {
+	cases := map[string]struct{ status, action string }{
+		"an action when dismissing": {"dismissed", "mute"},
+		"an unknown action":         {"resolved", "warn"},
+		"an action in another case": {"resolved", "Mute"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			f := newFixture()
+			_, err := f.svc.Close(context.Background(), report_service.CloseParams{
+				ServerID: f.serverID, ReportID: uuid.New(), ActorUserID: moderatorID, Status: tc.status, Action: tc.action,
+			})
+			if !errors.Is(err, model.ErrReportActionInvalid) {
+				t.Fatalf("err = %v, want ErrReportActionInvalid", err)
+			}
+			if len(f.repo.closeCalls) != 0 {
+				t.Errorf("the report was closed: %+v", f.repo.closeCalls)
+			}
+		})
+	}
+}
+
+func TestClose_PassesThroughTheKindMismatch(t *testing.T) {
+	f := newFixture()
+	f.repo.closeErr = model.ErrReportActionKind
+	_, err := f.svc.Close(context.Background(), report_service.CloseParams{
+		ServerID: f.serverID, ReportID: uuid.New(), ActorUserID: moderatorID, Status: "resolved", Action: "delete_message",
+	})
+	if !errors.Is(err, model.ErrReportActionKind) {
+		t.Errorf("err = %v, want ErrReportActionKind", err)
 	}
 }
 
