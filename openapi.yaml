@@ -3030,8 +3030,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/report.Response"
         "400":
-          description: status is not resolved or dismissed, action is unknown or sent
-            with dismissed (action_invalid), or delete_message on a user report
+          description: status is not resolved or dismissed, action is unknown or sent with
+            dismissed (action_invalid), or delete_message on a user report
             (action_not_for_kind)
           content:
             application/json:
@@ -3836,8 +3836,7 @@ components:
         reporter_profile:
           $ref: "#/components/schemas/model.MemberProfileResponse"
         resolution_action:
-          description: delete_message, mute, kick or ban; null if it was closed without
-            one.
+          description: delete_message, mute, kick or ban; null if it was closed without one.
           enum:
             - delete_message
             - mute
@@ -3856,7 +3855,6 @@ components:
     report_handler.CloseRequest:
       properties:
         action:
-          description: 'Optional, only with status "resolved": what the moderator did.'
           enum:
             - delete_message
             - mute
