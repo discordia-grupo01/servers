@@ -37,6 +37,7 @@ type CreateRequest struct {
 
 type CloseRequest struct {
 	Status string `json:"status" example:"resolved" enums:"resolved,dismissed"`
+	Action string `json:"action" example:"mute" enums:"delete_message,mute,kick,ban"`
 }
 
 // Create godoc
@@ -134,7 +135,7 @@ func (h *Handler) List(c *gin.Context) {
 
 // Close godoc
 // @Summary      Close a pending report
-// @Description  Only for moderators (see GET /v1/servers/{serverId}/reports). Marks the report as resolved (the moderator acted on it) or dismissed (nothing to act on). A report is closed once: closing it again is a 409 report_not_pending. Acting on the reported message or user is done with the existing moderation endpoints.
+// @Description  Only for moderators (see GET /v1/servers/{serverId}/reports). Marks the report as resolved (the moderator acted on it) or dismissed (nothing to act on). A report is closed once: closing it again is a 409 report_not_pending. Acting on the reported message or user is done with the existing moderation endpoints; when resolving, the optional action records which one was used (delete_message, mute, kick or ban; delete_message only for a message report) and comes back as resolution_action. The server doesn't check that the action happened.
 // @Tags         reports
 // @Accept       json
 // @Produce      json
@@ -143,7 +144,7 @@ func (h *Handler) List(c *gin.Context) {
 // @Param        reportId  path  string        true  "Report ID"
 // @Param        body      body  CloseRequest  true  "The new status"
 // @Success      200  {object}  report.Response
-// @Failure      400  {object}  apierr.ErrorResponse  "status is not resolved or dismissed"
+// @Failure      400  {object}  apierr.ErrorResponse  "status is not resolved or dismissed, action is unknown or sent with dismissed (action_invalid), or delete_message on a user report (action_not_for_kind)"
 // @Failure      401  {object}  apierr.ErrorResponse
 // @Failure      403  {object}  apierr.ErrorResponse  "not a member, or not a moderator"
 // @Failure      404  {object}  apierr.ErrorResponse  "server or report not found"
@@ -168,6 +169,7 @@ func (h *Handler) Close(c *gin.Context) {
 		ReportID:    reportID,
 		ActorUserID: middleware.UserID(c),
 		Status:      req.Status,
+		Action:      req.Action,
 	})
 	if err != nil {
 		apierr.WriteDomainError(c, err)

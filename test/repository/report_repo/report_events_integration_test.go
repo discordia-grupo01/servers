@@ -118,7 +118,7 @@ func TestClose_PublishesTheClosedSnapshot(t *testing.T) {
 	}
 
 	closedAt := now.Add(time.Hour)
-	if _, err := repo.Close(ctx, serverID, rep.ID, report.StatusResolved, "moderator-1", closedAt); err != nil {
+	if _, err := repo.Close(ctx, serverID, rep.ID, report.StatusResolved, nil, "moderator-1", closedAt); err != nil {
 		t.Fatal(err)
 	}
 
@@ -145,15 +145,15 @@ func TestClose_NotFoundAndNotPendingPublishNothingNew(t *testing.T) {
 	if err := repo.Create(ctx, rep); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := repo.Close(ctx, serverID, rep.ID, report.StatusDismissed, "moderator-1", now.Add(time.Minute)); err != nil {
+	if _, err := repo.Close(ctx, serverID, rep.ID, report.StatusDismissed, nil, "moderator-1", now.Add(time.Minute)); err != nil {
 		t.Fatal(err)
 	}
 	before := len(updates(ctx, t, pool))
 
-	if _, err := repo.Close(ctx, serverID, rep.ID, report.StatusResolved, "moderator-2", now.Add(time.Hour)); !errors.Is(err, model.ErrReportNotPending) {
+	if _, err := repo.Close(ctx, serverID, rep.ID, report.StatusResolved, nil, "moderator-2", now.Add(time.Hour)); !errors.Is(err, model.ErrReportNotPending) {
 		t.Fatalf("closing twice: err = %v, want ErrReportNotPending", err)
 	}
-	if _, err := repo.Close(ctx, serverID, uuid.New(), report.StatusResolved, "moderator-1", now); !errors.Is(err, model.ErrReportNotFound) {
+	if _, err := repo.Close(ctx, serverID, uuid.New(), report.StatusResolved, nil, "moderator-1", now); !errors.Is(err, model.ErrReportNotFound) {
 		t.Fatalf("unknown report: err = %v, want ErrReportNotFound", err)
 	}
 	if after := len(updates(ctx, t, pool)); after != before {
@@ -177,7 +177,7 @@ func TestClose_ConcurrentClosesPublishOnce(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, results[i] = repo.Close(ctx, serverID, rep.ID, report.StatusResolved, "moderator", now.Add(time.Minute))
+			_, results[i] = repo.Close(ctx, serverID, rep.ID, report.StatusResolved, nil, "moderator", now.Add(time.Minute))
 		}()
 	}
 	wg.Wait()
@@ -207,7 +207,7 @@ func TestEvents_NeverCarryWhoReportedOrResolved(t *testing.T) {
 	if err := repo.Create(ctx, rep); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := repo.Close(ctx, serverID, rep.ID, report.StatusResolved, "secret-moderator", now.Add(time.Minute)); err != nil {
+	if _, err := repo.Close(ctx, serverID, rep.ID, report.StatusResolved, nil, "secret-moderator", now.Add(time.Minute)); err != nil {
 		t.Fatal(err)
 	}
 	for _, r := range outboxRows(ctx, t, pool) {

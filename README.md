@@ -468,6 +468,16 @@ permisos en el resto del servidor (HU #57). Se guardan en la tabla
   `PATCH /v1/servers/{serverId}/reports/{reportId}`; queda guardado quién y
   cuándo. No dispara ninguna acción por sí solo: para borrar el mensaje,
   expulsar o banear se usan los endpoints que ya existen.
+  - **Qué se hizo al resolver**: al cerrar con `resolved` se puede mandar
+    `action` (`delete_message`, `mute`, `kick` o `ban`) para dejar anotado qué
+    sanción aplicó el moderador desde el reporte; vuelve como
+    `resolution_action` (`null` si se resolvió sin sancionar, se descartó o es
+    anterior a la columna). `servers` no comprueba que la sanción haya
+    ocurrido: el front la manda después de que el endpoint de la sanción
+    respondió bien. Con `dismissed` o un valor desconocido es 400
+    `action_invalid`; `delete_message` en un reporte de usuario es 400
+    `action_not_for_kind` (lo decide un `CHECK` de la base, así que el reporte
+    no se cierra). No viaja en `servers.report_updated`.
   - **Quién los ve (CA 1)**: los **moderadores**, que son quienes tienen
     `MANAGE_MESSAGES`, `KICK_MEMBERS` y `BAN_MEMBERS` **juntos** (los
     administradores y el dueño los tienen implícitos). Tener solo uno o dos
@@ -732,7 +742,7 @@ admins lo tienen implícito); ver "Roles, permisos y jerarquía".
 | PUT | `/v1/servers/{serverId}/banned-words` | si (`MANAGE_MESSAGES`) | Reemplazar la lista entera (`words`: hasta 100, de hasta 50 caracteres; vacía saca el filtro). 200 con la lista como quedó guardada; 400 si alguna está vacía, es muy larga o son más de 100. Ver "Moderación". |
 | POST | `/v1/servers/{serverId}/reports` | si (miembro) | Reportar un mensaje (`kind: "message"`, `channel_id`, `message_id`) o un usuario (`kind: "user"`, `user_id`) con un `reason` obligatorio de hasta 512 caracteres. 201 con el reporte (`pending`); 400 si falta algo, el canal no es de texto o es uno mismo; 403 si no es miembro; 404 si el canal no existe o no lo ve, o el usuario no es miembro; 409 `report_already_pending` si ya tiene uno pendiente sobre eso. Ver "Moderación". |
 | GET | `/v1/servers/{serverId}/reports` | si (`MANAGE_MESSAGES` + `KICK_MEMBERS` + `BAN_MEMBERS`) | Listar los reportes (paginado: `limit`, `offset`; más nuevo primero). `status`: `pending` (por defecto), `resolved`, `dismissed` o `all`. `total` es la cantidad con ese estado. |
-| PATCH | `/v1/servers/{serverId}/reports/{reportId}` | si (`MANAGE_MESSAGES` + `KICK_MEMBERS` + `BAN_MEMBERS`) | Cerrar un reporte pendiente (`status`: `resolved` o `dismissed`). 200 con el reporte; 404 si no existe; 409 `report_not_pending` si ya estaba cerrado. |
+| PATCH | `/v1/servers/{serverId}/reports/{reportId}` | si (`MANAGE_MESSAGES` + `KICK_MEMBERS` + `BAN_MEMBERS`) | Cerrar un reporte pendiente (`status`: `resolved` o `dismissed`; con `resolved`, `action` opcional: `delete_message`, `mute`, `kick` o `ban`). 200 con el reporte (`resolution_action`); 400 `action_invalid` / `action_not_for_kind`; 404 si no existe; 409 `report_not_pending` si ya estaba cerrado. |
 | PUT | `/v1/channels/{channelId}/permissions/roles/{roleId}` | si (`MANAGE_ROLES`) | Crear o reemplazar el override de un rol en un canal (`allow?`, `deny?`: `VIEW_CHANNELS`, `SEND_MESSAGES`, `MANAGE_MESSAGES`, `ADD_REACTIONS`, `CONNECT`). 200 con el override; 204 si las dos listas vienen vacías (se borra). 400 si el permiso no se puede sobrescribir o está en las dos listas; 403 si el rol no está por debajo del propio (salvo `@everyone`) o se permite algo que el caller no tiene. |
 | DELETE | `/v1/channels/{channelId}/permissions/roles/{roleId}` | si (`MANAGE_ROLES`) | Quitar el override de un rol en un canal. 204; 404 `channel_override_not_found` si no había. |
 | GET | `/v1/channels/{channelId}/permissions` | si (`MANAGE_ROLES`) | Listar los overrides del canal (`@everyone` primero, después por jerarquía). |

@@ -326,6 +326,48 @@ func TestClose_Returns200AndPassesTheStatus(t *testing.T) {
 	}
 }
 
+func TestClose_PassesTheActionAndReturnsIt(t *testing.T) {
+	serverID, reportID := uuid.New(), uuid.New()
+	by := testUser
+	at := time.Date(2026, 11, 10, 14, 0, 0, 0, time.UTC)
+	action := report.ActionMute
+	f := &fakeReports{closed: report.Report{
+		ID: reportID, ServerID: serverID, Kind: report.KindUser, Status: report.StatusResolved,
+		ResolvedBy: &by, ResolvedAt: &at, ResolutionAction: &action,
+	}}
+
+	w := do(newRouter(f), http.MethodPatch, basePath(serverID)+"/"+reportID.String(), testUser,
+		`{"status":"resolved","action":"mute"}`)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", w.Code, w.Body.String())
+	}
+	if f.gotClose.Action != "mute" || f.gotClose.Status != "resolved" {
+		t.Errorf("params = %+v", f.gotClose)
+	}
+	var body report.Response
+	_ = json.Unmarshal(w.Body.Bytes(), &body)
+	if body.ResolutionAction == nil || *body.ResolutionAction != "mute" {
+		t.Errorf("resolution_action = %v", body.ResolutionAction)
+	}
+}
+
+func TestClose_WithoutActionReturnsNull(t *testing.T) {
+	serverID, reportID := uuid.New(), uuid.New()
+	f := &fakeReports{closed: report.Report{ID: reportID, ServerID: serverID, Status: report.StatusResolved}}
+
+	w := do(newRouter(f), http.MethodPatch, basePath(serverID)+"/"+reportID.String(), testUser, `{"status":"resolved"}`)
+
+	if f.gotClose.Action != "" {
+		t.Errorf("action = %q, want empty", f.gotClose.Action)
+	}
+	var raw map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &raw)
+	if v, ok := raw["resolution_action"]; !ok || v != nil {
+		t.Errorf("resolution_action = %v (present %v), want null", v, ok)
+	}
+}
+
 func TestClose_Errors(t *testing.T) {
 	serverID, reportID := uuid.New(), uuid.New()
 	path := basePath(serverID) + "/" + reportID.String()
@@ -340,7 +382,9 @@ func TestClose_Errors(t *testing.T) {
 		"not a moderator": {
 			model.ErrForbiddenMissingPermission, http.StatusForbidden, "missing_permission",
 		},
-		"bad status": {model.ErrReportStatusInvalid, http.StatusBadRequest, ""},
+		"bad status":      {model.ErrReportStatusInvalid, http.StatusBadRequest, ""},
+		"bad action":      {model.ErrReportActionInvalid, http.StatusBadRequest, "action_invalid"},
+		"action for kind": {model.ErrReportActionKind, http.StatusBadRequest, "action_not_for_kind"},
 	} {
 		f := &fakeReports{err: tc.err}
 		w := do(newRouter(f), http.MethodPatch, path, testUser, `{"status":"resolved"}`)
@@ -358,6 +402,7 @@ func TestClose_Errors(t *testing.T) {
 		"invalid server id": {"/v1/servers/nope/reports/" + reportID.String(), `{"status":"resolved"}`},
 		"malformed json":    {path, `{"status":`},
 		"status not text":   {path, `{"status":1}`},
+		"action not text":   {path, `{"status":"resolved","action":2}`},
 	} {
 		f := &fakeReports{}
 		w := do(newRouter(f), http.MethodPatch, tc.path, testUser, tc.body)

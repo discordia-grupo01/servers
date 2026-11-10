@@ -2998,7 +2998,10 @@ paths:
         Marks the report as resolved (the moderator acted on it) or dismissed
         (nothing to act on). A report is closed once: closing it again is a 409
         report_not_pending. Acting on the reported message or user is done with
-        the existing moderation endpoints."
+        the existing moderation endpoints; when resolving, the optional action
+        records which one was used (delete_message, mute, kick or ban;
+        delete_message only for a message report) and comes back as
+        resolution_action. The server doesn't check that the action happened."
       parameters:
         - description: Server ID
           in: path
@@ -3027,7 +3030,9 @@ paths:
               schema:
                 $ref: "#/components/schemas/report.Response"
         "400":
-          description: status is not resolved or dismissed
+          description: status is not resolved or dismissed, action is unknown or sent with
+            dismissed (action_invalid), or delete_message on a user report
+            (action_not_for_kind)
           content:
             application/json:
               schema:
@@ -3830,6 +3835,14 @@ components:
           type: string
         reporter_profile:
           $ref: "#/components/schemas/model.MemberProfileResponse"
+        resolution_action:
+          description: delete_message, mute, kick or ban; null if it was closed without one.
+          enum:
+            - delete_message
+            - mute
+            - kick
+            - ban
+          type: string
         resolved_at:
           type: string
         resolved_by:
@@ -3841,6 +3854,14 @@ components:
       type: object
     report_handler.CloseRequest:
       properties:
+        action:
+          enum:
+            - delete_message
+            - mute
+            - kick
+            - ban
+          example: mute
+          type: string
         status:
           enum:
             - resolved
