@@ -237,6 +237,10 @@ func WriteDomainError(c *gin.Context, err error) {
 		RespondError(c, http.StatusNotFound, err.Error(), map[string]any{"reason": "report_not_found"})
 	case errors.Is(err, model.ErrReportNotPending):
 		RespondError(c, http.StatusConflict, err.Error(), map[string]any{"reason": "report_not_pending"})
+	case errors.Is(err, model.ErrReportActionInvalid):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("action", "action_invalid"))
+	case errors.Is(err, model.ErrReportActionKind):
+		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("action", "action_not_for_kind"))
 	case errors.Is(err, model.ErrReportStatusInvalid):
 		RespondError(c, http.StatusBadRequest, err.Error(), FieldErr("status", "status_invalid"))
 	case errors.As(err, &levelRequired):

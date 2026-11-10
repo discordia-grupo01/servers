@@ -17,7 +17,12 @@ import (
 	"github.com/discordia-grupo01/servers/internal/outbox"
 )
 
-const pgUniqueViolation = "23505"
+const (
+	pgUniqueViolation = "23505"
+	pgCheckViolation  = "23514"
+
+	actionKindConstraint = "reports_resolution_action_kind_check"
+)
 
 var pendingConstraints = map[string]bool{
 	"uq_reports_pending_message": true,
@@ -79,7 +84,7 @@ func (r *Repository) List(ctx context.Context, serverID uuid.UUID, status *repor
 
 	rows, err := r.pool.Query(ctx, `
 		SELECT r.id, r.server_id, r.kind, r.reporter_id, r.channel_id, r.message_id, r.reported_user_id,
-		       r.reason, r.status, r.created_at, r.resolved_at, r.resolved_by,
+		       r.reason, r.status, r.created_at, r.resolved_at, r.resolved_by, r.resolution_action,
 		       rp.user_id, rp.name, rp.avatar_url, rp.description, rp.status_text, rp.status_emoji, rp.version,
 		       tp.user_id, tp.name, tp.avatar_url, tp.description, tp.status_text, tp.status_emoji, tp.version
 		  FROM reports r
@@ -101,12 +106,13 @@ func (r *Repository) List(ctx context.Context, serverID uuid.UUID, status *repor
 			rep      report.Report
 			kind     string
 			status   string
+			action   *string
 			reporter profileColumns
 			reported profileColumns
 		)
 		if err := rows.Scan(
 			&rep.ID, &rep.ServerID, &kind, &rep.ReporterID, &rep.ChannelID, &rep.MessageID, &rep.ReportedUserID,
-			&rep.Reason, &status, &rep.CreatedAt, &rep.ResolvedAt, &rep.ResolvedBy,
+			&rep.Reason, &status, &rep.CreatedAt, &rep.ResolvedAt, &rep.ResolvedBy, &action,
 			&reporter.userID, &reporter.name, &reporter.avatarURL, &reporter.description, &reporter.statusText, &reporter.statusEmoji, &reporter.version,
 			&reported.userID, &reported.name, &reported.avatarURL, &reported.description, &reported.statusText, &reported.statusEmoji, &reported.version,
 		); err != nil {
@@ -114,6 +120,7 @@ func (r *Repository) List(ctx context.Context, serverID uuid.UUID, status *repor
 		}
 		rep.Kind = report.Kind(kind)
 		rep.Status = report.Status(status)
+		rep.ResolutionAction = resolutionAction(action)
 		rep.ReporterProfile = reporter.profile()
 		rep.ReportedProfile = reported.profile()
 		reports = append(reports, rep)
@@ -124,28 +131,33 @@ func (r *Repository) List(ctx context.Context, serverID uuid.UUID, status *repor
 	return reports, total, nil
 }
 
-// Close moves a pending report to resolved or dismissed and writes
-// servers.report_updated with the new snapshot in the same transaction.
-// ErrReportNotFound / ErrReportNotPending publish nothing.
-func (r *Repository) Close(ctx context.Context, serverID, reportID uuid.UUID, status report.Status, by string, at time.Time) (report.Report, error) {
+// Close moves a pending report to resolved or dismissed, with the optional
+// action the moderator took, and writes servers.report_updated with the new
+// snapshot in the same transaction. ErrReportNotFound / ErrReportNotPending /
+// ErrReportActionKind publish nothing.
+func (r *Repository) Close(ctx context.Context, serverID, reportID uuid.UUID, status report.Status, action *report.ResolutionAction, by string, at time.Time) (report.Report, error) {
 	var rep report.Report
 	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
-		var kind, st string
+		var (
+			kind, st string
+			stored   *string
+		)
 		if err := tx.QueryRow(ctx, `
 			UPDATE reports
-			   SET status = $3, resolved_by = $4, resolved_at = $5
+			   SET status = $3, resolved_by = $4, resolved_at = $5, resolution_action = $6
 			 WHERE id = $1 AND server_id = $2 AND status = 'pending'
 			RETURNING id, server_id, kind, reporter_id, channel_id, message_id, reported_user_id,
-			          reason, status, created_at, resolved_at, resolved_by`,
-			reportID, serverID, string(status), by, at,
+			          reason, status, created_at, resolved_at, resolved_by, resolution_action`,
+			reportID, serverID, string(status), by, at, actionText(action),
 		).Scan(
 			&rep.ID, &rep.ServerID, &kind, &rep.ReporterID, &rep.ChannelID, &rep.MessageID, &rep.ReportedUserID,
-			&rep.Reason, &st, &rep.CreatedAt, &rep.ResolvedAt, &rep.ResolvedBy,
+			&rep.Reason, &st, &rep.CreatedAt, &rep.ResolvedAt, &rep.ResolvedBy, &stored,
 		); err != nil {
 			return err
 		}
 		rep.Kind = report.Kind(kind)
 		rep.Status = report.Status(st)
+		rep.ResolutionAction = resolutionAction(stored)
 
 		event, err := UpdatedEvent(rep)
 		if err != nil {
@@ -155,6 +167,10 @@ func (r *Repository) Close(ctx context.Context, serverID, reportID uuid.UUID, st
 	})
 	if err == nil {
 		return rep, nil
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == pgCheckViolation && pgErr.ConstraintName == actionKindConstraint {
+		return report.Report{}, model.ErrReportActionKind
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return report.Report{}, fmt.Errorf("close report: %w", err)
@@ -170,6 +186,22 @@ func (r *Repository) Close(ctx context.Context, serverID, reportID uuid.UUID, st
 		return report.Report{}, model.ErrReportNotFound
 	}
 	return report.Report{}, model.ErrReportNotPending
+}
+
+func actionText(a *report.ResolutionAction) *string {
+	if a == nil {
+		return nil
+	}
+	s := string(*a)
+	return &s
+}
+
+func resolutionAction(raw *string) *report.ResolutionAction {
+	if raw == nil {
+		return nil
+	}
+	a := report.ResolutionAction(*raw)
+	return &a
 }
 
 type profileColumns struct {

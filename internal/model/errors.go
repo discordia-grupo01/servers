@@ -86,6 +86,8 @@ var (
 	ErrReportNotFound        = errors.New("report not found")
 	ErrReportNotPending      = errors.New("report was already closed")
 	ErrReportStatusInvalid   = errors.New("status must be 'resolved' or 'dismissed'")
+	ErrReportActionInvalid   = errors.New("action must be 'delete_message', 'mute', 'kick' or 'ban', and only when resolving")
+	ErrReportActionKind      = errors.New("action 'delete_message' only applies to a message report")
 
 	ErrEmojiNameInvalid      = errors.New("emoji name must be 2 to 32 letters, numbers or underscores")
 	ErrEmojiNameTaken        = errors.New("this server already has an emoji with that name")

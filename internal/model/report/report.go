@@ -25,6 +25,23 @@ const (
 	StatusDismissed Status = "dismissed"
 )
 
+type ResolutionAction string
+
+const (
+	ActionDeleteMessage ResolutionAction = "delete_message"
+	ActionMute          ResolutionAction = "mute"
+	ActionKick          ResolutionAction = "kick"
+	ActionBan           ResolutionAction = "ban"
+)
+
+func ParseResolutionAction(raw string) (ResolutionAction, bool) {
+	switch a := ResolutionAction(raw); a {
+	case ActionDeleteMessage, ActionMute, ActionKick, ActionBan:
+		return a, true
+	}
+	return "", false
+}
+
 func ParseKind(raw string) (Kind, bool) {
 	switch k := Kind(raw); k {
 	case KindMessage, KindUser:
@@ -47,18 +64,19 @@ func ParseClosingStatus(raw string) (Status, bool) {
 }
 
 type Report struct {
-	ID             uuid.UUID
-	ServerID       uuid.UUID
-	Kind           Kind
-	ReporterID     string
-	ChannelID      *uuid.UUID
-	MessageID      *uuid.UUID
-	ReportedUserID *string
-	Reason         string
-	Status         Status
-	CreatedAt      time.Time
-	ResolvedAt     *time.Time
-	ResolvedBy     *string
+	ID               uuid.UUID
+	ServerID         uuid.UUID
+	Kind             Kind
+	ReporterID       string
+	ChannelID        *uuid.UUID
+	MessageID        *uuid.UUID
+	ReportedUserID   *string
+	Reason           string
+	Status           Status
+	CreatedAt        time.Time
+	ResolvedAt       *time.Time
+	ResolvedBy       *string
+	ResolutionAction *ResolutionAction
 
 	ReporterProfile *userprofile.Profile
 	ReportedProfile *userprofile.Profile
@@ -93,20 +111,22 @@ func ClampPage(limit, offset int) (int, int) {
 }
 
 type Response struct {
-	ID              string                       `json:"id"`
-	ServerID        string                       `json:"server_id"`
-	Kind            string                       `json:"kind"`
-	ReporterID      string                       `json:"reporter_id"`
-	ChannelID       *string                      `json:"channel_id"`
-	MessageID       *string                      `json:"message_id"`
-	ReportedUserID  *string                      `json:"reported_user_id"`
-	Reason          string                       `json:"reason"`
-	Status          string                       `json:"status"`
-	CreatedAt       time.Time                    `json:"created_at"`
-	ResolvedAt      *time.Time                   `json:"resolved_at"`
-	ResolvedBy      *string                      `json:"resolved_by"`
-	ReporterProfile *model.MemberProfileResponse `json:"reporter_profile"`
-	ReportedProfile *model.MemberProfileResponse `json:"reported_profile"`
+	ID             string     `json:"id"`
+	ServerID       string     `json:"server_id"`
+	Kind           string     `json:"kind"`
+	ReporterID     string     `json:"reporter_id"`
+	ChannelID      *string    `json:"channel_id"`
+	MessageID      *string    `json:"message_id"`
+	ReportedUserID *string    `json:"reported_user_id"`
+	Reason         string     `json:"reason"`
+	Status         string     `json:"status"`
+	CreatedAt      time.Time  `json:"created_at"`
+	ResolvedAt     *time.Time `json:"resolved_at"`
+	ResolvedBy     *string    `json:"resolved_by"`
+	// delete_message, mute, kick or ban; null if it was closed without one.
+	ResolutionAction *string                      `json:"resolution_action" enums:"delete_message,mute,kick,ban"`
+	ReporterProfile  *model.MemberProfileResponse `json:"reporter_profile"`
+	ReportedProfile  *model.MemberProfileResponse `json:"reported_profile"`
 }
 
 type ListResponse struct {
@@ -118,20 +138,21 @@ type ListResponse struct {
 
 func ToResponse(r Report) Response {
 	return Response{
-		ID:              r.ID.String(),
-		ServerID:        r.ServerID.String(),
-		Kind:            string(r.Kind),
-		ReporterID:      r.ReporterID,
-		ChannelID:       uuidString(r.ChannelID),
-		MessageID:       uuidString(r.MessageID),
-		ReportedUserID:  r.ReportedUserID,
-		Reason:          r.Reason,
-		Status:          string(r.Status),
-		CreatedAt:       r.CreatedAt,
-		ResolvedAt:      r.ResolvedAt,
-		ResolvedBy:      r.ResolvedBy,
-		ReporterProfile: model.NewMemberProfileResponse(r.ReporterProfile),
-		ReportedProfile: model.NewMemberProfileResponse(r.ReportedProfile),
+		ID:               r.ID.String(),
+		ServerID:         r.ServerID.String(),
+		Kind:             string(r.Kind),
+		ReporterID:       r.ReporterID,
+		ChannelID:        uuidString(r.ChannelID),
+		MessageID:        uuidString(r.MessageID),
+		ReportedUserID:   r.ReportedUserID,
+		Reason:           r.Reason,
+		Status:           string(r.Status),
+		CreatedAt:        r.CreatedAt,
+		ResolvedAt:       r.ResolvedAt,
+		ResolvedBy:       r.ResolvedBy,
+		ResolutionAction: actionString(r.ResolutionAction),
+		ReporterProfile:  model.NewMemberProfileResponse(r.ReporterProfile),
+		ReportedProfile:  model.NewMemberProfileResponse(r.ReportedProfile),
 	}
 }
 
@@ -141,6 +162,14 @@ func ToListResponse(p Page) ListResponse {
 		reports = append(reports, ToResponse(r))
 	}
 	return ListResponse{Reports: reports, Total: p.Total, Limit: p.Limit, Offset: p.Offset}
+}
+
+func actionString(a *ResolutionAction) *string {
+	if a == nil {
+		return nil
+	}
+	s := string(*a)
+	return &s
 }
 
 func uuidString(id *uuid.UUID) *string {

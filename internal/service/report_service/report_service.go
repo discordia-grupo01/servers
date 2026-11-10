@@ -16,7 +16,7 @@ import (
 type Repository interface {
 	Create(ctx context.Context, rep report.Report) error
 	List(ctx context.Context, serverID uuid.UUID, status *report.Status, limit, offset int) ([]report.Report, int, error)
-	Close(ctx context.Context, serverID, reportID uuid.UUID, status report.Status, by string, at time.Time) (report.Report, error)
+	Close(ctx context.Context, serverID, reportID uuid.UUID, status report.Status, action *report.ResolutionAction, by string, at time.Time) (report.Report, error)
 }
 
 type Service struct {
@@ -60,6 +60,8 @@ type CloseParams struct {
 	ReportID    uuid.UUID
 	ActorUserID string
 	Status      string
+	// What the moderator did, only when resolving. Empty means none.
+	Action string
 }
 
 func (s *Service) Create(ctx context.Context, p CreateParams) (report.Report, error) {
@@ -141,10 +143,28 @@ func (s *Service) Close(ctx context.Context, p CloseParams) (report.Report, erro
 	if !ok {
 		return report.Report{}, model.ErrReportStatusInvalid
 	}
+	action, err := closingAction(status, p.Action)
+	if err != nil {
+		return report.Report{}, err
+	}
 	if _, err := s.authorizeModerator(ctx, p.ServerID, p.ActorUserID); err != nil {
 		return report.Report{}, err
 	}
-	return s.repo.Close(ctx, p.ServerID, p.ReportID, status, p.ActorUserID, s.now())
+	return s.repo.Close(ctx, p.ServerID, p.ReportID, status, action, p.ActorUserID, s.now())
+}
+
+func closingAction(status report.Status, raw string) (*report.ResolutionAction, error) {
+	if raw == "" {
+		return nil, nil
+	}
+	if status != report.StatusResolved {
+		return nil, model.ErrReportActionInvalid
+	}
+	action, ok := report.ParseResolutionAction(raw)
+	if !ok {
+		return nil, model.ErrReportActionInvalid
+	}
+	return &action, nil
 }
 
 func listFilter(raw string) (*report.Status, error) {

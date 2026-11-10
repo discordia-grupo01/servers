@@ -54,6 +54,19 @@ func TestParseClosingStatus_OnlyResolvedAndDismissed(t *testing.T) {
 	}
 }
 
+func TestParseResolutionAction(t *testing.T) {
+	for _, raw := range []string{"delete_message", "mute", "kick", "ban"} {
+		if got, ok := report.ParseResolutionAction(raw); !ok || string(got) != raw {
+			t.Errorf("%q: got %q, %v", raw, got, ok)
+		}
+	}
+	for _, raw := range []string{"", "warn", "MUTE", "unmute", "unban"} {
+		if _, ok := report.ParseResolutionAction(raw); ok {
+			t.Errorf("%q should be rejected", raw)
+		}
+	}
+}
+
 func TestNormalizeReason(t *testing.T) {
 	got, err := report.NormalizeReason("  Insultos \n repetidos  ")
 	if err != nil || got != "Insultos \n repetidos" {
@@ -119,6 +132,17 @@ func TestToResponse_User(t *testing.T) {
 	})
 	if got.ChannelID != nil || got.MessageID != nil || got.ReportedUserID == nil || *got.ReportedUserID != "u2" {
 		t.Errorf("response = %+v", got)
+	}
+}
+
+func TestToResponse_ResolutionAction(t *testing.T) {
+	action := report.ActionBan
+	got := report.ToResponse(report.Report{ID: uuid.New(), Status: report.StatusResolved, ResolutionAction: &action})
+	if got.ResolutionAction == nil || *got.ResolutionAction != "ban" {
+		t.Errorf("resolution_action = %v", got.ResolutionAction)
+	}
+	if none := report.ToResponse(report.Report{ID: uuid.New()}); none.ResolutionAction != nil {
+		t.Errorf("resolution_action = %v, want nil", *none.ResolutionAction)
 	}
 }
 
