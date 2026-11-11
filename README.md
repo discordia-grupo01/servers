@@ -535,6 +535,23 @@ correrla con la cola del consumidor ya creada, o repetirla después.
 
 ### Expediente de investigación de admin (HU #81)
 
+### Cambios que los clientes tienen que ver al instante
+
+Casi todo cambio ya publica su propio evento (alta o baja de miembros, canales, roles, moderación,
+emojis, dueño). Para lo que no, `servers.resource_changed` dice **qué volver a pedir** (`server`,
+`channels` o `roles`) y no lleva datos:
+
+| `resource` | Se publica cuando |
+|---|---|
+| `server` | se edita el servidor (nombre, ícono o banner, siempre, junto con `server_updated` si cambió el nombre) o su enlace personalizado |
+| `channels` | se edita, mueve o reordena un canal; se crea, edita o reordena una categoría |
+| `roles` | se reordenan los roles o cambia el rol por defecto |
+
+Lo de ícono, banner y nombre se publica dentro de la misma transacción que el cambio. Lo de canales,
+categorías, roles y enlace lo publica un middleware (`ResourceChanged`) cuando la respuesta fue 2xx, en
+una transacción propia: si el proceso muere justo en el medio se pierde el aviso, y el cliente igual
+refresca cada 15 a 30 s. `notifications` lo empuja por WebSocket a los miembros.
+
 ### Transferencia de propiedad y notificaciones
 
 Para avisarle al receptor y al dueño anterior sin que `notifications` nos llame,
