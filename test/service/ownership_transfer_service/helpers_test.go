@@ -59,6 +59,10 @@ type fakeTransfers struct {
 	rejectErr    error
 	rejectCalls  int
 
+	expireResult model.OwnershipTransfer
+	expireErr    error
+	expireCalls  int
+
 	cancelResult model.OwnershipTransfer
 	cancelErr    error
 	cancelCalls  int
@@ -103,6 +107,14 @@ func (f *fakeTransfers) Reject(context.Context, uuid.UUID, time.Time) (model.Own
 		return model.OwnershipTransfer{}, f.rejectErr
 	}
 	return f.rejectResult, nil
+}
+
+func (f *fakeTransfers) Expire(context.Context, uuid.UUID, time.Time) (model.OwnershipTransfer, error) {
+	f.expireCalls++
+	if f.expireErr != nil {
+		return model.OwnershipTransfer{}, f.expireErr
+	}
+	return f.expireResult, nil
 }
 
 func (f *fakeTransfers) Cancel(context.Context, uuid.UUID, time.Time) (model.OwnershipTransfer, error) {

@@ -133,8 +133,11 @@ func TestInitiateTransfer_ExpiredExisting_ExpiresAndCreatesNew(t *testing.T) {
 	if err != nil {
 		t.Fatalf("InitiateTransfer() error = %v, want nil", err)
 	}
-	if transfers.rejectCalls != 1 {
-		t.Errorf("Reject calls = %d, want 1 (auto-expire of the old offer)", transfers.rejectCalls)
+	if transfers.expireCalls != 1 {
+		t.Errorf("Expire calls = %d, want 1 (auto-expire of the old offer)", transfers.expireCalls)
+	}
+	if transfers.rejectCalls != 0 {
+		t.Errorf("Reject calls = %d, want 0: an expiry is not a rejection", transfers.rejectCalls)
 	}
 	if transfers.createdN != 1 {
 		t.Fatalf("Create calls = %d, want 1", transfers.createdN)
@@ -240,8 +243,8 @@ func TestAcceptTransfer_Expired_NotPending(t *testing.T) {
 	if !errors.Is(err, model.ErrOwnershipTransferNotPending) {
 		t.Errorf("err = %v, want ErrOwnershipTransferNotPending", err)
 	}
-	if transfers.rejectCalls != 1 {
-		t.Errorf("Reject calls = %d, want 1 (auto-expire)", transfers.rejectCalls)
+	if transfers.expireCalls != 1 {
+		t.Errorf("Expire calls = %d, want 1 (auto-expire)", transfers.expireCalls)
 	}
 	if transfers.acceptCalls != 0 {
 		t.Error("Accept must not be called on an expired transfer")
@@ -299,8 +302,8 @@ func TestRejectTransfer_Expired_NotPending(t *testing.T) {
 	}
 	// El auto-expire (dentro de resolveRespondable) ya la rechazó una vez;
 	// RejectTransfer no debe intentarlo de nuevo.
-	if transfers.rejectCalls != 1 {
-		t.Errorf("Reject calls = %d, want 1 (auto-expire only)", transfers.rejectCalls)
+	if transfers.expireCalls != 1 || transfers.rejectCalls != 0 {
+		t.Errorf("Expire calls = %d, Reject calls = %d, want 1 and 0 (auto-expire only)", transfers.expireCalls, transfers.rejectCalls)
 	}
 }
 
@@ -453,8 +456,8 @@ func TestGetPendingTransfer_Expired_NotFound(t *testing.T) {
 	if !errors.Is(err, model.ErrOwnershipTransferNotFound) {
 		t.Errorf("err = %v, want ErrOwnershipTransferNotFound", err)
 	}
-	if transfers.rejectCalls != 1 {
-		t.Errorf("Reject calls = %d, want 1 (auto-expire)", transfers.rejectCalls)
+	if transfers.expireCalls != 1 {
+		t.Errorf("Expire calls = %d, want 1 (auto-expire)", transfers.expireCalls)
 	}
 }
 
