@@ -31,6 +31,11 @@ type Pinger interface {
 	Ping(ctx context.Context) error
 }
 
+type ChangeNotifier interface {
+	middleware.ChangeRecorder
+	middleware.ServerOfResolver
+}
+
 type Deps struct {
 	Servers            ServerUseCases
 	Icons              IconStore
@@ -57,6 +62,7 @@ type Deps struct {
 	// (leaving it excepted); optional.
 	RejectSuspendedServer gin.HandlerFunc
 	DB                    Pinger
+	Changes               ChangeNotifier
 }
 
 func NewRouter(d Deps) *gin.Engine {
@@ -106,6 +112,9 @@ func NewRouter(d Deps) *gin.Engine {
 	}
 	if d.RejectSuspendedServer != nil {
 		v1.Use(d.RejectSuspendedServer)
+	}
+	if d.Changes != nil {
+		v1.Use(middleware.ResourceChanged(d.Changes, d.Changes))
 	}
 	v1.POST("/servers", h.createServer)
 	v1.GET("/servers", h.listMyServers)
