@@ -156,6 +156,7 @@ func main() {
 	mentionSvc := mention_service.New(serverRepo, channelRepo, memberRepo, roleRepo)
 
 	router := handler.NewRouter(handler.Deps{
+		Changes:            repository.NewChangeRecorder(pool),
 		Servers:            svc,
 		Icons:              icons,
 		Roles:              roleSvc,
