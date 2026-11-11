@@ -535,6 +535,24 @@ correrla con la cola del consumidor ya creada, o repetirla después.
 
 ### Expediente de investigación de admin (HU #81)
 
+### Transferencia de propiedad y notificaciones
+
+Para avisarle al receptor y al dueño anterior sin que `notifications` nos llame,
+cada cambio de estado de una transferencia publica `servers.ownership_transfer_updated`
+en la **misma transacción** que lo escribe:
+
+| Estado del evento | Se publica cuando | Quién recibe el aviso |
+|---|---|---|
+| `pending` | el dueño ofrece la propiedad | el receptor (entrada y push) |
+| `accepted` / `rejected` | el receptor responde | el dueño anterior (entrada y push) |
+| `expired` | pasan 24 horas sin respuesta (lo detecta el barrido o cualquier lectura de esa transferencia) | el dueño anterior |
+| `cancelled` | el dueño cancela el ofrecimiento | nadie: solo se cierra la entrada del receptor |
+
+Es una foto completa (`transfer_id`, `server_id`, `from_user_id`, `to_user_id`, `status`,
+`created_at`, `resolved_at`) y `occurred_at` es el momento del cambio, así que el consumidor se
+queda con la de `occurred_at` más nuevo. En la base el vencimiento sigue siendo `rejected`
+(`expired` solo existe en el evento).
+
 Para que el staff vea reportes y moderación de un usuario o un servidor sin
 que `admin` nos llame (ADR-024), el servicio publica dos eventos más, siempre en
 la **misma transacción** que la escritura:

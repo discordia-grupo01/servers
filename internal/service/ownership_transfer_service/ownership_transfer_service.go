@@ -168,9 +168,9 @@ func (s *Service) expireIfStale(ctx context.Context, t model.OwnershipTransfer) 
 	if !t.IsPending() || s.now().Sub(t.CreatedAt) <= model.OwnershipTransferTTL {
 		return t, false
 	}
-	rejected, err := s.transfers.Reject(ctx, t.ID, s.now())
+	expired, err := s.transfers.Expire(ctx, t.ID, s.now())
 	if err != nil {
 		return t, false
 	}
-	return rejected, true
+	return expired, true
 }

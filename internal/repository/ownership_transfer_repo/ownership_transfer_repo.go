@@ -39,20 +39,29 @@ func scanTransfer(row pgx.Row) (model.OwnershipTransfer, error) {
 	return t, nil
 }
 
-func (r *Repository) Create(ctx context.Context, t model.OwnershipTransfer) error {
-	_, err := r.pool.Exec(ctx, `
-		INSERT INTO ownership_transfers (id, server_id, from_user_id, to_user_id, status, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6)`,
-		t.ID, t.ServerID, t.FromUserID, t.ToUserID, string(t.Status), t.CreatedAt,
-	)
-	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgUniqueViolation && pgErr.ConstraintName == uqPendingPerServer {
-			return model.ErrOwnershipTransferAlreadyPending
-		}
-		return fmt.Errorf("insert ownership transfer: %w", err)
+func snapshot(t model.OwnershipTransfer) repository.TransferSnapshot {
+	return repository.TransferSnapshot{
+		ID: t.ID, ServerID: t.ServerID, FromUserID: t.FromUserID, ToUserID: t.ToUserID,
+		CreatedAt: t.CreatedAt, ResolvedAt: t.ResolvedAt,
 	}
-	return nil
+}
+
+func (r *Repository) Create(ctx context.Context, t model.OwnershipTransfer) error {
+	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `
+			INSERT INTO ownership_transfers (id, server_id, from_user_id, to_user_id, status, created_at)
+			VALUES ($1, $2, $3, $4, $5, $6)`,
+			t.ID, t.ServerID, t.FromUserID, t.ToUserID, string(t.Status), t.CreatedAt,
+		)
+		if err != nil {
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) && pgErr.Code == pgUniqueViolation && pgErr.ConstraintName == uqPendingPerServer {
+				return model.ErrOwnershipTransferAlreadyPending
+			}
+			return fmt.Errorf("insert ownership transfer: %w", err)
+		}
+		return repository.PublishOwnershipTransfer(ctx, tx, snapshot(t), string(model.OwnershipTransferPending))
+	})
 }
 
 func (r *Repository) GetByID(ctx context.Context, id uuid.UUID) (model.OwnershipTransfer, error) {
@@ -87,45 +96,112 @@ func (r *Repository) GetPendingByServer(ctx context.Context, serverID uuid.UUID)
 }
 
 func (r *Repository) Reject(ctx context.Context, id uuid.UUID, resolvedAt time.Time) (model.OwnershipTransfer, error) {
-	t, err := scanTransfer(r.pool.QueryRow(ctx, `
-		UPDATE ownership_transfers SET status = 'rejected', resolved_at = $2
-		 WHERE id = $1 AND status = 'pending'
-		RETURNING id, server_id, from_user_id, to_user_id, status, created_at, resolved_at`,
-		id, resolvedAt,
-	))
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return model.OwnershipTransfer{}, model.ErrOwnershipTransferNotPending
+	var t model.OwnershipTransfer
+	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+		var scanErr error
+		t, scanErr = scanTransfer(tx.QueryRow(ctx, `
+			UPDATE ownership_transfers SET status = 'rejected', resolved_at = $2
+			 WHERE id = $1 AND status = 'pending'
+			RETURNING id, server_id, from_user_id, to_user_id, status, created_at, resolved_at`,
+			id, resolvedAt,
+		))
+		if scanErr != nil {
+			if errors.Is(scanErr, pgx.ErrNoRows) {
+				return model.ErrOwnershipTransferNotPending
+			}
+			return fmt.Errorf("reject ownership transfer: %w", scanErr)
 		}
-		return model.OwnershipTransfer{}, fmt.Errorf("reject ownership transfer: %w", err)
+		return repository.PublishOwnershipTransfer(ctx, tx, snapshot(t), "rejected")
+	})
+	if err != nil {
+		return model.OwnershipTransfer{}, err
+	}
+	return t, nil
+}
+
+func (r *Repository) Expire(ctx context.Context, id uuid.UUID, resolvedAt time.Time) (model.OwnershipTransfer, error) {
+	var t model.OwnershipTransfer
+	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+		var scanErr error
+		t, scanErr = scanTransfer(tx.QueryRow(ctx, `
+			UPDATE ownership_transfers SET status = 'rejected', resolved_at = $2
+			 WHERE id = $1 AND status = 'pending'
+			RETURNING id, server_id, from_user_id, to_user_id, status, created_at, resolved_at`,
+			id, resolvedAt,
+		))
+		if scanErr != nil {
+			if errors.Is(scanErr, pgx.ErrNoRows) {
+				return model.ErrOwnershipTransferNotPending
+			}
+			return fmt.Errorf("expire ownership transfer: %w", scanErr)
+		}
+		return repository.PublishOwnershipTransfer(ctx, tx, snapshot(t), "expired")
+	})
+	if err != nil {
+		return model.OwnershipTransfer{}, err
 	}
 	return t, nil
 }
 
 func (r *Repository) ExpireStalePending(ctx context.Context, cutoff time.Time, resolvedAt time.Time) (int, error) {
-	tag, err := r.pool.Exec(ctx, `
-		UPDATE ownership_transfers SET status = 'rejected', resolved_at = $2
-		 WHERE status = 'pending' AND created_at < $1`,
-		cutoff, resolvedAt,
-	)
+	count := 0
+	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, `
+			UPDATE ownership_transfers SET status = 'rejected', resolved_at = $2
+			 WHERE status = 'pending' AND created_at < $1
+			RETURNING id, server_id, from_user_id, to_user_id, status, created_at, resolved_at`,
+			cutoff, resolvedAt,
+		)
+		if err != nil {
+			return fmt.Errorf("expire stale ownership transfers: %w", err)
+		}
+		var expired []model.OwnershipTransfer
+		for rows.Next() {
+			t, err := scanTransfer(rows)
+			if err != nil {
+				rows.Close()
+				return fmt.Errorf("scan expired ownership transfer: %w", err)
+			}
+			expired = append(expired, t)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return fmt.Errorf("expire stale ownership transfers: %w", err)
+		}
+		for _, t := range expired {
+			if err := repository.PublishOwnershipTransfer(ctx, tx, snapshot(t), "expired"); err != nil {
+				return err
+			}
+		}
+		count = len(expired)
+		return nil
+	})
 	if err != nil {
-		return 0, fmt.Errorf("expire stale ownership transfers: %w", err)
+		return 0, err
 	}
-	return int(tag.RowsAffected()), nil
+	return count, nil
 }
 
 func (r *Repository) Cancel(ctx context.Context, id uuid.UUID, resolvedAt time.Time) (model.OwnershipTransfer, error) {
-	t, err := scanTransfer(r.pool.QueryRow(ctx, `
-		UPDATE ownership_transfers SET status = 'cancelled', resolved_at = $2
-		 WHERE id = $1 AND status = 'pending'
-		RETURNING id, server_id, from_user_id, to_user_id, status, created_at, resolved_at`,
-		id, resolvedAt,
-	))
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return model.OwnershipTransfer{}, model.ErrOwnershipTransferNotPending
+	var t model.OwnershipTransfer
+	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+		var scanErr error
+		t, scanErr = scanTransfer(tx.QueryRow(ctx, `
+			UPDATE ownership_transfers SET status = 'cancelled', resolved_at = $2
+			 WHERE id = $1 AND status = 'pending'
+			RETURNING id, server_id, from_user_id, to_user_id, status, created_at, resolved_at`,
+			id, resolvedAt,
+		))
+		if scanErr != nil {
+			if errors.Is(scanErr, pgx.ErrNoRows) {
+				return model.ErrOwnershipTransferNotPending
+			}
+			return fmt.Errorf("cancel ownership transfer: %w", scanErr)
 		}
-		return model.OwnershipTransfer{}, fmt.Errorf("cancel ownership transfer: %w", err)
+		return repository.PublishOwnershipTransfer(ctx, tx, snapshot(t), "cancelled")
+	})
+	if err != nil {
+		return model.OwnershipTransfer{}, err
 	}
 	return t, nil
 }
@@ -191,6 +267,9 @@ func (r *Repository) Accept(ctx context.Context, id uuid.UUID, resolvedAt time.T
 			return nil
 		})
 		if err != nil {
+			return err
+		}
+		if err := repository.PublishOwnershipTransfer(ctx, tx, snapshot(t), "accepted"); err != nil {
 			return err
 		}
 		if err := repository.PublishOwner(ctx, tx, t.ServerID, t.ToUserID); err != nil {
