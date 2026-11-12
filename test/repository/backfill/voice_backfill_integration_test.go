@@ -133,13 +133,14 @@ func newVoiceBackfillPool(t *testing.T) *pgxpool.Pool {
 	}
 	t.Cleanup(pool.Close)
 	_, _ = pool.Exec(context.Background(), `
-		DROP TABLE IF EXISTS server_mutes, channel_permission_overrides, member_roles,
-		ownership_transfers, roles, server_members, channels, servers CASCADE`)
-	for _, migration := range []string{
-		"0001_init", "0003_roles", "0004_member_roles", "0006_ownership_transfers",
-		"0015_role_positions", "0019_everyone_role", "0020_channel_permission_overrides",
-		"0021_server_mutes", "0025_connect_permission",
-	} {
+			DROP TABLE IF EXISTS outbox_events, server_mutes, channel_permission_overrides, member_roles,
+			ownership_transfers, roles, server_members, channels, servers CASCADE`)
+		for _, migration := range []string{
+			"0001_init", "0003_roles", "0004_member_roles", "0006_ownership_transfers",
+			/* agregar aquí la migración que crea outbox_events, ej. "00XX_outbox_events", */
+			"0015_role_positions", "0019_everyone_role", "0020_channel_permission_overrides",
+			"0021_server_mutes", "0025_connect_permission",
+		} {
 		sql, err := os.ReadFile("../../../migrations/" + migration + ".up.sql")
 		if err != nil {
 			t.Fatalf("read migration %s: %v", migration, err)
@@ -149,10 +150,10 @@ func newVoiceBackfillPool(t *testing.T) *pgxpool.Pool {
 		}
 	}
 	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(), `
-			DROP TABLE IF EXISTS server_mutes, channel_permission_overrides, member_roles,
-			ownership_transfers, roles, server_members, channels, servers CASCADE`)
-	})
+			_, _ = pool.Exec(context.Background(), `
+				DROP TABLE IF EXISTS outbox_events, server_mutes, channel_permission_overrides, member_roles,
+				ownership_transfers, roles, server_members, channels, servers CASCADE`)
+		})
 	return pool
 }
 
