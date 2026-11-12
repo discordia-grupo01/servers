@@ -4,9 +4,21 @@ on:
   pull_request:
   push:
     branches: [main, develop]
+  workflow_dispatch:
+    inputs:
+      voice_instance_id:
+        description: "ID de instancia/réplica de signaling (si aplica)"
+        required: false
+        type: string
+      dry_run:
+        description: "Ejecutar en modo simulación (--dry-run)"
+        required: true
+        default: true
+        type: boolean
 
 jobs:
   test:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -194,3 +206,66 @@ jobs:
             -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
             -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
             "$VM_USER@localhost" "${{ github.sha }}"
+
+  # Job manual (workflow_dispatch) para hidratar la réplica de autorización de
+  # voz en signaling. Conecta el runner a la tailnet vía Tailscale para llegar
+  # a RabbitMQ/Postgres privados y ejecuta el binario `backfillvoice`.
+  backfill-voice:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: backfill-voice
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Instalar y conectar Tailscale
+        env:
+          TS_AUTHKEY: ${{ secrets.TS_AUTHKEY }}
+        run: |
+          if [ -z "$TS_AUTHKEY" ]; then
+            echo "Falta el secret TS_AUTHKEY" >&2
+            exit 1
+          fi
+          curl -fsSL https://tailscale.com/install.sh | sh
+          sudo tailscale up \
+            --authkey="$TS_AUTHKEY" \
+            --hostname="gh-backfill-${{ github.run_id }}" \
+            --accept-routes
+          tailscale status
+
+      - name: Ejecutar backfill de voz en producción
+        env:
+          DATABASE_HOST: ${{ secrets.PROD_DATABASE_HOST }}
+          DATABASE_PORT: ${{ secrets.PROD_DATABASE_PORT }}
+          DATABASE_NAME: ${{ secrets.PROD_DATABASE_NAME }}
+          DATABASE_USER: ${{ secrets.PROD_DATABASE_USER }}
+          DATABASE_PASSWORD: ${{ secrets.PROD_DATABASE_PASSWORD }}
+          DATABASE_SSLMODE: ${{ secrets.PROD_DATABASE_SSLMODE }}
+          DATABASE_SCHEMA: ${{ secrets.PROD_DATABASE_SCHEMA }}
+          RABBITMQ_URL: ${{ secrets.PROD_RABBITMQ_URL }}
+          VOICE_INSTANCE_ID: ${{ inputs.voice_instance_id }}
+        run: |
+          if [ -z "$DATABASE_HOST" ] || [ -z "$DATABASE_PASSWORD" ] || [ -z "$RABBITMQ_URL" ]; then
+            echo "Faltan secrets requeridos (PROD_DATABASE_* o PROD_RABBITMQ_URL)" >&2
+            exit 1
+          fi
+
+          ARGS=""
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            ARGS="$ARGS --dry-run"
+          fi
+          if [ -n "$VOICE_INSTANCE_ID" ]; then
+            ARGS="$ARGS --instance-id $VOICE_INSTANCE_ID"
+          fi
+
+          go run ./cmd/backfillvoice $ARGS
+
+      - name: Desconectar Tailscale
+        if: always()
+        run: sudo tailscale logout || true
