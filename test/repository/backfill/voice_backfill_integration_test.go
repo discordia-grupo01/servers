@@ -33,7 +33,7 @@ func TestRunPublishesCompleteVoiceAuthorizationSnapshots(t *testing.T) {
 	voiceID, textID := uuid.New(), uuid.New()
 	everyoneID, roleID := uuid.New(), uuid.New()
 	userID := "member-1"
-	base := time.Now().UTC().Add(-time.Hour)
+	base := time.Now().UTC().Add(-time.Hour).Truncate(time.Microsecond)
 	roleChanged := base.Add(time.Hour)
 	memberChanged := roleChanged.Add(time.Hour)
 	overrideChanged := memberChanged.Add(time.Hour)
@@ -100,18 +100,46 @@ func TestRunPublishesCompleteVoiceAuthorizationSnapshots(t *testing.T) {
 			mute = value
 		}
 	}
-	if channel.ChannelID != voiceID.String() || channel.Kind != "voice" || !channel.Meta.OccurredAt.Equal(base) {
-		t.Errorf("channel snapshot = %+v", channel)
+	if channel.ChannelID != voiceID.String() {
+		t.Errorf("channel id = %s, want %s", channel.ChannelID, voiceID)
 	}
-	if member.UserID != userID || len(member.RoleIDs) != 2 || !member.Meta.OccurredAt.Equal(memberChanged) {
-		t.Errorf("member snapshot = %+v", member)
+	if channel.Kind != "voice" {
+		t.Errorf("channel kind = %s, want voice", channel.Kind)
 	}
-	if overrides.ChannelID != voiceID.String() || len(overrides.Overrides) != 1 ||
-		!overrides.Meta.OccurredAt.Equal(overrideChanged) {
-		t.Errorf("override snapshot = %+v", overrides)
+	if !channel.Meta.OccurredAt.Equal(base) {
+		t.Errorf("channel occurred_at = %s (%d), want %s (%d)",
+			channel.Meta.OccurredAt, channel.Meta.OccurredAt.UnixNano(), base, base.UnixNano())
 	}
-	if mute.UserID != userID || !mute.UntilAt.Equal(muteUntil) || !mute.Meta.OccurredAt.Equal(muteChanged) {
-		t.Errorf("mute snapshot = %+v", mute)
+	if member.UserID != userID {
+		t.Errorf("member user id = %s, want %s", member.UserID, userID)
+	}
+	if len(member.RoleIDs) != 2 {
+		t.Errorf("member role count = %d, want 2", len(member.RoleIDs))
+	}
+	if !member.Meta.OccurredAt.Equal(memberChanged) {
+		t.Errorf("member occurred_at = %s (%d), want %s (%d)",
+			member.Meta.OccurredAt, member.Meta.OccurredAt.UnixNano(), memberChanged, memberChanged.UnixNano())
+	}
+	if overrides.ChannelID != voiceID.String() {
+		t.Errorf("override channel id = %s, want %s", overrides.ChannelID, voiceID)
+	}
+	if len(overrides.Overrides) != 1 {
+		t.Errorf("override count = %d, want 1", len(overrides.Overrides))
+	}
+	if !overrides.Meta.OccurredAt.Equal(overrideChanged) {
+		t.Errorf("override occurred_at = %s (%d), want %s (%d)",
+			overrides.Meta.OccurredAt, overrides.Meta.OccurredAt.UnixNano(), overrideChanged, overrideChanged.UnixNano())
+	}
+	if mute.UserID != userID {
+		t.Errorf("mute user id = %s, want %s", mute.UserID, userID)
+	}
+	if !mute.UntilAt.Equal(muteUntil) {
+		t.Errorf("mute until_at = %s (%d), want %s (%d)",
+			mute.UntilAt, mute.UntilAt.UnixNano(), muteUntil, muteUntil.UnixNano())
+	}
+	if !mute.Meta.OccurredAt.Equal(muteChanged) {
+		t.Errorf("mute occurred_at = %s (%d), want %s (%d)",
+			mute.Meta.OccurredAt, mute.Meta.OccurredAt.UnixNano(), muteChanged, muteChanged.UnixNano())
 	}
 }
 
