@@ -33,7 +33,7 @@ func TestRunPublishesCompleteVoiceAuthorizationSnapshots(t *testing.T) {
 	voiceID, textID := uuid.New(), uuid.New()
 	everyoneID, roleID := uuid.New(), uuid.New()
 	userID := "member-1"
-	base := time.Date(2026, 11, 1, 10, 0, 0, 0, time.UTC)
+	base := time.Now().UTC().Add(-time.Hour)
 	roleChanged := base.Add(time.Hour)
 	memberChanged := roleChanged.Add(time.Hour)
 	overrideChanged := memberChanged.Add(time.Hour)
