@@ -21,7 +21,7 @@ type capturedPublisher struct {
 	events []any
 }
 
-func (p *capturedPublisher) Publish(_ context.Context, payload any) error {
+func (p *capturedPublisher) Publish(_ context.Context, _ string, payload any) error {
 	p.events = append(p.events, payload)
 	return nil
 }

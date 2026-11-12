@@ -14,7 +14,7 @@ import (
 
 type countingPublisher struct{}
 
-func (countingPublisher) Publish(context.Context, any) error { return nil }
+func (countingPublisher) Publish(context.Context, string, any) error { return nil }
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)

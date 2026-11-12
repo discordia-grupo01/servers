@@ -11,6 +11,7 @@ import (
 )
 
 const dialTimeout = 3 * time.Second
+const eventsExchange = "discordia.events"
 
 type AMQPPublisher struct {
 	queue string
@@ -53,7 +54,7 @@ func (p *AMQPPublisher) connect(url string) error {
 	return nil
 }
 
-func (p *AMQPPublisher) Publish(ctx context.Context, payload any) error {
+func (p *AMQPPublisher) Publish(ctx context.Context, routingKey string, payload any) error {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("marshal backfill event: %w", err)
@@ -61,16 +62,16 @@ func (p *AMQPPublisher) Publish(ctx context.Context, payload any) error {
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	confirmation, err := p.ch.PublishWithDeferredConfirmWithContext(ctx, "", p.queue, true, false, amqp.Publishing{
+	confirmation, err := p.ch.PublishWithDeferredConfirmWithContext(ctx, eventsExchange, routingKey, false, false, amqp.Publishing{
 		ContentType:  "application/json",
 		Body:         body,
 		DeliveryMode: amqp.Persistent,
 	})
 	if err != nil {
-		return fmt.Errorf("publish to queue %q: %w", p.queue, err)
+		return fmt.Errorf("publish with routing key %q: %w", routingKey, err)
 	}
 	if confirmation == nil || !confirmation.Wait() {
-		return fmt.Errorf("RabbitMQ did not confirm event for queue %q", p.queue)
+		return fmt.Errorf("RabbitMQ did not confirm event with routing key %q", routingKey)
 	}
 	return nil
 }
