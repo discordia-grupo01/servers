@@ -223,10 +223,22 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.22"
-      - name: Conectar a Tailscale
-        uses: tailscale/github-action@v4
-        with:
-          authkey: ${{ secrets.TS_AUTHKEY }}
+
+      - name: Instalar y conectar Tailscale
+        env:
+          TS_AUTHKEY: ${{ secrets.TS_AUTHKEY }}
+        run: |
+          if [ -z "$TS_AUTHKEY" ]; then
+            echo "Falta el secret TS_AUTHKEY" >&2
+            exit 1
+          fi
+          curl -fsSL https://tailscale.com/install.sh | sh
+          sudo tailscale up \
+            --authkey="$TS_AUTHKEY" \
+            --hostname="gh-backfill-${{ github.run_id }}" \
+            --accept-routes
+          tailscale status
+
       - name: Ejecutar backfill de voz en producción
         env:
           DATABASE_HOST: ${{ secrets.PROD_DATABASE_HOST }}
@@ -248,9 +260,12 @@ jobs:
           if [ "${{ inputs.dry_run }}" = "true" ]; then
             ARGS="$ARGS --dry-run"
           fi
-          # Ajustá el flag si tu cmd/backfillvoice espera otro nombre (ej. --replica)
           if [ -n "$VOICE_INSTANCE_ID" ]; then
             ARGS="$ARGS --instance-id $VOICE_INSTANCE_ID"
           fi
 
           go run ./cmd/backfillvoice $ARGS
+
+      - name: Desconectar Tailscale
+        if: always()
+        run: sudo tailscale logout || true
