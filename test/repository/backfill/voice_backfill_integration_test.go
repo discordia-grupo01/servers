@@ -81,8 +81,8 @@ func TestRunPublishesCompleteVoiceAuthorizationSnapshots(t *testing.T) {
 		counts.Members != 1 || counts.Overrides != 2 || counts.Mutes != 1 {
 		t.Fatalf("counts = %+v, want one voice snapshot per category", counts)
 	}
-	if len(publisher.events) != 8 {
-		t.Fatalf("published events = %d, want 8", len(publisher.events))
+	if len(publisher.events) != 9 {
+		t.Fatalf("published events = %d, want 9", len(publisher.events))
 	}
 
 	channelsByID := make(map[string]channels.ChannelCreated)
