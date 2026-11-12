@@ -137,7 +137,7 @@ func newVoiceBackfillPool(t *testing.T) *pgxpool.Pool {
 			ownership_transfers, roles, server_members, channels, servers CASCADE`)
 	for _, migration := range []string{
 		"0001_init", "0003_roles", "0004_member_roles", "0006_ownership_transfers",
-		/* agregar aquí la migración que crea outbox_events, ej. "00XX_outbox_events", */
+		"0011_outbox_events",
 		"0015_role_positions", "0019_everyone_role", "0020_channel_permission_overrides",
 		"0021_server_mutes", "0025_connect_permission",
 	} {
