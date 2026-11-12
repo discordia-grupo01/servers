@@ -100,6 +100,24 @@ sin llamar a identify:
 
 Las `DATABASE_*` no tienen default: si falta alguna, el servicio no arranca (no se usa una credencial adivinada). Los valores reales van en el `.env`; `.env.example` trae los del Postgres local.
 
+### Backfill de autorización para voice signaling
+
+Para poblar una réplica nueva de voice sin depender de eventos históricos:
+
+```text
+VOICE_EVENTS_QUEUE=voice.signaling VOICE_INSTANCE_ID=staging-1 make backfill-voice
+VOICE_EVENTS_QUEUE=voice.signaling VOICE_INSTANCE_ID=staging-1 make backfill-voice ARGS=--dry-run
+```
+
+El comando publica directamente al exchange default de RabbitMQ, con la routing
+key igual a la cola `VOICE_EVENTS_QUEUE.VOICE_INSTANCE_ID.replica`; por eso no
+entrega el backfill a otros consumidores. Verifica que la cola exista y usa
+confirmaciones del broker. Los `occurred_at` salen de `created_at`, `updated_at`,
+`assigned_at`, `resolved_at`, `muted_at` o `joined_at` reales de cada entidad,
+nunca de la hora de ejecución. La réplica debe seguir en
+`VOICE_AUTHZ_MODE=replica_shadow` hasta observar paridad y completar la
+reconciliación operativa.
+
 ## Estructura de carpetas
 ```
 servers/
