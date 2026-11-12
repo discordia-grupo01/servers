@@ -30,7 +30,7 @@ func TestRunPublishesCompleteVoiceAuthorizationSnapshots(t *testing.T) {
 	pool := newVoiceBackfillPool(t)
 	ctx := context.Background()
 	serverID := uuid.New()
-	voiceID, textID := uuid.New(), uuid.New()
+	voiceID, emptyVoiceID, textID := uuid.New(), uuid.New(), uuid.New()
 	everyoneID, roleID := uuid.New(), uuid.New()
 	userID := "member-1"
 	base := time.Now().UTC().Add(-time.Hour).Truncate(time.Microsecond)
@@ -44,8 +44,9 @@ func TestRunPublishesCompleteVoiceAuthorizationSnapshots(t *testing.T) {
 		`INSERT INTO servers (id, name, name_key, owner_id, created_at) VALUES ($1, 'Sala', 'sala', 'owner-1', $2)`,
 		serverID, base)
 	execVoiceBackfill(t, pool,
-		`INSERT INTO channels (id, server_id, name, kind, created_at) VALUES ($1, $2, 'voz', 'voice', $3), ($4, $2, 'texto', 'text', $3)`,
-		voiceID, serverID, base, textID)
+		`INSERT INTO channels (id, server_id, name, kind, created_at)
+		 VALUES ($1, $2, 'voz', 'voice', $3), ($4, $2, 'voz-vacia', 'voice', $3), ($5, $2, 'texto', 'text', $3)`,
+		voiceID, serverID, base, emptyVoiceID, textID)
 	execVoiceBackfill(t, pool,
 		`INSERT INTO roles (id, server_id, name, color, permissions, position, is_everyone, created_at, updated_at)
 		 VALUES ($1, $3, '@everyone', '#000000', $4, 0, true, $5, $5),
@@ -76,30 +77,31 @@ func TestRunPublishesCompleteVoiceAuthorizationSnapshots(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if counts.Channels != 1 || counts.Roles != 2 || counts.Owners != 1 ||
-		counts.Members != 1 || counts.Overrides != 1 || counts.Mutes != 1 {
+	if counts.Channels != 2 || counts.Roles != 2 || counts.Owners != 1 ||
+		counts.Members != 1 || counts.Overrides != 2 || counts.Mutes != 1 {
 		t.Fatalf("counts = %+v, want one voice snapshot per category", counts)
 	}
-	if len(publisher.events) != 7 {
-		t.Fatalf("published events = %d, want 7", len(publisher.events))
+	if len(publisher.events) != 9 {
+		t.Fatalf("published events = %d, want 9", len(publisher.events))
 	}
 
-	var channel channels.ChannelCreated
+	channelsByID := make(map[string]channels.ChannelCreated)
 	var member permissions.MemberRolesUpdated
-	var overrides permissions.ChannelOverridesUpdated
+	overridesByChannelID := make(map[string]permissions.ChannelOverridesUpdated)
 	var mute moderation.MemberMuted
 	for _, event := range publisher.events {
 		switch value := event.(type) {
 		case channels.ChannelCreated:
-			channel = value
+			channelsByID[value.ChannelID] = value
 		case permissions.MemberRolesUpdated:
 			member = value
 		case permissions.ChannelOverridesUpdated:
-			overrides = value
+			overridesByChannelID[value.ChannelID] = value
 		case moderation.MemberMuted:
 			mute = value
 		}
 	}
+	channel := channelsByID[voiceID.String()]
 	if channel.ChannelID != voiceID.String() {
 		t.Errorf("channel id = %s, want %s", channel.ChannelID, voiceID)
 	}
@@ -120,6 +122,7 @@ func TestRunPublishesCompleteVoiceAuthorizationSnapshots(t *testing.T) {
 		t.Errorf("member occurred_at = %s (%d), want %s (%d)",
 			member.Meta.OccurredAt, member.Meta.OccurredAt.UnixNano(), memberChanged, memberChanged.UnixNano())
 	}
+	overrides := overridesByChannelID[voiceID.String()]
 	if overrides.ChannelID != voiceID.String() {
 		t.Errorf("override channel id = %s, want %s", overrides.ChannelID, voiceID)
 	}
@@ -129,6 +132,17 @@ func TestRunPublishesCompleteVoiceAuthorizationSnapshots(t *testing.T) {
 	if !overrides.Meta.OccurredAt.Equal(overrideChanged) {
 		t.Errorf("override occurred_at = %s (%d), want %s (%d)",
 			overrides.Meta.OccurredAt, overrides.Meta.OccurredAt.UnixNano(), overrideChanged, overrideChanged.UnixNano())
+	}
+	emptyOverrides := overridesByChannelID[emptyVoiceID.String()]
+	if emptyOverrides.ChannelID != emptyVoiceID.String() {
+		t.Errorf("empty override channel id = %s, want %s", emptyOverrides.ChannelID, emptyVoiceID)
+	}
+	if len(emptyOverrides.Overrides) != 0 {
+		t.Errorf("empty override count = %d, want 0", len(emptyOverrides.Overrides))
+	}
+	if !emptyOverrides.Meta.OccurredAt.Equal(base) {
+		t.Errorf("empty override occurred_at = %s (%d), want %s (%d)",
+			emptyOverrides.Meta.OccurredAt, emptyOverrides.Meta.OccurredAt.UnixNano(), base, base.UnixNano())
 	}
 	if mute.UserID != userID {
 		t.Errorf("mute user id = %s, want %s", mute.UserID, userID)

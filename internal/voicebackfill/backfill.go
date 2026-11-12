@@ -205,7 +205,8 @@ func publishMembers(ctx context.Context, pool *pgxpool.Pool, publisher Publisher
 
 func publishOverrides(ctx context.Context, pool *pgxpool.Pool, publisher Publisher, counts *Counts) error {
 	rows, err := pool.Query(ctx, `
-		SELECT c.id, c.server_id, c.created_at, o.role_id, o.allow, o.deny, o.updated_at
+		SELECT c.id, c.server_id, c.created_at, o.role_id,
+		       COALESCE(o.allow, 0), COALESCE(o.deny, 0), o.updated_at
 		  FROM channels c
 		  LEFT JOIN channel_permission_overrides o ON o.channel_id = c.id
 		 WHERE c.kind = 'voice'
