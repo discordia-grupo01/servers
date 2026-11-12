@@ -138,7 +138,7 @@ func newVoiceBackfillPool(t *testing.T) *pgxpool.Pool {
 	for _, migration := range []string{
 		"0001_init", "0003_roles", "0004_member_roles", "0006_ownership_transfers",
 		"0015_role_positions", "0019_everyone_role", "0020_channel_permission_overrides",
-		"0021_server_mutes",
+		"0021_server_mutes", "0025_connect_permission",
 	} {
 		sql, err := os.ReadFile("../../../migrations/" + migration + ".up.sql")
 		if err != nil {
