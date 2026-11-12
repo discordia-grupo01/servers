@@ -62,9 +62,9 @@ func main() {
 	if *dryRun {
 		prefix = "[dry-run] "
 	}
-	fmt.Printf("%scola %q: %d eventos (canales=%d roles=%d dueños=%d miembros=%d overrides=%d mutes=%d)\n",
+	fmt.Printf("%scola %q: %d eventos (canales=%d roles=%d dueños=%d miembros=%d perfiles=%d overrides=%d mutes=%d)\n",
 		prefix, targetQueue, counts.Total(), counts.Channels, counts.Roles, counts.Owners,
-		counts.Members, counts.Overrides, counts.Mutes)
+		counts.Members, counts.Profiles, counts.Overrides, counts.Mutes)
 }
 
 func getenv(key, fallback string) string {

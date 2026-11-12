@@ -12,6 +12,7 @@ import (
 	"github.com/discordia-grupo01/events-contract/channels"
 	"github.com/discordia-grupo01/events-contract/moderation"
 	"github.com/discordia-grupo01/events-contract/permissions"
+	"github.com/discordia-grupo01/events-contract/users"
 	"github.com/discordia-grupo01/servers/internal/model/role"
 	"github.com/discordia-grupo01/servers/internal/repository"
 	"github.com/discordia-grupo01/servers/internal/voicebackfill"
@@ -57,6 +58,10 @@ func TestRunPublishesCompleteVoiceAuthorizationSnapshots(t *testing.T) {
 		`INSERT INTO server_members (server_id, user_id, joined_at) VALUES ($1, $2, $3)`,
 		serverID, userID, base)
 	execVoiceBackfill(t, pool,
+		`INSERT INTO user_profiles (user_id, name, avatar_url, description, status_text, status_emoji, version, updated_at)
+		 VALUES ($1, 'Member', 'avatar', 'description', 'online', ':wave:', 1, $2)`,
+		userID, memberChanged)
+	execVoiceBackfill(t, pool,
 		`INSERT INTO member_roles (server_id, user_id, role_id, assigned_at) VALUES ($1, $2, $3, $4), ($1, $2, $5, $6)`,
 		serverID, userID, everyoneID, base, roleID, memberChanged)
 	execVoiceBackfill(t, pool,
@@ -78,15 +83,16 @@ func TestRunPublishesCompleteVoiceAuthorizationSnapshots(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 	if counts.Channels != 2 || counts.Roles != 2 || counts.Owners != 1 ||
-		counts.Members != 1 || counts.Overrides != 2 || counts.Mutes != 1 {
+		counts.Members != 1 || counts.Profiles != 1 || counts.Overrides != 2 || counts.Mutes != 1 {
 		t.Fatalf("counts = %+v, want one voice snapshot per category", counts)
 	}
-	if len(publisher.events) != 9 {
-		t.Fatalf("published events = %d, want 9", len(publisher.events))
+	if len(publisher.events) != 10 {
+		t.Fatalf("published events = %d, want 10", len(publisher.events))
 	}
 
 	channelsByID := make(map[string]channels.ChannelCreated)
 	var member permissions.MemberRolesUpdated
+	var profile users.ProfileUpdated
 	overridesByChannelID := make(map[string]permissions.ChannelOverridesUpdated)
 	var mute moderation.MemberMuted
 	for _, event := range publisher.events {
@@ -95,6 +101,8 @@ func TestRunPublishesCompleteVoiceAuthorizationSnapshots(t *testing.T) {
 			channelsByID[value.ChannelID] = value
 		case permissions.MemberRolesUpdated:
 			member = value
+		case users.ProfileUpdated:
+			profile = value
 		case permissions.ChannelOverridesUpdated:
 			overridesByChannelID[value.ChannelID] = value
 		case moderation.MemberMuted:
@@ -121,6 +129,13 @@ func TestRunPublishesCompleteVoiceAuthorizationSnapshots(t *testing.T) {
 	if !member.Meta.OccurredAt.Equal(memberChanged) {
 		t.Errorf("member occurred_at = %s (%d), want %s (%d)",
 			member.Meta.OccurredAt, member.Meta.OccurredAt.UnixNano(), memberChanged, memberChanged.UnixNano())
+	}
+	if profile.UserID != userID || profile.Name != "Member" || profile.Version != 1 {
+		t.Errorf("profile = %+v, want member snapshot", profile)
+	}
+	if !profile.Meta.OccurredAt.Equal(memberChanged) {
+		t.Errorf("profile occurred_at = %s (%d), want %s (%d)",
+			profile.Meta.OccurredAt, profile.Meta.OccurredAt.UnixNano(), memberChanged, memberChanged.UnixNano())
 	}
 	overrides := overridesByChannelID[voiceID.String()]
 	if overrides.ChannelID != voiceID.String() {
@@ -175,11 +190,11 @@ func newVoiceBackfillPool(t *testing.T) *pgxpool.Pool {
 	}
 	t.Cleanup(pool.Close)
 	_, _ = pool.Exec(context.Background(), `
-			DROP TABLE IF EXISTS outbox_events, server_mutes, channel_permission_overrides, member_roles,
+			DROP TABLE IF EXISTS outbox_events, user_profiles, server_mutes, channel_permission_overrides, member_roles,
 			ownership_transfers, roles, server_members, channels, servers CASCADE`)
 	for _, migration := range []string{
 		"0001_init", "0003_roles", "0004_member_roles", "0006_ownership_transfers",
-		"0011_outbox_events",
+		"0011_outbox_events", "0017_user_profiles",
 		"0015_role_positions", "0019_everyone_role", "0020_channel_permission_overrides",
 		"0021_server_mutes", "0025_connect_permission",
 	} {
@@ -193,7 +208,7 @@ func newVoiceBackfillPool(t *testing.T) *pgxpool.Pool {
 	}
 	t.Cleanup(func() {
 		_, _ = pool.Exec(context.Background(), `
-				DROP TABLE IF EXISTS outbox_events, server_mutes, channel_permission_overrides, member_roles,
+				DROP TABLE IF EXISTS outbox_events, user_profiles, server_mutes, channel_permission_overrides, member_roles,
 				ownership_transfers, roles, server_members, channels, servers CASCADE`)
 	})
 	return pool
