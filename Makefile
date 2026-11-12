@@ -1,4 +1,4 @@
-.PHONY: run test mutation build db-reset migrate openapi
+.PHONY: run test mutation build db-reset migrate openapi backfill-voice
 
 -include .env
 export
@@ -45,3 +45,8 @@ openapi:
 	go run github.com/swaggo/swag/cmd/swag@v1.16.4 init -g cmd/api/main.go -o ./.openapi-tmp --parseInternal -q
 	npx --yes swagger2openapi@7 ./.openapi-tmp/swagger.yaml -o openapi.yaml --patch
 	rm -rf ./.openapi-tmp
+
+# Publica el snapshot actual de autorizacion solo en la cola de una replica de
+# voice. Usar ARGS=--dry-run para contar sin publicar.
+backfill-voice:
+	go run ./cmd/backfillvoice $(ARGS)
