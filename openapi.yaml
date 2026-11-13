@@ -2456,11 +2456,10 @@ paths:
         - mentions
   "/v1/servers/{serverId}/moderation-audit":
     get:
-      description: "Only for moderators: MANAGE_MESSAGES, KICK_MEMBERS and
-        BAN_MEMBERS held together (the owner and administrators hold them
-        implicitly). Newest first, paginated. Each entry carries the replicated
-        profiles of the actor and the target (null when they haven't arrived
-        yet)."
+      description: "Only for moderators: MANAGE_MESSAGES, KICK_MEMBERS and BAN_MEMBERS
+        held together (the owner and administrators hold them implicitly).
+        Newest first, paginated. Each entry carries the replicated profiles of
+        the actor and the target (null when they haven't arrived yet)."
       parameters:
         - description: Server ID
           in: path
@@ -3731,7 +3730,13 @@ components:
         action:
           type: string
         actor_profile:
-          $ref: "#/components/schemas/model.MemberProfileResponse"
+          allOf:
+            - $ref: "#/components/schemas/model.MemberProfileResponse"
+          description: >-
+            Replicated from identify; nil until it arrives. The target of a kick
+            or
+
+            ban is no longer a member, so this is the only way to name them.
         actor_user_id:
           type: string
         id:
