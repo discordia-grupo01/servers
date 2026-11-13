@@ -468,10 +468,14 @@ func (r *Repository) ListAudit(ctx context.Context, serverID uuid.UUID, limit, o
 	}
 
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, server_id, action, actor_user_id, target_user_id, occurred_at
-		  FROM moderation_audit_entries
-		 WHERE server_id = $1
-		 ORDER BY occurred_at DESC, id DESC
+		SELECT a.id, a.server_id, a.action, a.actor_user_id, a.target_user_id, a.occurred_at,
+		       ap.user_id, ap.name, ap.avatar_url, ap.description, ap.status_text, ap.status_emoji,
+		       tp.user_id, tp.name, tp.avatar_url, tp.description, tp.status_text, tp.status_emoji
+		  FROM moderation_audit_entries a
+		  LEFT JOIN user_profiles ap ON ap.user_id = a.actor_user_id
+		  LEFT JOIN user_profiles tp ON tp.user_id = a.target_user_id
+		 WHERE a.server_id = $1
+		 ORDER BY a.occurred_at DESC, a.id DESC
 		 LIMIT $2 OFFSET $3`, serverID, limit, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("list moderation audit: %w", err)
@@ -481,13 +485,34 @@ func (r *Repository) ListAudit(ctx context.Context, serverID uuid.UUID, limit, o
 	entries := make([]moderation.AuditEntry, 0)
 	for rows.Next() {
 		var entry moderation.AuditEntry
-		if err := rows.Scan(&entry.ID, &entry.ServerID, &entry.Action, &entry.ActorUserID, &entry.TargetUserID, &entry.OccurredAt); err != nil {
+		var actor, target nullableProfile
+		if err := rows.Scan(&entry.ID, &entry.ServerID, &entry.Action, &entry.ActorUserID, &entry.TargetUserID, &entry.OccurredAt,
+			&actor.userID, &actor.name, &actor.avatarURL, &actor.description, &actor.statusText, &actor.statusEmoji,
+			&target.userID, &target.name, &target.avatarURL, &target.description, &target.statusText, &target.statusEmoji,
+		); err != nil {
 			return nil, 0, fmt.Errorf("scan moderation audit: %w", err)
 		}
+		entry.ActorProfile = actor.response()
+		entry.TargetProfile = target.response()
 		entries = append(entries, entry)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, 0, fmt.Errorf("list moderation audit: %w", err)
 	}
 	return entries, total, nil
+}
+
+// nullableProfile scans the columns of a LEFT JOINed user_profiles row.
+type nullableProfile struct {
+	userID, name, avatarURL, description, statusText, statusEmoji *string
+}
+
+func (p nullableProfile) response() *model.MemberProfileResponse {
+	if p.userID == nil {
+		return nil
+	}
+	return &model.MemberProfileResponse{
+		Name: *p.name, AvatarURL: *p.avatarURL, Description: *p.description,
+		StatusText: *p.statusText, StatusEmoji: *p.statusEmoji,
+	}
 }

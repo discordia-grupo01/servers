@@ -260,7 +260,7 @@ func (h *Handler) ListBans(c *gin.Context) {
 
 // ListAudit godoc
 // @Summary      List the server moderation audit log
-// @Description  Requires any moderation permission: MANAGE_MESSAGES, KICK_MEMBERS or BAN_MEMBERS. Newest first, paginated.
+// @Description  Only for moderators: MANAGE_MESSAGES, KICK_MEMBERS and BAN_MEMBERS held together (the owner and administrators hold them implicitly). Newest first, paginated. Each entry carries the replicated profiles of the actor and the target (null when they haven't arrived yet).
 // @Tags         moderation
 // @Produce      json
 // @Security     BearerAuth

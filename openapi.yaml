@@ -2456,8 +2456,11 @@ paths:
         - mentions
   "/v1/servers/{serverId}/moderation-audit":
     get:
-      description: "Requires any moderation permission: MANAGE_MESSAGES, KICK_MEMBERS
-        or BAN_MEMBERS. Newest first, paginated."
+      description: "Only for moderators: MANAGE_MESSAGES, KICK_MEMBERS and
+        BAN_MEMBERS held together (the owner and administrators hold them
+        implicitly). Newest first, paginated. Each entry carries the replicated
+        profiles of the actor and the target (null when they haven't arrived
+        yet)."
       parameters:
         - description: Server ID
           in: path
@@ -3727,6 +3730,8 @@ components:
       properties:
         action:
           type: string
+        actor_profile:
+          $ref: "#/components/schemas/model.MemberProfileResponse"
         actor_user_id:
           type: string
         id:
@@ -3735,6 +3740,8 @@ components:
           type: string
         server_id:
           type: string
+        target_profile:
+          $ref: "#/components/schemas/model.MemberProfileResponse"
         target_user_id:
           type: string
       type: object

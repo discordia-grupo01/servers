@@ -271,6 +271,7 @@ func TestListAudit_Returns200WithThePage(t *testing.T) {
 		Entries: []moderation.AuditEntry{{
 			ID: uuid.New(), ServerID: serverID, Action: moderation.AuditActionBan,
 			ActorUserID: testUser, TargetUserID: "member-1", OccurredAt: at,
+			ActorProfile: &model.MemberProfileResponse{Name: "Ana"},
 		}},
 		Total: 1, Limit: 10, Offset: 5,
 	}}
@@ -289,7 +290,9 @@ func TestListAudit_Returns200WithThePage(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(got.Entries) != 1 || got.Entries[0].Action != moderation.AuditActionBan ||
-		got.Entries[0].ActorUserID != testUser || !got.Entries[0].OccurredAt.Equal(at) {
+		got.Entries[0].ActorUserID != testUser || !got.Entries[0].OccurredAt.Equal(at) ||
+		got.Entries[0].ActorProfile == nil || got.Entries[0].ActorProfile.Name != "Ana" ||
+		got.Entries[0].TargetProfile != nil {
 		t.Fatalf("body=%+v", got)
 	}
 }
