@@ -47,6 +47,7 @@ openapi:
 	rm -rf ./.openapi-tmp
 
 # Publica el snapshot actual de autorizacion solo en la cola de una replica de
-# voice. Usar ARGS=--dry-run para contar sin publicar.
+# voice. Usar ARGS=--dry-run para contar sin publicar. Para reconciliación
+# periódica: ARGS="--interval 5m".
 backfill-voice:
 	go run ./cmd/backfillvoice $(ARGS)

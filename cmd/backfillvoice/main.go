@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"time"
 
 	"github.com/discordia-grupo01/servers/internal/repository"
 	"github.com/discordia-grupo01/servers/internal/voicebackfill"
@@ -24,7 +25,12 @@ func main() {
 	dryRun := fs.Bool("dry-run", false, "cuenta eventos sin publicarlos")
 	queue := fs.String("queue", "", "cola exacta de la réplica (por defecto VOICE_EVENTS_QUEUE.VOICE_INSTANCE_ID.replica)")
 	instanceID := fs.String("instance-id", "", "identificador de la instancia de voice (sobrescribe VOICE_INSTANCE_ID)")
+	interval := fs.Duration("interval", 0, "repite la reconciliación con este intervalo (0 ejecuta una sola vez)")
 	fs.Parse(os.Args[1:])
+	if *interval < 0 {
+		fmt.Fprintln(os.Stderr, "backfillvoice: --interval no puede ser negativo")
+		os.Exit(1)
+	}
 
 	rabbitURL := strings.TrimSpace(os.Getenv("RABBITMQ_URL"))
 	if rabbitURL == "" && !*dryRun {
@@ -53,18 +59,30 @@ func main() {
 		publisher = amqpPublisher
 	}
 
-	counts, err := voicebackfill.Run(ctx, pool, publisher)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "backfillvoice: %v\n", err)
-		os.Exit(1)
+	for {
+		counts, err := voicebackfill.Run(ctx, pool, publisher)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "backfillvoice: %v\n", err)
+			os.Exit(1)
+		}
+		prefix := ""
+		if *dryRun {
+			prefix = "[dry-run] "
+		}
+		fmt.Printf("%scola %q: %d eventos (canales=%d roles=%d dueños=%d miembros=%d perfiles=%d overrides=%d mutes=%d)\n",
+			prefix, targetQueue, counts.Total(), counts.Channels, counts.Roles, counts.Owners,
+			counts.Members, counts.Profiles, counts.Overrides, counts.Mutes)
+		if *interval == 0 {
+			return
+		}
+		timer := time.NewTimer(*interval)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return
+		case <-timer.C:
+		}
 	}
-	prefix := ""
-	if *dryRun {
-		prefix = "[dry-run] "
-	}
-	fmt.Printf("%scola %q: %d eventos (canales=%d roles=%d dueños=%d miembros=%d perfiles=%d overrides=%d mutes=%d)\n",
-		prefix, targetQueue, counts.Total(), counts.Channels, counts.Roles, counts.Owners,
-		counts.Members, counts.Profiles, counts.Overrides, counts.Mutes)
 }
 
 func getenv(key, fallback string) string {
