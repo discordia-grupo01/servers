@@ -555,6 +555,35 @@ func TestListAudit_NewestFirstAndScopedToServer(t *testing.T) {
 	}
 }
 
+func TestListAudit_JoinsActorAndTargetProfiles(t *testing.T) {
+	repo, pool := newRepo(t)
+	ctx := context.Background()
+	serverID := seedServer(ctx, t, pool)
+	exec(ctx, t, pool, `
+		INSERT INTO moderation_audit_entries
+			(id, server_id, action, actor_user_id, target_user_id, occurred_at)
+		VALUES ($1, $2, $3, 'mod-1', 'no-profile', $4)`,
+		uuid.New(), serverID, moderation.AuditActionKick, time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC))
+	exec(ctx, t, pool, `
+		INSERT INTO user_profiles (user_id, name, avatar_url, description, status_text, status_emoji, version)
+		VALUES ('mod-1', 'Ana', 'https://cdn/ana.png', 'hola', 'moderando', '🛡️', 2)`)
+
+	entries, _, err := repo.ListAudit(ctx, serverID, 10, 0)
+	if err != nil {
+		t.Fatalf("ListAudit: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("len = %d, want 1", len(entries))
+	}
+	want := model.MemberProfileResponse{Name: "Ana", AvatarURL: "https://cdn/ana.png", Description: "hola", StatusText: "moderando", StatusEmoji: "🛡️"}
+	if entries[0].ActorProfile == nil || *entries[0].ActorProfile != want {
+		t.Errorf("actor profile = %+v, want %+v", entries[0].ActorProfile, want)
+	}
+	if entries[0].TargetProfile != nil {
+		t.Errorf("target profile = %+v, want nil", entries[0].TargetProfile)
+	}
+}
+
 func TestBanMember_AuditIsWrittenAtomically(t *testing.T) {
 	repo, pool := newRepo(t)
 	ctx := context.Background()
