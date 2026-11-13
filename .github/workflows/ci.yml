@@ -260,9 +260,6 @@ jobs:
           if [ "${{ inputs.dry_run }}" = "true" ]; then
             ARGS="$ARGS --dry-run"
           fi
-          if [ -n "$VOICE_INSTANCE_ID" ]; then
-            ARGS="$ARGS --instance-id $VOICE_INSTANCE_ID"
-          fi
 
           go run ./cmd/backfillvoice $ARGS
 

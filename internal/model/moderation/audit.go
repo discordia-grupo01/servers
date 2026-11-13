@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/discordia-grupo01/servers/internal/model"
 )
 
 const (
@@ -22,6 +24,10 @@ type AuditEntry struct {
 	ActorUserID  string    `json:"actor_user_id"`
 	TargetUserID string    `json:"target_user_id"`
 	OccurredAt   time.Time `json:"occurred_at"`
+	// Replicated from identify; nil until it arrives. The target of a kick or
+	// ban is no longer a member, so this is the only way to name them.
+	ActorProfile  *model.MemberProfileResponse `json:"actor_profile"`
+	TargetProfile *model.MemberProfileResponse `json:"target_profile"`
 }
 
 type AuditPage struct {

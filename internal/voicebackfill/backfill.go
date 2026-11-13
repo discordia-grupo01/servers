@@ -13,11 +13,12 @@ import (
 	"github.com/discordia-grupo01/events-contract/envelope"
 	"github.com/discordia-grupo01/events-contract/moderation"
 	"github.com/discordia-grupo01/events-contract/permissions"
+	"github.com/discordia-grupo01/events-contract/users"
 	"github.com/discordia-grupo01/servers/internal/model/role"
 )
 
 type Publisher interface {
-	Publish(ctx context.Context, payload any) error
+	Publish(ctx context.Context, routingKey string, payload any) error
 }
 
 type Counts struct {
@@ -27,10 +28,11 @@ type Counts struct {
 	Members   int
 	Overrides int
 	Mutes     int
+	Profiles  int
 }
 
 func (c Counts) Total() int {
-	return c.Channels + c.Roles + c.Owners + c.Members + c.Overrides + c.Mutes
+	return c.Channels + c.Roles + c.Owners + c.Members + c.Overrides + c.Mutes + c.Profiles
 }
 
 func Run(ctx context.Context, pool *pgxpool.Pool, publisher Publisher) (Counts, error) {
@@ -46,6 +48,9 @@ func Run(ctx context.Context, pool *pgxpool.Pool, publisher Publisher) (Counts, 
 		return counts, err
 	}
 	if err := publishMembers(ctx, pool, publisher, &counts); err != nil {
+		return counts, err
+	}
+	if err := publishProfiles(ctx, pool, publisher, &counts); err != nil {
 		return counts, err
 	}
 	if err := publishOverrides(ctx, pool, publisher, &counts); err != nil {
@@ -75,7 +80,7 @@ func publishChannels(ctx context.Context, pool *pgxpool.Pool, publisher Publishe
 		if err := rows.Scan(&channelID, &serverID, &name, &kind, &occurredAt); err != nil {
 			return fmt.Errorf("scan voice channel: %w", err)
 		}
-		if err := publisher.Publish(ctx, channels.ChannelCreated{
+		if err := publisher.Publish(ctx, channels.RoutingKeyChannelCreated, channels.ChannelCreated{
 			Meta:      meta(occurredAt),
 			ServerID:  serverID.String(),
 			ChannelID: channelID.String(),
@@ -110,7 +115,7 @@ func publishRoles(ctx context.Context, pool *pgxpool.Pool, publisher Publisher, 
 		if err := rows.Scan(&roleID, &serverID, &mask, &isEveryone, &occurredAt); err != nil {
 			return fmt.Errorf("scan role: %w", err)
 		}
-		if err := publisher.Publish(ctx, permissions.RoleUpdated{
+		if err := publisher.Publish(ctx, permissions.RoutingKeyRoleUpdated, permissions.RoleUpdated{
 			Meta:        meta(occurredAt),
 			ServerID:    serverID.String(),
 			RoleID:      roleID.String(),
@@ -146,7 +151,7 @@ func publishOwners(ctx context.Context, pool *pgxpool.Pool, publisher Publisher,
 		if err := rows.Scan(&serverID, &ownerID, &occurredAt); err != nil {
 			return fmt.Errorf("scan owner: %w", err)
 		}
-		if err := publisher.Publish(ctx, permissions.OwnerUpdated{
+		if err := publisher.Publish(ctx, permissions.RoutingKeyOwnerUpdated, permissions.OwnerUpdated{
 			Meta:     meta(occurredAt),
 			ServerID: serverID,
 			OwnerID:  ownerID,
@@ -187,7 +192,7 @@ func publishMembers(ctx context.Context, pool *pgxpool.Pool, publisher Publisher
 		if roleIDs == nil {
 			roleIDs = []string{}
 		}
-		if err := publisher.Publish(ctx, permissions.MemberRolesUpdated{
+		if err := publisher.Publish(ctx, permissions.RoutingKeyMemberRolesUpdated, permissions.MemberRolesUpdated{
 			Meta:     meta(occurredAt),
 			ServerID: serverID,
 			UserID:   userID,
@@ -203,9 +208,50 @@ func publishMembers(ctx context.Context, pool *pgxpool.Pool, publisher Publisher
 	return nil
 }
 
+func publishProfiles(ctx context.Context, pool *pgxpool.Pool, publisher Publisher, counts *Counts) error {
+	rows, err := pool.Query(ctx, `
+		SELECT user_id, name, avatar_url, description, status_text, status_emoji, version, updated_at
+		  FROM user_profiles
+		 ORDER BY user_id`)
+	if err != nil {
+		return fmt.Errorf("backfill user profiles: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var userID, name, avatarURL, description, statusText, statusEmoji string
+		var version int64
+		var occurredAt time.Time
+		if err := rows.Scan(
+			&userID, &name, &avatarURL, &description, &statusText, &statusEmoji,
+			&version, &occurredAt,
+		); err != nil {
+			return fmt.Errorf("scan user profile: %w", err)
+		}
+		if err := publisher.Publish(ctx, users.RoutingKeyProfileUpdated, users.ProfileUpdated{
+			Meta:        meta(occurredAt),
+			UserID:      userID,
+			Version:     version,
+			Name:        name,
+			AvatarURL:   avatarURL,
+			Description: description,
+			StatusText:  statusText,
+			StatusEmoji: statusEmoji,
+		}); err != nil {
+			return err
+		}
+		counts.Profiles++
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("read user profiles: %w", err)
+	}
+	return nil
+}
+
 func publishOverrides(ctx context.Context, pool *pgxpool.Pool, publisher Publisher, counts *Counts) error {
 	rows, err := pool.Query(ctx, `
-		SELECT c.id, c.server_id, c.created_at, o.role_id, o.allow, o.deny, o.updated_at
+		SELECT c.id, c.server_id, c.created_at, o.role_id,
+		       COALESCE(o.allow, 0), COALESCE(o.deny, 0), o.updated_at
 		  FROM channels c
 		  LEFT JOIN channel_permission_overrides o ON o.channel_id = c.id
 		 WHERE c.kind = 'voice'
@@ -260,7 +306,7 @@ func publishOverrides(ctx context.Context, pool *pgxpool.Pool, publisher Publish
 	})
 	for _, channelID := range channelIDs {
 		current := snapshots[channelID]
-		if err := publisher.Publish(ctx, permissions.ChannelOverridesUpdated{
+		if err := publisher.Publish(ctx, permissions.RoutingKeyChannelOverridesUpdated, permissions.ChannelOverridesUpdated{
 			Meta:      meta(current.occurredAt),
 			ServerID:  current.serverID.String(),
 			ChannelID: channelID.String(),
@@ -290,7 +336,7 @@ func publishMutes(ctx context.Context, pool *pgxpool.Pool, publisher Publisher, 
 		if err := rows.Scan(&serverID, &userID, &mutedBy, &mutedAt, &untilAt, &reason); err != nil {
 			return fmt.Errorf("scan mute: %w", err)
 		}
-		if err := publisher.Publish(ctx, moderation.MemberMuted{
+		if err := publisher.Publish(ctx, moderation.RoutingKeyMemberMuted, moderation.MemberMuted{
 			Meta:     meta(mutedAt),
 			ServerID: serverID,
 			UserID:   userID,

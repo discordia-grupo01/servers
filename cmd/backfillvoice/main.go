@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"time"
 
 	"github.com/discordia-grupo01/servers/internal/repository"
 	"github.com/discordia-grupo01/servers/internal/voicebackfill"
@@ -14,7 +15,7 @@ import (
 
 type countingPublisher struct{}
 
-func (countingPublisher) Publish(context.Context, any) error { return nil }
+func (countingPublisher) Publish(context.Context, string, any) error { return nil }
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
@@ -23,7 +24,13 @@ func main() {
 	fs := flag.NewFlagSet("backfillvoice", flag.ExitOnError)
 	dryRun := fs.Bool("dry-run", false, "cuenta eventos sin publicarlos")
 	queue := fs.String("queue", "", "cola exacta de la réplica (por defecto VOICE_EVENTS_QUEUE.VOICE_INSTANCE_ID.replica)")
+	instanceID := fs.String("instance-id", "", "identificador de la instancia de voice (sobrescribe VOICE_INSTANCE_ID)")
+	interval := fs.Duration("interval", 0, "repite la reconciliación con este intervalo (0 ejecuta una sola vez)")
 	fs.Parse(os.Args[1:])
+	if *interval < 0 {
+		fmt.Fprintln(os.Stderr, "backfillvoice: --interval no puede ser negativo")
+		os.Exit(1)
+	}
 
 	rabbitURL := strings.TrimSpace(os.Getenv("RABBITMQ_URL"))
 	if rabbitURL == "" && !*dryRun {
@@ -38,12 +45,7 @@ func main() {
 	}
 	defer pool.Close()
 
-	targetQueue := strings.TrimSpace(*queue)
-	if targetQueue == "" {
-		base := getenv("VOICE_EVENTS_QUEUE", "voice.signaling")
-		instance := getenv("VOICE_INSTANCE_ID", "default")
-		targetQueue = base + "." + instance + ".replica"
-	}
+	targetQueue := resolveVoiceQueue(*queue, *instanceID)
 
 	var publisher voicebackfill.Publisher = countingPublisher{}
 	var amqpPublisher *voicebackfill.AMQPPublisher
@@ -57,18 +59,30 @@ func main() {
 		publisher = amqpPublisher
 	}
 
-	counts, err := voicebackfill.Run(ctx, pool, publisher)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "backfillvoice: %v\n", err)
-		os.Exit(1)
+	for {
+		counts, err := voicebackfill.Run(ctx, pool, publisher)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "backfillvoice: %v\n", err)
+			os.Exit(1)
+		}
+		prefix := ""
+		if *dryRun {
+			prefix = "[dry-run] "
+		}
+		fmt.Printf("%scola %q: %d eventos (canales=%d roles=%d dueños=%d miembros=%d perfiles=%d overrides=%d mutes=%d)\n",
+			prefix, targetQueue, counts.Total(), counts.Channels, counts.Roles, counts.Owners,
+			counts.Members, counts.Profiles, counts.Overrides, counts.Mutes)
+		if *interval == 0 {
+			return
+		}
+		timer := time.NewTimer(*interval)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return
+		case <-timer.C:
+		}
 	}
-	prefix := ""
-	if *dryRun {
-		prefix = "[dry-run] "
-	}
-	fmt.Printf("%scola %q: %d eventos (canales=%d roles=%d dueños=%d miembros=%d overrides=%d mutes=%d)\n",
-		prefix, targetQueue, counts.Total(), counts.Channels, counts.Roles, counts.Owners,
-		counts.Members, counts.Overrides, counts.Mutes)
 }
 
 func getenv(key, fallback string) string {
@@ -76,6 +90,16 @@ func getenv(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func resolveVoiceQueue(queue, instanceID string) string {
+	if queue = strings.TrimSpace(queue); queue != "" {
+		return queue
+	}
+	if instanceID = strings.TrimSpace(instanceID); instanceID == "" {
+		instanceID = getenv("VOICE_INSTANCE_ID", "default")
+	}
+	return getenv("VOICE_EVENTS_QUEUE", "voice.signaling") + "." + instanceID + ".replica"
 }
 
 func databaseDSN() string {

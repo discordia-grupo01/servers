@@ -109,6 +109,18 @@ VOICE_EVENTS_QUEUE=voice.signaling VOICE_INSTANCE_ID=staging-1 make backfill-voi
 VOICE_EVENTS_QUEUE=voice.signaling VOICE_INSTANCE_ID=staging-1 make backfill-voice ARGS=--dry-run
 ```
 
+Para mantener la réplica reconciliada después del corte, se puede ejecutar el
+backfill en modo periódico (el proceso termina al recibir `Ctrl+C`):
+
+```text
+VOICE_EVENTS_QUEUE=voice.signaling VOICE_INSTANCE_ID=staging-1 \
+  make backfill-voice ARGS="--interval 5m"
+```
+
+El intervalo vuelve a publicar el snapshot vigente en la cola de esa réplica;
+los consumidores aplican los eventos de forma idempotente y respetan
+`occurred_at`.
+
 El comando publica directamente al exchange default de RabbitMQ, con la routing
 key igual a la cola `VOICE_EVENTS_QUEUE.VOICE_INSTANCE_ID.replica`; por eso no
 entrega el backfill a otros consumidores. Verifica que la cola exista y usa
