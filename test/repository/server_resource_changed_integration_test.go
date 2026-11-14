@@ -66,8 +66,8 @@ func TestUpdateServer_AnIconChangeTellsTheClientsToAskAgain(t *testing.T) {
 	if len(changes) != 1 || changes[0].ServerID != srv.ID.String() || changes[0].Resource != "server" {
 		t.Fatalf("resource_changed = %+v, want one for the server", changes)
 	}
-	if after := countOf(ctx, t, pool, servers.RoutingKeyServerUpdated); after != before {
-		t.Errorf("server_updated grew from %d to %d: an icon change must not publish the name snapshot", before, after)
+	if after := countOf(ctx, t, pool, servers.RoutingKeyServerUpdated); after != before+1 {
+		t.Errorf("server_updated = %d, want %d: the snapshot carries the icon", after, before+1)
 	}
 }
 

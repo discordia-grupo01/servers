@@ -13,6 +13,8 @@ import (
 
 	moderationevents "github.com/discordia-grupo01/events-contract/moderation"
 	"github.com/discordia-grupo01/events-contract/reports"
+	"github.com/discordia-grupo01/events-contract/servers"
+	"github.com/discordia-grupo01/events-contract/validate"
 	"github.com/discordia-grupo01/servers/internal/repository"
 )
 
@@ -218,10 +220,51 @@ func TestBackfillModerationActionsKeepsTheOriginalIdAndTime(t *testing.T) {
 	}
 }
 
+func TestBackfillServerIconsPublishesEveryServerWithItsIcon(t *testing.T) {
+	pool := newPool(t)
+	ctx := context.Background()
+	withIcon, withoutIcon := uuid.New(), uuid.New()
+	created := time.Date(2026, 10, 1, 10, 0, 0, 123456000, time.UTC)
+	icon := "/v1/servers/" + withIcon.String() + "/icon?v=abc123"
+
+	exec(ctx, t, pool, `INSERT INTO servers (id, name, name_key, owner_id, icon_url, created_at) VALUES ($1, 'Con icono', 'con icono', $2, $3, $4)`,
+		withIcon, uuid.NewString(), icon, created)
+	exec(ctx, t, pool, `INSERT INTO servers (id, name, name_key, owner_id, created_at) VALUES ($1, 'Sin icono', 'sin icono', $2, $3)`,
+		withoutIcon, uuid.NewString(), created)
+
+	before := time.Now().UTC().Add(-time.Second)
+	apply(ctx, t, pool, "0037_backfill_server_icons")
+
+	raw := payloads(ctx, t, pool, servers.RoutingKeyServerUpdated)
+	if len(raw) != 2 {
+		t.Fatalf("events = %d, want one per server", len(raw))
+	}
+	byID := map[string]servers.ServerUpdated{}
+	for _, p := range raw {
+		if err := validate.Validate(servers.RoutingKeyServerUpdated, p); err != nil {
+			t.Errorf("the event does not meet the contract: %v", err)
+		}
+		var e servers.ServerUpdated
+		if err := json.Unmarshal(p, &e); err != nil {
+			t.Fatalf("payload doesn't decode with the contract type: %v: %s", err, p)
+		}
+		if e.EventID == "" || e.OccurredAt.Before(before) {
+			t.Errorf("occurred_at = %v: the backfill must be newer than any earlier live event", e.OccurredAt)
+		}
+		byID[e.ServerID] = e
+	}
+	if e := byID[withIcon.String()]; e.Name != "Con icono" || e.IconURL != icon || !e.CreatedAt.Equal(created) {
+		t.Errorf("server with icon = %+v", e)
+	}
+	if e := byID[withoutIcon.String()]; e.Name != "Sin icono" || e.IconURL != "" {
+		t.Errorf("server without icon = %+v", e)
+	}
+}
+
 func TestBackfillsOnAnEmptyDatabasePublishNothing(t *testing.T) {
 	pool := newPool(t)
 	ctx := context.Background()
-	apply(ctx, t, pool, "0034_backfill_report_events", "0035_backfill_moderation_actions")
+	apply(ctx, t, pool, "0034_backfill_report_events", "0035_backfill_moderation_actions", "0037_backfill_server_icons")
 	var n int
 	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM outbox_events`).Scan(&n); err != nil || n != 0 {
 		t.Errorf("events = %d, err = %v, want 0", n, err)

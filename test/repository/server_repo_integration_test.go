@@ -526,16 +526,46 @@ func TestRepo_UpdateServer_RenamePublishesServerUpdatedWithTheNewName(t *testing
 	}
 }
 
-func TestRepo_UpdateServer_OnlyIconOrBannerPublishesNothing(t *testing.T) {
+func TestRepo_UpdateServer_IconChangePublishesServerUpdatedWithTheNewIcon(t *testing.T) {
 	repo, pool := newRepo(t)
 	ctx := context.Background()
 	srv, chans := serverFixture("Same Name", "owner-"+uuid.NewString())
 	if err := repo.CreateServer(ctx, srv, nil, chans, nil); err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	iconURL, bannerURL := "/v1/servers/"+srv.ID.String()+"/icon", "/v1/servers/"+srv.ID.String()+"/banner"
+	iconURL := "/v1/servers/" + srv.ID.String() + "/icon?v=abc123"
 
-	if err := repo.UpdateServer(ctx, srv.ID, srv.Name, srv.NameKey, &iconURL, &bannerURL, false); err != nil {
+	if err := repo.UpdateServer(ctx, srv.ID, srv.Name, srv.NameKey, &iconURL, nil, false); err != nil {
+		t.Fatalf("UpdateServer: %v", err)
+	}
+
+	if got := countServerUpdated(ctx, t, pool, srv.ID); got != 2 {
+		t.Fatalf("server_updated after icon change = %d, want 2", got)
+	}
+	var icon string
+	err := pool.QueryRow(ctx, `
+		SELECT payload->>'icon_url' FROM outbox_events
+		 WHERE routing_key = 'servers.server_updated' AND payload->>'server_id' = $1
+		 ORDER BY created_at DESC, (payload->>'occurred_at') DESC LIMIT 1`, srv.ID.String(),
+	).Scan(&icon)
+	if err != nil {
+		t.Fatalf("read event: %v", err)
+	}
+	if icon != iconURL {
+		t.Errorf("event icon_url = %q, want %q", icon, iconURL)
+	}
+}
+
+func TestRepo_UpdateServer_OnlyBannerPublishesNoServerUpdated(t *testing.T) {
+	repo, pool := newRepo(t)
+	ctx := context.Background()
+	srv, chans := serverFixture("Same Name", "owner-"+uuid.NewString())
+	if err := repo.CreateServer(ctx, srv, nil, chans, nil); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	bannerURL := "/v1/servers/" + srv.ID.String() + "/banner"
+
+	if err := repo.UpdateServer(ctx, srv.ID, srv.Name, srv.NameKey, srv.IconURL, &bannerURL, false); err != nil {
 		t.Fatalf("UpdateServer: %v", err)
 	}
 
