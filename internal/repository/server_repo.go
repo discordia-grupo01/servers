@@ -313,15 +313,16 @@ func (r *ServerRepository) ListForUser(ctx context.Context, userID string) ([]mo
 	return servers, nil
 }
 
-// UpdateServer rewrites the server's editable fields. The previous name is
-// read under a row lock, in the same transaction as the UPDATE, so
+// UpdateServer rewrites the server's editable fields. The previous name and
+// icon are read under a row lock, in the same transaction as the UPDATE, so
 // servers.server_updated is written to the outbox atomically and only when the
-// name actually changed; any change of name, icon or banner also publishes
-// servers.resource_changed so the clients ask for the server again.
+// name or the icon actually changed; any change of name, icon or banner also
+// publishes servers.resource_changed so the clients ask for the server again.
 func (r *ServerRepository) UpdateServer(ctx context.Context, id uuid.UUID, name, nameKey string, iconURL, bannerURL *string, iconAnimated bool) error {
 	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
 		var previousName string
-		if err := tx.QueryRow(ctx, `SELECT name FROM servers WHERE id = $1 FOR UPDATE`, id).Scan(&previousName); err != nil {
+		var previousIconURL *string
+		if err := tx.QueryRow(ctx, `SELECT name, icon_url FROM servers WHERE id = $1 FOR UPDATE`, id).Scan(&previousName, &previousIconURL); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return model.ErrServerNotFound
 			}
@@ -340,7 +341,7 @@ func (r *ServerRepository) UpdateServer(ctx context.Context, id uuid.UUID, name,
 			return fmt.Errorf("update server: %w", err)
 		}
 
-		if name != previousName {
+		if name != previousName || derefString(iconURL) != derefString(previousIconURL) {
 			if err := PublishServerUpdated(ctx, tx, id); err != nil {
 				return err
 			}
