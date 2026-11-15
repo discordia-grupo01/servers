@@ -31,7 +31,7 @@ func New(uc CategoryUseCases) *Handler {
 }
 
 type createCategoryRequest struct {
-	Name string `json:"name"`
+	Name string `json:"name" maxLength:"100"`
 }
 
 // CreateCategory godoc
@@ -74,7 +74,7 @@ func (h *Handler) CreateCategory(c *gin.Context) {
 }
 
 type updateCategoryRequest struct {
-	Name string `json:"name"`
+	Name string `json:"name" maxLength:"100"`
 }
 
 // UpdateCategory godoc
@@ -117,7 +117,7 @@ func (h *Handler) UpdateCategory(c *gin.Context) {
 }
 
 type reorderCategoriesRequest struct {
-	CategoryIDs []string `json:"category_ids"`
+	CategoryIDs []string `json:"category_ids" format:"uuid"`
 }
 
 // Reorder godoc

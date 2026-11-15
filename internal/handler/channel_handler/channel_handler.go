@@ -45,9 +45,9 @@ func parseOptionalUUID(c *gin.Context, field string, raw *string) (*uuid.UUID, b
 }
 
 type createChannelRequest struct {
-	Name       string  `json:"name"`
+	Name       string  `json:"name" maxLength:"100"`
 	Kind       string  `json:"kind"`
-	CategoryID *string `json:"category_id"`
+	CategoryID *string `json:"category_id" format:"uuid" extensions:"x-nullable"`
 }
 
 // CreateChannel godoc
@@ -97,8 +97,8 @@ func (h *Handler) CreateChannel(c *gin.Context) {
 }
 
 type updateChannelRequest struct {
-	Name  *string `json:"name"`
-	Topic *string `json:"topic"`
+	Name  *string `json:"name" maxLength:"100" extensions:"x-nullable"`
+	Topic *string `json:"topic" extensions:"x-nullable"`
 }
 
 // UpdateChannel godoc
@@ -171,7 +171,7 @@ func (h *Handler) DeleteChannel(c *gin.Context) {
 }
 
 type moveChannelRequest struct {
-	CategoryID *string `json:"category_id"`
+	CategoryID *string `json:"category_id" format:"uuid" extensions:"x-nullable"`
 }
 
 // MoveToCategory godoc
@@ -219,8 +219,8 @@ func (h *Handler) MoveToCategory(c *gin.Context) {
 }
 
 type reorderChannelsRequest struct {
-	CategoryID *string  `json:"category_id"`
-	ChannelIDs []string `json:"channel_ids"`
+	CategoryID *string  `json:"category_id" format:"uuid" extensions:"x-nullable"`
+	ChannelIDs []string `json:"channel_ids" format:"uuid"`
 }
 
 // Reorder godoc

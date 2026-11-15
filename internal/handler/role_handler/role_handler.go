@@ -37,7 +37,7 @@ func New(uc RoleUseCases) *Handler {
 }
 
 type createRoleRequest struct {
-	Name  string `json:"name"`
+	Name  string `json:"name" maxLength:"100"`
 	Color string `json:"color"`
 }
 
@@ -142,8 +142,8 @@ func (h *Handler) GetRole(c *gin.Context) {
 
 type updateRolePermissionsRequest struct {
 	Permissions []string `json:"permissions"`
-	Name        *string  `json:"name"`
-	Color       *string  `json:"color"`
+	Name        *string  `json:"name" maxLength:"100" extensions:"x-nullable"`
+	Color       *string  `json:"color" extensions:"x-nullable"`
 }
 
 // UpdateRolePermissions godoc
@@ -188,11 +188,11 @@ func (h *Handler) UpdateRolePermissions(c *gin.Context) {
 }
 
 type setDefaultRoleRequest struct {
-	RoleID string `json:"role_id"`
+	RoleID string `json:"role_id" format:"uuid"`
 }
 
 type reorderRolesRequest struct {
-	RoleIDs []string `json:"role_ids"`
+	RoleIDs []string `json:"role_ids" format:"uuid"`
 }
 
 // ReorderRoles godoc
@@ -333,8 +333,8 @@ func (h *Handler) DeleteRole(c *gin.Context) {
 // @Param        roleId    path   string  true   "Role ID" Format(uuid)
 // @Param        has_role  query  bool    false  "false lists the members without the role" default(true)
 // @Param        q         query  string  false  "Keep only members whose name contains this, ignoring case and accents"
-// @Param        limit     query  int     false  "Page size" default(20)
-// @Param        offset    query  int     false  "Items to skip" default(0)
+// @Param        limit     query  int     false  "Page size" minimum(0) Format(int64) default(20)
+// @Param        offset    query  int     false  "Items to skip" minimum(0) Format(int64) default(0)
 // @Success      200  {object}  model.MemberListResponse
 // @Failure      400  {object}  apierr.ErrorResponse  "invalid roleId, has_role, limit or offset"
 // @Failure      401  {object}  apierr.ErrorResponse

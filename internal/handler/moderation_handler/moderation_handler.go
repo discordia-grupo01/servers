@@ -23,8 +23,8 @@ func New(uc UseCases) *Handler {
 }
 
 type banRequest struct {
-	UserID string  `json:"user_id"`
-	Reason *string `json:"reason"`
+	UserID string  `json:"user_id" format:"uuid"`
+	Reason *string `json:"reason" maxLength:"512" extensions:"x-nullable"`
 }
 
 // Ban godoc
@@ -69,13 +69,13 @@ func (h *Handler) Ban(c *gin.Context) {
 }
 
 type kickRequest struct {
-	UserID string `json:"user_id"`
+	UserID string `json:"user_id" format:"uuid"`
 }
 
 type muteRequest struct {
-	UserID  string    `json:"user_id"`
+	UserID  string    `json:"user_id" format:"uuid"`
 	UntilAt time.Time `json:"until_at"`
-	Reason  *string   `json:"reason"`
+	Reason  *string   `json:"reason" maxLength:"512" extensions:"x-nullable"`
 }
 
 // Mute godoc
@@ -214,8 +214,8 @@ func (h *Handler) Unban(c *gin.Context) {
 // @Produce      json
 // @Security     BearerAuth
 // @Param        serverId  path   string  true   "Server ID" Format(uuid)
-// @Param        limit     query  int     false  "Page size (max 100)" default(20)
-// @Param        offset    query  int     false  "Items to skip" default(0)
+// @Param        limit     query  int     false  "Page size (max 100)" minimum(0) Format(int64) default(20)
+// @Param        offset    query  int     false  "Items to skip" minimum(0) Format(int64) default(0)
 // @Success      200  {object}  moderation.BanListResponse
 // @Failure      400  {object}  apierr.ErrorResponse  "invalid limit/offset"
 // @Failure      401  {object}  apierr.ErrorResponse
@@ -266,8 +266,8 @@ func (h *Handler) ListBans(c *gin.Context) {
 // @Produce      json
 // @Security     BearerAuth
 // @Param        serverId path string true "Server ID" Format(uuid)
-// @Param        limit query int false "Page size (max 100)" default(20)
-// @Param        offset query int false "Items to skip" default(0)
+// @Param        limit query int false "Page size (max 100)" minimum(0) Format(int64) default(20)
+// @Param        offset query int false "Items to skip" minimum(0) Format(int64) default(0)
 // @Success      200 {object} moderation.AuditPage
 // @Failure      400 {object} apierr.ErrorResponse
 // @Failure      401 {object} apierr.ErrorResponse

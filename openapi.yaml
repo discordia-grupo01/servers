@@ -809,12 +809,16 @@ paths:
           name: limit
           schema:
             type: integer
+            format: int64
+            minimum: 0
             default: 20
         - description: Items to skip
           in: query
           name: offset
           schema:
             type: integer
+            format: int64
+            minimum: 0
             default: 0
       responses:
         "200":
@@ -1260,12 +1264,16 @@ paths:
           name: limit
           schema:
             type: integer
+            format: int64
+            minimum: 0
             default: 20
         - description: Items to skip
           in: query
           name: offset
           schema:
             type: integer
+            format: int64
+            minimum: 0
             default: 0
       responses:
         "200":
@@ -2143,12 +2151,16 @@ paths:
           name: limit
           schema:
             type: integer
+            format: int64
+            minimum: 0
             default: 20
         - description: Items to skip
           in: query
           name: offset
           schema:
             type: integer
+            format: int64
+            minimum: 0
             default: 0
       responses:
         "200":
@@ -2612,12 +2624,16 @@ paths:
           name: limit
           schema:
             type: integer
+            format: int64
+            minimum: 0
             default: 20
         - description: Items to skip
           in: query
           name: offset
           schema:
             type: integer
+            format: int64
+            minimum: 0
             default: 0
       responses:
         "200":
@@ -3066,11 +3082,15 @@ paths:
           name: limit
           schema:
             type: integer
+            format: int64
+            minimum: 0
         - description: Reports to skip
           in: query
           name: offset
           schema:
             type: integer
+            format: int64
+            minimum: 0
       responses:
         "200":
           description: OK
@@ -3530,7 +3550,9 @@ components:
           example: 1
           type: integer
         next_level:
-          $ref: "#/components/schemas/boost_handler.NextLevelResponse"
+          allOf:
+            - $ref: "#/components/schemas/boost_handler.NextLevelResponse"
+          nullable: true
         perks_unlocked:
           example:
             - extra_emoji_slots
@@ -3544,28 +3566,33 @@ components:
         code:
           example: mi-servidor
           type: string
+          nullable: true
       type: object
     boost_handler.VanityResponse:
       properties:
         vanity_code:
           example: mi-servidor
           type: string
+          nullable: true
       type: object
     category_handler.createCategoryRequest:
       properties:
         name:
+          maxLength: 100
           type: string
       type: object
     category_handler.reorderCategoriesRequest:
       properties:
         category_ids:
           items:
+            format: uuid
             type: string
           type: array
       type: object
     category_handler.updateCategoryRequest:
       properties:
         name:
+          maxLength: 100
           type: string
       type: object
     categoryview.Response:
@@ -3582,32 +3609,43 @@ components:
     channel_handler.createChannelRequest:
       properties:
         category_id:
+          format: uuid
           type: string
+          nullable: true
         kind:
           type: string
         name:
+          maxLength: 100
           type: string
       type: object
     channel_handler.moveChannelRequest:
       properties:
         category_id:
+          format: uuid
           type: string
+          nullable: true
       type: object
     channel_handler.reorderChannelsRequest:
       properties:
         category_id:
+          format: uuid
           type: string
+          nullable: true
         channel_ids:
           items:
+            format: uuid
             type: string
           type: array
       type: object
     channel_handler.updateChannelRequest:
       properties:
         name:
+          maxLength: 100
           type: string
+          nullable: true
         topic:
           type: string
+          nullable: true
       type: object
     channelperm_handler.OverrideResponse:
       properties:
@@ -3652,6 +3690,7 @@ components:
       properties:
         category_id:
           type: string
+          nullable: true
         id:
           type: string
         kind:
@@ -3664,6 +3703,7 @@ components:
           type: string
         topic:
           type: string
+          nullable: true
       type: object
     emoji.ListResponse:
       properties:
@@ -3715,6 +3755,7 @@ components:
       properties:
         banner_url:
           type: string
+          nullable: true
         boost_count:
           description: >-
             BoostCount and BoostLevel come from the boosts billing charged for.
@@ -3736,6 +3777,7 @@ components:
           type: string
         icon_url:
           type: string
+          nullable: true
         id:
           type: string
         name:
@@ -3753,10 +3795,12 @@ components:
           type: boolean
         vanity_code:
           type: string
+          nullable: true
       type: object
     member_role_handler.assignRoleRequest:
       properties:
         role_id:
+          format: uuid
           type: string
       type: object
     member_role_handler.memberPermissionsResponse:
@@ -3790,15 +3834,18 @@ components:
     mention_handler.resolveRequest:
       properties:
         channel_id:
+          format: uuid
           type: string
         everyone:
           type: boolean
         role_ids:
           items:
+            format: uuid
             type: string
           type: array
         user_ids:
           items:
+            format: uuid
             type: string
           type: array
       type: object
@@ -3989,22 +4036,29 @@ components:
     moderation_handler.banRequest:
       properties:
         reason:
+          maxLength: 512
           type: string
+          nullable: true
         user_id:
+          format: uuid
           type: string
       type: object
     moderation_handler.kickRequest:
       properties:
         user_id:
+          format: uuid
           type: string
       type: object
     moderation_handler.muteRequest:
       properties:
         reason:
+          maxLength: 512
           type: string
+          nullable: true
         until_at:
           type: string
         user_id:
+          format: uuid
           type: string
       type: object
     report.ListResponse:
@@ -4024,6 +4078,7 @@ components:
       properties:
         channel_id:
           type: string
+          nullable: true
         created_at:
           type: string
         id:
@@ -4032,16 +4087,22 @@ components:
           type: string
         message_id:
           type: string
+          nullable: true
         reason:
           type: string
         reported_profile:
-          $ref: "#/components/schemas/model.MemberProfileResponse"
+          allOf:
+            - $ref: "#/components/schemas/model.MemberProfileResponse"
+          nullable: true
         reported_user_id:
           type: string
+          nullable: true
         reporter_id:
           type: string
         reporter_profile:
-          $ref: "#/components/schemas/model.MemberProfileResponse"
+          allOf:
+            - $ref: "#/components/schemas/model.MemberProfileResponse"
+          nullable: true
         resolution_action:
           description: delete_message, mute, kick or ban; null if it was closed without one.
           enum:
@@ -4050,10 +4111,13 @@ components:
             - kick
             - ban
           type: string
+          nullable: true
         resolved_at:
           type: string
+          nullable: true
         resolved_by:
           type: string
+          nullable: true
         server_id:
           type: string
         status:
@@ -4080,6 +4144,7 @@ components:
       properties:
         channel_id:
           example: 0b6f6a2e-6a41-4a42-9d0a-2c6a2d1f7c11
+          format: uuid
           type: string
         kind:
           enum:
@@ -4092,9 +4157,11 @@ components:
           type: string
         reason:
           example: Insultos repetidos hacia otros miembros
+          maxLength: 512
           type: string
         user_id:
           example: a3f1c0de-1111-4222-8333-444455556666
+          format: uuid
           type: string
       type: object
     role_handler.createRoleRequest:
@@ -4102,26 +4169,32 @@ components:
         color:
           type: string
         name:
+          maxLength: 100
           type: string
       type: object
     role_handler.reorderRolesRequest:
       properties:
         role_ids:
           items:
+            format: uuid
             type: string
           type: array
       type: object
     role_handler.setDefaultRoleRequest:
       properties:
         role_id:
+          format: uuid
           type: string
       type: object
     role_handler.updateRolePermissionsRequest:
       properties:
         color:
           type: string
+          nullable: true
         name:
+          maxLength: 100
           type: string
+          nullable: true
         permissions:
           items:
             type: string
@@ -4167,6 +4240,7 @@ components:
       properties:
         words:
           items:
+            maxLength: 50
             type: string
           type: array
       type: object

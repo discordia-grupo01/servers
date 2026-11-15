@@ -47,8 +47,8 @@ type serverHandler struct {
 type serverResponse struct {
 	ID        string    `json:"id"`
 	Name      string    `json:"name"`
-	IconURL   *string   `json:"icon_url"`
-	BannerURL *string   `json:"banner_url"`
+	IconURL   *string   `json:"icon_url" extensions:"x-nullable"`
+	BannerURL *string   `json:"banner_url" extensions:"x-nullable"`
 	OwnerID   string    `json:"owner_id"`
 	CreatedAt time.Time `json:"created_at"`
 	// Suspended is true when the platform staff suspended the server. It is only
@@ -59,7 +59,7 @@ type serverResponse struct {
 	// images and vanity code a level no longer unlocks are returned as null.
 	BoostCount int                     `json:"boost_count"`
 	BoostLevel int                     `json:"boost_level"`
-	VanityCode *string                 `json:"vanity_code"`
+	VanityCode *string                 `json:"vanity_code" extensions:"x-nullable"`
 	Channels   []channelview.Response  `json:"channels"`
 	Categories []categoryview.Response `json:"categories"`
 }

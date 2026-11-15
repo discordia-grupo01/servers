@@ -115,18 +115,18 @@ type Response struct {
 	ServerID       string     `json:"server_id"`
 	Kind           string     `json:"kind"`
 	ReporterID     string     `json:"reporter_id"`
-	ChannelID      *string    `json:"channel_id"`
-	MessageID      *string    `json:"message_id"`
-	ReportedUserID *string    `json:"reported_user_id"`
+	ChannelID      *string    `json:"channel_id" extensions:"x-nullable"`
+	MessageID      *string    `json:"message_id" extensions:"x-nullable"`
+	ReportedUserID *string    `json:"reported_user_id" extensions:"x-nullable"`
 	Reason         string     `json:"reason"`
 	Status         string     `json:"status"`
 	CreatedAt      time.Time  `json:"created_at"`
-	ResolvedAt     *time.Time `json:"resolved_at"`
-	ResolvedBy     *string    `json:"resolved_by"`
+	ResolvedAt     *time.Time `json:"resolved_at" extensions:"x-nullable"`
+	ResolvedBy     *string    `json:"resolved_by" extensions:"x-nullable"`
 	// delete_message, mute, kick or ban; null if it was closed without one.
-	ResolutionAction *string                      `json:"resolution_action" enums:"delete_message,mute,kick,ban"`
-	ReporterProfile  *model.MemberProfileResponse `json:"reporter_profile"`
-	ReportedProfile  *model.MemberProfileResponse `json:"reported_profile"`
+	ResolutionAction *string                      `json:"resolution_action" enums:"delete_message,mute,kick,ban" extensions:"x-nullable"`
+	ReporterProfile  *model.MemberProfileResponse `json:"reporter_profile" extensions:"x-nullable"`
+	ReportedProfile  *model.MemberProfileResponse `json:"reported_profile" extensions:"x-nullable"`
 }
 
 type ListResponse struct {

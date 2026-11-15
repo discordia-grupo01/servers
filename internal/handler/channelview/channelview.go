@@ -11,8 +11,8 @@ type Response struct {
 	Name       string  `json:"name"`
 	Kind       string  `json:"kind"`
 	Position   int     `json:"position"`
-	CategoryID *string `json:"category_id"`
-	Topic      *string `json:"topic"`
+	CategoryID *string `json:"category_id" extensions:"x-nullable"`
+	Topic      *string `json:"topic" extensions:"x-nullable"`
 }
 
 func ToResponse(ch model.Channel) Response {
