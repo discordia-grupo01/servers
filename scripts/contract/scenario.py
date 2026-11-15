@@ -25,7 +25,7 @@ if urlparse(BASE).hostname not in ("localhost", "127.0.0.1", "::1"):
 RUN = uuid.uuid4().hex[:8]
 OWNER_ID = "00000000-0000-4000-8000-0000000000d1"
 OWNER = token(OWNER_ID)
-MEMBERS = [f"00000000-0000-4000-8000-0000000000d{n}" for n in (2, 3)]
+MEMBERS = [f"00000000-0000-4000-8000-0000000000d{n}" for n in (2, 3, 4)]
 entries = []
 failures = []
 
@@ -51,6 +51,7 @@ def main():
     # Reordenar con la lista completa y vigente.
     cat = step("POST", f"/v1/servers/{sid}/categories", 201, body={"name": "extra"})
     cats = step("GET", f"/v1/servers/{sid}", 200)["categories"]
+    step("PATCH", f"/v1/categories/{cat['id']}", 200, body={"name": "renombrada"})
     step("PATCH", f"/v1/servers/{sid}/categories/reorder", 200, body={"category_ids": [c["id"] for c in reversed(cats)]})
     role = step("POST", f"/v1/servers/{sid}/roles", 201, body={"name": "r1", "color": "#112233"})
     role2 = step("POST", f"/v1/servers/{sid}/roles", 201, body={"name": "r2", "color": "#112233"})
@@ -64,17 +65,26 @@ def main():
     step("POST", f"/v1/servers/{sid}/mentions/resolve", 200,
          body={"channel_id": text["id"], "user_ids": [MEMBERS[0]], "role_ids": [role["id"]], "everyone": False})
 
+    # Emoji: crear con una imagen valida (el fuzzing casi nunca arma un multipart valido).
+    step("POST", f"/v1/servers/{sid}/emojis", 201, form={"name": f"emoji_{RUN}"},
+         files={"image": ("e.png", PNG, "image/png")})
+
     # Moderacion.
+    step("POST", f"/v1/servers/{sid}/bans", 201, body={"user_id": MEMBERS[2]})
+    step("DELETE", f"/v1/servers/{sid}/bans/{MEMBERS[2]}", 204)
     step("POST", f"/v1/servers/{sid}/mutes", 204, body={"user_id": MEMBERS[0], "until_at": "2999-01-01T00:00:00Z"})
     step("POST", f"/v1/servers/{sid}/reports", 201,
          body={"kind": "user", "user_id": MEMBERS[1], "reason": "scenario"}, tok=token(MEMBERS[0]))
 
     # Transferencia: crear, ver la pendiente y cancelarla; se deja una sin responder.
-    step("POST", f"/v1/servers/{sid}/ownership-transfers", 201, body={"to_user_id": MEMBERS[0]})
+    transfer = step("POST", f"/v1/servers/{sid}/ownership-transfers", 201, body={"to_user_id": MEMBERS[0]})
     step("GET", f"/v1/servers/{sid}/ownership-transfers/pending", 200)
 
     # Expulsar al ultimo (el rol alto es del dueno: queda por debajo).
     step("POST", f"/v1/servers/{sid}/kicks", 204, body={"user_id": MEMBERS[1]})
+
+    # Aceptar la transferencia al final: el destinatario pasa a ser el dueno.
+    step("POST", f"/v1/servers/{sid}/ownership-transfers/{transfer['id']}/accept", 200, tok=token(MEMBERS[0]))
 
 
 try:
