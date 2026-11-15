@@ -35,15 +35,15 @@ type SummaryResponse struct {
 	BoostCount    int                `json:"boost_count" example:"7"`
 	Level         int                `json:"level" example:"1"`
 	PerksUnlocked []string           `json:"perks_unlocked" example:"extra_emoji_slots,animated_icon"`
-	NextLevel     *NextLevelResponse `json:"next_level"`
+	NextLevel     *NextLevelResponse `json:"next_level" extensions:"x-nullable"`
 }
 
 type VanityRequest struct {
-	Code *string `json:"code" example:"mi-servidor"`
+	Code *string `json:"code" example:"mi-servidor" extensions:"x-nullable"`
 }
 
 type VanityResponse struct {
-	VanityCode *string `json:"vanity_code" example:"mi-servidor"`
+	VanityCode *string `json:"vanity_code" example:"mi-servidor" extensions:"x-nullable"`
 }
 
 // Summary godoc
@@ -52,11 +52,12 @@ type VanityResponse struct {
 // @Tags         boosts
 // @Produce      json
 // @Security     BearerAuth
-// @Param        serverId  path  string  true  "Server ID"
+// @Param        serverId  path  string  true  "Server ID" Format(uuid)
 // @Success      200  {object}  SummaryResponse
 // @Failure      401  {object}  apierr.ErrorResponse
 // @Failure      403  {object}  apierr.ErrorResponse  "not a member"
 // @Failure      404  {object}  apierr.ErrorResponse  "server not found"
+// @Failure      400  {object}  apierr.ErrorResponse
 // @Router       /v1/servers/{serverId}/boosts [get]
 func (h *Handler) Summary(c *gin.Context) {
 	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
@@ -82,7 +83,7 @@ func (h *Handler) Summary(c *gin.Context) {
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        serverId  path  string         true  "Server ID"
+// @Param        serverId  path  string         true  "Server ID" Format(uuid)
 // @Param        body      body  VanityRequest  true  "The code, or null to clear it"
 // @Success      200  {object}  VanityResponse
 // @Failure      400  {object}  apierr.ErrorResponse  "invalid code or body"

@@ -28,15 +28,15 @@ func New(uc UseCases) *Handler {
 }
 
 type CreateRequest struct {
-	Kind      string `json:"kind" example:"message" enums:"message,user"`
-	ChannelID string `json:"channel_id" example:"0b6f6a2e-6a41-4a42-9d0a-2c6a2d1f7c11"`
-	MessageID string `json:"message_id" example:"01a1b2c3-d4e5-7f60-8a9b-0c1d2e3f4a5b"`
-	UserID    string `json:"user_id" example:"a3f1c0de-1111-4222-8333-444455556666"`
-	Reason    string `json:"reason" example:"Insultos repetidos hacia otros miembros"`
+	Kind      string `json:"kind" example:"message" enums:"message,user" validate:"required"`
+	ChannelID string `json:"channel_id" example:"0b6f6a2e-6a41-4a42-9d0a-2c6a2d1f7c11" format:"uuid"`
+	MessageID string `json:"message_id" example:"01a1b2c3-d4e5-7f60-8a9b-0c1d2e3f4a5b" format:"uuid"`
+	UserID    string `json:"user_id" example:"a3f1c0de-1111-4222-8333-444455556666" format:"uuid"`
+	Reason    string `json:"reason" example:"Insultos repetidos hacia otros miembros" maxLength:"512"`
 }
 
 type CloseRequest struct {
-	Status string `json:"status" example:"resolved" enums:"resolved,dismissed"`
+	Status string `json:"status" example:"resolved" enums:"resolved,dismissed" validate:"required"`
 	Action string `json:"action" example:"mute" enums:"delete_message,mute,kick,ban"`
 }
 
@@ -47,7 +47,7 @@ type CloseRequest struct {
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        serverId  path  string         true  "Server ID"
+// @Param        serverId  path  string         true  "Server ID" Format(uuid)
 // @Param        body      body  CreateRequest  true  "What is reported and why"
 // @Success      201  {object}  report.Response
 // @Failure      400  {object}  apierr.ErrorResponse  "invalid kind, missing target or reason, reason too long, not a text channel, or reporting yourself"
@@ -96,10 +96,10 @@ func (h *Handler) Create(c *gin.Context) {
 // @Tags         reports
 // @Produce      json
 // @Security     BearerAuth
-// @Param        serverId  path   string  true   "Server ID"
+// @Param        serverId  path   string  true   "Server ID" Format(uuid)
 // @Param        status    query  string  false  "pending (default), resolved, dismissed or all"
-// @Param        limit     query  int     false  "Page size (default 20, max 100)"
-// @Param        offset    query  int     false  "Reports to skip"
+// @Param        limit     query  int     false  "Page size (default 20, max 100)" minimum(0) Format(int64)
+// @Param        offset    query  int     false  "Reports to skip" minimum(0) Format(int64)
 // @Success      200  {object}  report.ListResponse
 // @Failure      400  {object}  apierr.ErrorResponse  "invalid status, limit or offset"
 // @Failure      401  {object}  apierr.ErrorResponse
@@ -140,8 +140,8 @@ func (h *Handler) List(c *gin.Context) {
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        serverId  path  string        true  "Server ID"
-// @Param        reportId  path  string        true  "Report ID"
+// @Param        serverId  path  string        true  "Server ID" Format(uuid)
+// @Param        reportId  path  string        true  "Report ID" Format(uuid)
 // @Param        body      body  CloseRequest  true  "The new status"
 // @Success      200  {object}  report.Response
 // @Failure      400  {object}  apierr.ErrorResponse  "status is not resolved or dismissed, action is unknown or sent with dismissed (action_invalid), or delete_message on a user report (action_not_for_kind)"

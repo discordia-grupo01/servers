@@ -38,11 +38,12 @@ type response struct {
 // @Tags         voice
 // @Produce      json
 // @Security     BearerAuth
-// @Param        channelId  path  string  true  "Voice channel ID"
+// @Param        channelId  path  string  true  "Voice channel ID" Format(uuid)
 // @Success      200  {object} response
 // @Failure      401  {object} apierr.ErrorResponse
 // @Failure      403  {object} apierr.ErrorResponse
 // @Failure      404  {object} apierr.ErrorResponse
+// @Failure      400  {object}  apierr.ErrorResponse
 // @Router       /v1/channels/{channelId}/voice-access [get]
 func (h *Handler) AuthorizeVoice(c *gin.Context) {
 	channelID, err := uuid.Parse(c.Param("channelId"))

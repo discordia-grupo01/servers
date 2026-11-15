@@ -42,7 +42,7 @@ func (i Invitation) Validate(now time.Time) error {
 }
 
 type GenerateInvitationRequest struct {
-	MaxUses *int `json:"max_uses"`
+	MaxUses *int `json:"max_uses" minimum:"1" format:"int64" extensions:"x-nullable"`
 }
 
 type InvitationResponse struct {
@@ -50,10 +50,10 @@ type InvitationResponse struct {
 	URL       string     `json:"url"`
 	ServerID  string     `json:"server_id"`
 	CreatedBy string     `json:"created_by"`
-	MaxUses   *int       `json:"max_uses"`
+	MaxUses   *int       `json:"max_uses" extensions:"x-nullable"`
 	Uses      int        `json:"uses"`
-	ExpiresAt *time.Time `json:"expires_at"`
-	RevokedAt *time.Time `json:"revoked_at"`
+	ExpiresAt *time.Time `json:"expires_at" extensions:"x-nullable"`
+	RevokedAt *time.Time `json:"revoked_at" extensions:"x-nullable"`
 	CreatedAt time.Time  `json:"created_at"`
 }
 

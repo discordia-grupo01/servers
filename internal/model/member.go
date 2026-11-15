@@ -31,10 +31,10 @@ type MemberResponse struct {
 	// Profile is null while the member's profile hasn't been replicated from
 	// identify yet; clients can fall back to GET /v1/users/{id} then. It is also
 	// null for a member suspended at platform level, who stays listed.
-	Profile *MemberProfileResponse `json:"profile"`
+	Profile *MemberProfileResponse `json:"profile" extensions:"x-nullable"`
 	// MutedUntil is when the member's mute ends (they can't send messages or
 	// speak until then), null if they aren't muted.
-	MutedUntil *time.Time `json:"muted_until"`
+	MutedUntil *time.Time `json:"muted_until" extensions:"x-nullable"`
 	// RoleIDs are the roles the member holds, @everyone included, so clients
 	// can resolve them against GET /v1/servers/{id}/roles without a request
 	// per member.

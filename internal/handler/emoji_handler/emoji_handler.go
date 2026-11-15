@@ -43,7 +43,7 @@ func New(uc UseCases, images ImageReader) *Handler {
 // @Accept       multipart/form-data
 // @Produce      json
 // @Security     BearerAuth
-// @Param        serverId  path      string  true  "Server ID"
+// @Param        serverId  path      string  true  "Server ID" Format(uuid)
 // @Param        name      formData  string  true  "Emoji name"
 // @Param        image     formData  file    true  "Emoji image"
 // @Success      201  {object}  emoji.Response
@@ -82,11 +82,12 @@ func (h *Handler) Create(c *gin.Context) {
 // @Tags         emojis
 // @Produce      json
 // @Security     BearerAuth
-// @Param        serverId  path  string  true  "Server ID"
+// @Param        serverId  path  string  true  "Server ID" Format(uuid)
 // @Success      200  {object}  emoji.ListResponse
 // @Failure      401  {object}  apierr.ErrorResponse
 // @Failure      403  {object}  apierr.ErrorResponse  "not a member of the server"
 // @Failure      404  {object}  apierr.ErrorResponse  "server not found"
+// @Failure      400  {object}  apierr.ErrorResponse
 // @Router       /v1/servers/{serverId}/emojis [get]
 func (h *Handler) List(c *gin.Context) {
 	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
@@ -110,8 +111,8 @@ func (h *Handler) List(c *gin.Context) {
 // @Tags         emojis
 // @Produce      json
 // @Security     BearerAuth
-// @Param        serverId  path  string  true  "Server ID"
-// @Param        emojiId   path  string  true  "Emoji ID"
+// @Param        serverId  path  string  true  "Server ID" Format(uuid)
+// @Param        emojiId   path  string  true  "Emoji ID" Format(uuid)
 // @Success      204  "deleted"
 // @Failure      400  {object}  apierr.ErrorResponse  "invalid id"
 // @Failure      401  {object}  apierr.ErrorResponse

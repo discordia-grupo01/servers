@@ -42,6 +42,7 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
       requestBody:
         content:
           application/json:
@@ -97,9 +98,16 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
       responses:
         "204":
           description: no content
+        "400":
+          description: Bad Request
+          content:
+            "*/*":
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
         "401":
           description: Unauthorized
           content:
@@ -135,6 +143,7 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
       requestBody:
         content:
           application/json:
@@ -192,6 +201,7 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
       requestBody:
         content:
           application/json:
@@ -252,12 +262,14 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
         - description: Target member's user ID
           in: path
           name: userId
           required: true
           schema:
             type: string
+            format: uuid
       responses:
         "200":
           description: OK
@@ -307,6 +319,7 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
       responses:
         "200":
           description: OK
@@ -356,12 +369,14 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
         - description: Role ID
           in: path
           name: roleId
           required: true
           schema:
             type: string
+            format: uuid
       responses:
         "204":
           description: No Content
@@ -411,12 +426,14 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
         - description: Role ID (it may be @everyone)
           in: path
           name: roleId
           required: true
           schema:
             type: string
+            format: uuid
       requestBody:
         content:
           application/json:
@@ -480,6 +497,7 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
       responses:
         "200":
           description: OK
@@ -487,6 +505,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/voice_access_handler.response"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
         "401":
           description: Unauthorized
           content:
@@ -525,6 +549,12 @@ paths:
       responses:
         "204":
           description: no content
+        "400":
+          description: Bad Request
+          content:
+            "*/*":
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
         "401":
           description: Unauthorized
           content:
@@ -572,6 +602,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/model.JoinResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
         "401":
           description: Unauthorized
           content:
@@ -605,9 +641,16 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
       responses:
         "204":
           description: no content
+        "400":
+          description: Bad Request
+          content:
+            "*/*":
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
         "401":
           description: Unauthorized
           content:
@@ -641,6 +684,7 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
       responses:
         "200":
           description: OK
@@ -648,6 +692,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/roleview.Response"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
         "401":
           description: Unauthorized
           content:
@@ -682,6 +732,7 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
       requestBody:
         content:
           application/json:
@@ -741,6 +792,7 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
         - description: false lists the members without the role
           in: query
           name: has_role
@@ -757,12 +809,16 @@ paths:
           name: limit
           schema:
             type: integer
+            format: int64
+            minimum: 0
             default: 20
         - description: Items to skip
           in: query
           name: offset
           schema:
             type: integer
+            format: int64
+            minimum: 0
             default: 0
       responses:
         "200":
@@ -840,6 +896,8 @@ paths:
                 name:
                   description: Server name
                   type: string
+                  minLength: 1
+                  maxLength: 100
                 icon:
                   description: Server icon image
                   type: string
@@ -862,6 +920,12 @@ paths:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "403":
+          description: a GIF icon needs boost level 1
           content:
             application/json:
               schema:
@@ -890,6 +954,7 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
       requestBody:
         content:
           application/json:
@@ -942,6 +1007,7 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
       responses:
         "200":
           description: OK
@@ -951,6 +1017,12 @@ paths:
                 $ref: "#/components/schemas/handler.serverResponse"
         "400":
           description: malformed serverId
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "401":
+          description: Unauthorized
           content:
             application/json:
               schema:
@@ -980,6 +1052,7 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
       requestBody:
         content:
           multipart/form-data:
@@ -1053,6 +1126,7 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
       responses:
         "200":
           description: OK
@@ -1060,6 +1134,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/word_filter_handler.BannedWordsResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
         "401":
           description: Unauthorized
           content:
@@ -1098,6 +1178,7 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
       requestBody:
         content:
           application/json:
@@ -1152,11 +1233,16 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
       responses:
         "200":
           description: the banner image
           content:
             image/png:
+              schema:
+                type: string
+                format: binary
+            application/json:
               schema:
                 type: string
                 format: binary
@@ -1166,10 +1252,16 @@ paths:
             image/png:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
         "404":
           description: server has no banner, or not found
           content:
             image/png:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
       summary: Get a server's banner
@@ -1190,17 +1282,22 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
         - description: Page size (max 100)
           in: query
           name: limit
           schema:
             type: integer
+            format: int64
+            minimum: 0
             default: 20
         - description: Items to skip
           in: query
           name: offset
           schema:
             type: integer
+            format: int64
+            minimum: 0
             default: 0
       responses:
         "200":
@@ -1253,6 +1350,7 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
       requestBody:
         content:
           application/json:
@@ -1316,12 +1414,14 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
         - description: ID of the banned user
           in: path
           name: userId
           required: true
           schema:
             type: string
+            format: uuid
       responses:
         "204":
           description: No Content
@@ -1368,6 +1468,7 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
       responses:
         "200":
           description: OK
@@ -1375,6 +1476,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/boost_handler.SummaryResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
         "401":
           description: Unauthorized
           content:
@@ -1408,6 +1515,7 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
       requestBody:
         content:
           application/json:
@@ -1462,6 +1570,7 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
       requestBody:
         content:
           application/json:
@@ -1514,6 +1623,7 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
       requestBody:
         content:
           application/json:
@@ -1572,6 +1682,7 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
       requestBody:
         content:
           application/json:
@@ -1622,6 +1733,7 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
       requestBody:
         content:
           application/json:
@@ -1673,6 +1785,7 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
       responses:
         "200":
           description: OK
@@ -1680,6 +1793,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/emoji.ListResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
         "401":
           description: Unauthorized
           content:
@@ -1718,6 +1837,7 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
       requestBody:
         content:
           multipart/form-data:
@@ -1789,12 +1909,14 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
         - description: Emoji ID
           in: path
           name: emojiId
           required: true
           schema:
             type: string
+            format: uuid
       responses:
         "204":
           description: deleted
@@ -1838,11 +1960,16 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
       responses:
         "200":
           description: the icon image
           content:
             image/png:
+              schema:
+                type: string
+                format: binary
+            application/json:
               schema:
                 type: string
                 format: binary
@@ -1852,10 +1979,16 @@ paths:
             image/png:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
         "404":
           description: server, or icon, not found
           content:
             image/png:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
       summary: Get a server's icon
@@ -1873,6 +2006,7 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
       responses:
         "200":
           description: OK
@@ -1882,6 +2016,12 @@ paths:
                 items:
                   $ref: "#/components/schemas/model.InvitationResponse"
                 type: array
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
         "401":
           description: Unauthorized
           content:
@@ -1916,6 +2056,7 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
       requestBody:
         content:
           application/json:
@@ -1974,6 +2115,7 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
       requestBody:
         content:
           application/json:
@@ -2031,6 +2173,7 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
         - description: Keep only members whose name contains this, ignoring case and
             accents. Members without a visible profile never match.
           in: query
@@ -2042,12 +2185,16 @@ paths:
           name: limit
           schema:
             type: integer
+            format: int64
+            minimum: 0
             default: 20
         - description: Items to skip
           in: query
           name: offset
           schema:
             type: integer
+            format: int64
+            minimum: 0
             default: 0
       responses:
         "200":
@@ -2097,15 +2244,23 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
         - description: Must match the caller's own user ID
           in: path
           name: userId
           required: true
           schema:
             type: string
+            format: uuid
       responses:
         "204":
           description: no content
+        "400":
+          description: Bad Request
+          content:
+            "*/*":
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
         "401":
           description: Unauthorized
           content:
@@ -2148,12 +2303,14 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
         - description: Target member's user ID
           in: path
           name: userId
           required: true
           schema:
             type: string
+            format: uuid
       responses:
         "200":
           description: OK
@@ -2161,6 +2318,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/member_role_handler.memberPermissionsResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
         "401":
           description: Unauthorized
           content:
@@ -2194,12 +2357,14 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
         - description: Target member's user ID
           in: path
           name: userId
           required: true
           schema:
             type: string
+            format: uuid
       responses:
         "200":
           description: OK
@@ -2209,6 +2374,12 @@ paths:
                 items:
                   $ref: "#/components/schemas/roleview.Response"
                 type: array
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
         "401":
           description: Unauthorized
           content:
@@ -2243,12 +2414,14 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
         - description: Target member's user ID
           in: path
           name: userId
           required: true
           schema:
             type: string
+            format: uuid
       requestBody:
         content:
           application/json:
@@ -2303,21 +2476,30 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
         - description: Target member's user ID
           in: path
           name: userId
           required: true
           schema:
             type: string
+            format: uuid
         - description: Role ID
           in: path
           name: roleId
           required: true
           schema:
             type: string
+            format: uuid
       responses:
         "204":
           description: no content
+        "400":
+          description: Bad Request
+          content:
+            "*/*":
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
         "401":
           description: Unauthorized
           content:
@@ -2356,6 +2538,7 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
       responses:
         "200":
           description: OK
@@ -2411,6 +2594,7 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
       requestBody:
         content:
           application/json:
@@ -2468,17 +2652,22 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
         - description: Page size (max 100)
           in: query
           name: limit
           schema:
             type: integer
+            format: int64
+            minimum: 0
             default: 20
         - description: Items to skip
           in: query
           name: offset
           schema:
             type: integer
+            format: int64
+            minimum: 0
             default: 0
       responses:
         "200":
@@ -2528,6 +2717,7 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
       requestBody:
         content:
           application/json:
@@ -2578,15 +2768,29 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
         - description: Muted user ID
           in: path
           name: userId
           required: true
           schema:
             type: string
+            format: uuid
       responses:
         "204":
           description: No Content
+        "400":
+          description: Bad Request
+          content:
+            "*/*":
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            "*/*":
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
         "404":
           description: user is not muted in this server
           content:
@@ -2610,6 +2814,7 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
       requestBody:
         content:
           application/json:
@@ -2670,12 +2875,14 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
         - description: Transfer ID
           in: path
           name: transferId
           required: true
           schema:
             type: string
+            format: uuid
       responses:
         "200":
           description: OK
@@ -2683,6 +2890,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/model.OwnershipTransferResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
         "401":
           description: Unauthorized
           content:
@@ -2723,12 +2936,14 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
         - description: Transfer ID
           in: path
           name: transferId
           required: true
           schema:
             type: string
+            format: uuid
       responses:
         "200":
           description: OK
@@ -2736,6 +2951,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/model.OwnershipTransferResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
         "401":
           description: Unauthorized
           content:
@@ -2775,12 +2996,14 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
         - description: Transfer ID
           in: path
           name: transferId
           required: true
           schema:
             type: string
+            format: uuid
       responses:
         "200":
           description: OK
@@ -2788,6 +3011,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/model.OwnershipTransferResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
         "401":
           description: Unauthorized
           content:
@@ -2829,6 +3058,7 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
       responses:
         "200":
           description: OK
@@ -2836,6 +3066,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/model.OwnershipTransferResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
         "401":
           description: Unauthorized
           content:
@@ -2875,6 +3111,7 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
         - description: pending (default), resolved, dismissed or all
           in: query
           name: status
@@ -2885,11 +3122,15 @@ paths:
           name: limit
           schema:
             type: integer
+            format: int64
+            minimum: 0
         - description: Reports to skip
           in: query
           name: offset
           schema:
             type: integer
+            format: int64
+            minimum: 0
       responses:
         "200":
           description: OK
@@ -2945,6 +3186,7 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
       requestBody:
         content:
           application/json:
@@ -3012,12 +3254,14 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
         - description: Report ID
           in: path
           name: reportId
           required: true
           schema:
             type: string
+            format: uuid
       requestBody:
         content:
           application/json:
@@ -3079,6 +3323,7 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
       responses:
         "200":
           description: OK
@@ -3088,6 +3333,12 @@ paths:
                 items:
                   $ref: "#/components/schemas/roleview.Response"
                 type: array
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
         "401":
           description: Unauthorized
           content:
@@ -3120,6 +3371,7 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
       requestBody:
         content:
           application/json:
@@ -3177,6 +3429,7 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
       requestBody:
         content:
           application/json:
@@ -3238,6 +3491,7 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
       requestBody:
         content:
           application/json:
@@ -3336,7 +3590,9 @@ components:
           example: 1
           type: integer
         next_level:
-          $ref: "#/components/schemas/boost_handler.NextLevelResponse"
+          allOf:
+            - $ref: "#/components/schemas/boost_handler.NextLevelResponse"
+          nullable: true
         perks_unlocked:
           example:
             - extra_emoji_slots
@@ -3350,29 +3606,42 @@ components:
         code:
           example: mi-servidor
           type: string
+          nullable: true
       type: object
     boost_handler.VanityResponse:
       properties:
         vanity_code:
           example: mi-servidor
           type: string
+          nullable: true
       type: object
     category_handler.createCategoryRequest:
       properties:
         name:
+          maxLength: 100
+          minLength: 1
           type: string
+      required:
+        - name
       type: object
     category_handler.reorderCategoriesRequest:
       properties:
         category_ids:
           items:
+            format: uuid
             type: string
           type: array
+      required:
+        - category_ids
       type: object
     category_handler.updateCategoryRequest:
       properties:
         name:
+          maxLength: 100
+          minLength: 1
           type: string
+      required:
+        - name
       type: object
     categoryview.Response:
       properties:
@@ -3388,32 +3657,50 @@ components:
     channel_handler.createChannelRequest:
       properties:
         category_id:
+          format: uuid
           type: string
+          nullable: true
         kind:
+          enum:
+            - text
+            - voice
           type: string
         name:
+          maxLength: 100
+          minLength: 1
           type: string
+      required:
+        - kind
+        - name
       type: object
     channel_handler.moveChannelRequest:
       properties:
         category_id:
+          format: uuid
           type: string
+          nullable: true
       type: object
     channel_handler.reorderChannelsRequest:
       properties:
         category_id:
+          format: uuid
           type: string
+          nullable: true
         channel_ids:
           items:
+            format: uuid
             type: string
           type: array
       type: object
     channel_handler.updateChannelRequest:
       properties:
         name:
+          maxLength: 100
           type: string
+          nullable: true
         topic:
           type: string
+          nullable: true
       type: object
     channelperm_handler.OverrideResponse:
       properties:
@@ -3458,6 +3745,7 @@ components:
       properties:
         category_id:
           type: string
+          nullable: true
         id:
           type: string
         kind:
@@ -3470,6 +3758,7 @@ components:
           type: string
         topic:
           type: string
+          nullable: true
       type: object
     emoji.ListResponse:
       properties:
@@ -3509,6 +3798,8 @@ components:
         confirm_name:
           example: Mi Comunidad
           type: string
+      required:
+        - confirm_name
       type: object
     handler.membershipResponse:
       properties:
@@ -3521,6 +3812,7 @@ components:
       properties:
         banner_url:
           type: string
+          nullable: true
         boost_count:
           description: >-
             BoostCount and BoostLevel come from the boosts billing charged for.
@@ -3542,6 +3834,7 @@ components:
           type: string
         icon_url:
           type: string
+          nullable: true
         id:
           type: string
         name:
@@ -3559,11 +3852,15 @@ components:
           type: boolean
         vanity_code:
           type: string
+          nullable: true
       type: object
     member_role_handler.assignRoleRequest:
       properties:
         role_id:
+          format: uuid
           type: string
+      required:
+        - role_id
       type: object
     member_role_handler.memberPermissionsResponse:
       properties:
@@ -3596,27 +3893,38 @@ components:
     mention_handler.resolveRequest:
       properties:
         channel_id:
+          format: uuid
           type: string
         everyone:
           type: boolean
         role_ids:
           items:
+            format: uuid
             type: string
           type: array
         user_ids:
           items:
+            format: uuid
             type: string
           type: array
+      required:
+        - channel_id
       type: object
     model.GenerateInvitationRequest:
       properties:
         max_uses:
+          format: int64
+          minimum: 1
           type: integer
+          nullable: true
       type: object
     model.InitiateOwnershipTransferRequest:
       properties:
         to_user_id:
+          format: uuid
           type: string
+      required:
+        - to_user_id
       type: object
     model.InvitationResponse:
       properties:
@@ -3628,10 +3936,13 @@ components:
           type: string
         expires_at:
           type: string
+          nullable: true
         max_uses:
           type: integer
+          nullable: true
         revoked_at:
           type: string
+          nullable: true
         server_id:
           type: string
         url:
@@ -3685,6 +3996,7 @@ components:
 
             speak until then), null if they aren't muted.
           type: string
+          nullable: true
         profile:
           allOf:
             - $ref: "#/components/schemas/model.MemberProfileResponse"
@@ -3695,6 +4007,7 @@ components:
             identify yet; clients can fall back to GET /v1/users/{id} then. It is also
 
             null for a member suspended at platform level, who stays listed.
+          nullable: true
         role_ids:
           description: >-
             RoleIDs are the roles the member holds, @everyone included, so
@@ -3719,6 +4032,7 @@ components:
           type: string
         resolved_at:
           type: string
+          nullable: true
         server_id:
           type: string
         status:
@@ -3738,6 +4052,7 @@ components:
             or
 
             ban is no longer a member, so this is the only way to name them.
+          nullable: true
         actor_user_id:
           type: string
         id:
@@ -3747,7 +4062,9 @@ components:
         server_id:
           type: string
         target_profile:
-          $ref: "#/components/schemas/model.MemberProfileResponse"
+          allOf:
+            - $ref: "#/components/schemas/model.MemberProfileResponse"
+          nullable: true
         target_user_id:
           type: string
       type: object
@@ -3783,10 +4100,14 @@ components:
           type: string
         banned_by:
           type: string
+          nullable: true
         profile:
-          $ref: "#/components/schemas/model.MemberProfileResponse"
+          allOf:
+            - $ref: "#/components/schemas/model.MemberProfileResponse"
+          nullable: true
         reason:
           type: string
+          nullable: true
         server_id:
           type: string
         user_id:
@@ -3795,23 +4116,38 @@ components:
     moderation_handler.banRequest:
       properties:
         reason:
+          maxLength: 512
           type: string
+          nullable: true
         user_id:
+          format: uuid
           type: string
+      required:
+        - user_id
       type: object
     moderation_handler.kickRequest:
       properties:
         user_id:
+          format: uuid
           type: string
+      required:
+        - user_id
       type: object
     moderation_handler.muteRequest:
       properties:
         reason:
+          maxLength: 512
           type: string
+          nullable: true
         until_at:
+          format: date-time
           type: string
         user_id:
+          format: uuid
           type: string
+      required:
+        - until_at
+        - user_id
       type: object
     report.ListResponse:
       properties:
@@ -3830,6 +4166,7 @@ components:
       properties:
         channel_id:
           type: string
+          nullable: true
         created_at:
           type: string
         id:
@@ -3838,16 +4175,22 @@ components:
           type: string
         message_id:
           type: string
+          nullable: true
         reason:
           type: string
         reported_profile:
-          $ref: "#/components/schemas/model.MemberProfileResponse"
+          allOf:
+            - $ref: "#/components/schemas/model.MemberProfileResponse"
+          nullable: true
         reported_user_id:
           type: string
+          nullable: true
         reporter_id:
           type: string
         reporter_profile:
-          $ref: "#/components/schemas/model.MemberProfileResponse"
+          allOf:
+            - $ref: "#/components/schemas/model.MemberProfileResponse"
+          nullable: true
         resolution_action:
           description: delete_message, mute, kick or ban; null if it was closed without one.
           enum:
@@ -3856,10 +4199,13 @@ components:
             - kick
             - ban
           type: string
+          nullable: true
         resolved_at:
           type: string
+          nullable: true
         resolved_by:
           type: string
+          nullable: true
         server_id:
           type: string
         status:
@@ -3881,11 +4227,14 @@ components:
             - dismissed
           example: resolved
           type: string
+      required:
+        - status
       type: object
     report_handler.CreateRequest:
       properties:
         channel_id:
           example: 0b6f6a2e-6a41-4a42-9d0a-2c6a2d1f7c11
+          format: uuid
           type: string
         kind:
           enum:
@@ -3895,39 +4244,57 @@ components:
           type: string
         message_id:
           example: 01a1b2c3-d4e5-7f60-8a9b-0c1d2e3f4a5b
+          format: uuid
           type: string
         reason:
           example: Insultos repetidos hacia otros miembros
+          maxLength: 512
           type: string
         user_id:
           example: a3f1c0de-1111-4222-8333-444455556666
+          format: uuid
           type: string
+      required:
+        - kind
       type: object
     role_handler.createRoleRequest:
       properties:
         color:
           type: string
         name:
+          maxLength: 100
+          minLength: 1
           type: string
+      required:
+        - name
       type: object
     role_handler.reorderRolesRequest:
       properties:
         role_ids:
           items:
+            format: uuid
             type: string
           type: array
+      required:
+        - role_ids
       type: object
     role_handler.setDefaultRoleRequest:
       properties:
         role_id:
+          format: uuid
           type: string
+      required:
+        - role_id
       type: object
     role_handler.updateRolePermissionsRequest:
       properties:
         color:
           type: string
+          nullable: true
         name:
+          maxLength: 100
           type: string
+          nullable: true
         permissions:
           items:
             type: string
@@ -3973,8 +4340,11 @@ components:
       properties:
         words:
           items:
+            maxLength: 50
             type: string
           type: array
+      required:
+        - words
       type: object
     word_filter_handler.BannedWordsResponse:
       properties:

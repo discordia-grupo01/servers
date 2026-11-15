@@ -23,9 +23,9 @@ func New(uc UseCases) *Handler {
 }
 
 type resolveRequest struct {
-	ChannelID string   `json:"channel_id"`
-	UserIDs   []string `json:"user_ids"`
-	RoleIDs   []string `json:"role_ids"`
+	ChannelID string   `json:"channel_id" validate:"required" format:"uuid"`
+	UserIDs   []string `json:"user_ids" format:"uuid" maxItems:"50"`
+	RoleIDs   []string `json:"role_ids" format:"uuid" maxItems:"20"`
 	Everyone  bool     `json:"everyone"`
 }
 
@@ -36,7 +36,7 @@ type resolveRequest struct {
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        serverId  path  string          true  "Server ID"
+// @Param        serverId  path  string          true  "Server ID" Format(uuid)
 // @Param        body      body  resolveRequest  true  "Channel of the message and the mentions found in it"
 // @Success      200  {object}  mention.ResolutionResponse
 // @Failure      400  {object}  apierr.ErrorResponse  "invalid body, channel_id or role id, channel of another server, or too many mentions"

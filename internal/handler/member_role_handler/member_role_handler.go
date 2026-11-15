@@ -33,7 +33,7 @@ func New(uc MemberRoleUseCases) *Handler {
 }
 
 type assignRoleRequest struct {
-	RoleID string `json:"role_id"`
+	RoleID string `json:"role_id" validate:"required" format:"uuid"`
 }
 
 // AssignRole godoc
@@ -43,8 +43,8 @@ type assignRoleRequest struct {
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        serverId  path  string              true  "Server ID"
-// @Param        userId    path  string              true  "Target member's user ID"
+// @Param        serverId  path  string              true  "Server ID" Format(uuid)
+// @Param        userId    path  string              true  "Target member's user ID" Format(uuid)
 // @Param        body      body  assignRoleRequest   true  "ID of the role to assign"
 // @Success      200  {object}  roleview.Response
 // @Failure      400  {object}  apierr.ErrorResponse
@@ -88,13 +88,14 @@ func (h *Handler) AssignRole(c *gin.Context) {
 // @Description  Administrators only (the owner, or a member with ADMINISTRATOR).
 // @Tags         member-roles
 // @Security     BearerAuth
-// @Param        serverId  path  string  true  "Server ID"
-// @Param        userId    path  string  true  "Target member's user ID"
-// @Param        roleId    path  string  true  "Role ID"
+// @Param        serverId  path  string  true  "Server ID" Format(uuid)
+// @Param        userId    path  string  true  "Target member's user ID" Format(uuid)
+// @Param        roleId    path  string  true  "Role ID" Format(uuid)
 // @Success      204  "no content"
 // @Failure      401  {object}  apierr.ErrorResponse
 // @Failure      403  {object}  apierr.ErrorResponse  "not a server administrator, or unassigning a role with ADMINISTRATOR from yourself, or the role is not below your highest role"
 // @Failure      404  {object}  apierr.ErrorResponse  "server or role not found, or the member doesn't have the role"
+// @Failure      400  {object}  apierr.ErrorResponse
 // @Router       /v1/servers/{serverId}/members/{userId}/roles/{roleId} [delete]
 func (h *Handler) RemoveRole(c *gin.Context) {
 	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
@@ -126,12 +127,13 @@ func (h *Handler) RemoveRole(c *gin.Context) {
 // @Tags         member-roles
 // @Produce      json
 // @Security     BearerAuth
-// @Param        serverId  path  string  true  "Server ID"
-// @Param        userId    path  string  true  "Target member's user ID"
+// @Param        serverId  path  string  true  "Server ID" Format(uuid)
+// @Param        userId    path  string  true  "Target member's user ID" Format(uuid)
 // @Success      200  {array}   roleview.Response
 // @Failure      401  {object}  apierr.ErrorResponse
 // @Failure      403  {object}  apierr.ErrorResponse  "the caller is not a member of the server"
 // @Failure      404  {object}  apierr.ErrorResponse  "server not found, or the user is not a member"
+// @Failure      400  {object}  apierr.ErrorResponse
 // @Router       /v1/servers/{serverId}/members/{userId}/roles [get]
 func (h *Handler) ListMemberRoles(c *gin.Context) {
 	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
@@ -169,12 +171,13 @@ type memberPermissionsResponse struct {
 // @Tags         member-roles
 // @Produce      json
 // @Security     BearerAuth
-// @Param        serverId  path  string  true  "Server ID"
-// @Param        userId    path  string  true  "Target member's user ID"
+// @Param        serverId  path  string  true  "Server ID" Format(uuid)
+// @Param        userId    path  string  true  "Target member's user ID" Format(uuid)
 // @Success      200  {object}  memberPermissionsResponse
 // @Failure      401  {object}  apierr.ErrorResponse
 // @Failure      403  {object}  apierr.ErrorResponse  "the caller is not a member of the server"
 // @Failure      404  {object}  apierr.ErrorResponse  "server not found, or the user is not a member"
+// @Failure      400  {object}  apierr.ErrorResponse
 // @Router       /v1/servers/{serverId}/members/{userId}/permissions [get]
 func (h *Handler) GetMemberPermissions(c *gin.Context) {
 	serverID, ok := apierr.ParseUUIDParam(c, "serverId")

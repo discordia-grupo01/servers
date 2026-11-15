@@ -60,8 +60,8 @@ type effectivePermissionsResponse struct {
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        channelId  path  string              true  "Channel ID"
-// @Param        roleId     path  string              true  "Role ID (it may be @everyone)"
+// @Param        channelId  path  string              true  "Channel ID" Format(uuid)
+// @Param        roleId     path  string              true  "Role ID (it may be @everyone)" Format(uuid)
 // @Param        body       body  setOverrideRequest  true  "Permissions to allow and to deny in this channel"
 // @Success      200  {object}  OverrideResponse
 // @Success      204  "both lists empty: the override was removed"
@@ -109,8 +109,8 @@ func (h *Handler) SetOverride(c *gin.Context) {
 // @Tags         channel-permissions
 // @Produce      json
 // @Security     BearerAuth
-// @Param        channelId  path  string  true  "Channel ID"
-// @Param        roleId     path  string  true  "Role ID"
+// @Param        channelId  path  string  true  "Channel ID" Format(uuid)
+// @Param        roleId     path  string  true  "Role ID" Format(uuid)
 // @Success      204
 // @Failure      400  {object}  apierr.ErrorResponse  "invalid id, or role from another server"
 // @Failure      401  {object}  apierr.ErrorResponse
@@ -144,7 +144,7 @@ func (h *Handler) DeleteOverride(c *gin.Context) {
 // @Tags         channel-permissions
 // @Produce      json
 // @Security     BearerAuth
-// @Param        channelId  path  string  true  "Channel ID"
+// @Param        channelId  path  string  true  "Channel ID" Format(uuid)
 // @Success      200  {array}   OverrideResponse
 // @Failure      400  {object}  apierr.ErrorResponse  "invalid channel id"
 // @Failure      401  {object}  apierr.ErrorResponse
@@ -177,8 +177,8 @@ func (h *Handler) ListOverrides(c *gin.Context) {
 // @Tags         channel-permissions
 // @Produce      json
 // @Security     BearerAuth
-// @Param        channelId  path  string  true  "Channel ID"
-// @Param        userId     path  string  true  "Target member's user ID"
+// @Param        channelId  path  string  true  "Channel ID" Format(uuid)
+// @Param        userId     path  string  true  "Target member's user ID" Format(uuid)
 // @Success      200  {object}  effectivePermissionsResponse
 // @Failure      400  {object}  apierr.ErrorResponse  "invalid channel id"
 // @Failure      401  {object}  apierr.ErrorResponse

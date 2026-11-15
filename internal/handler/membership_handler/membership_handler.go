@@ -24,13 +24,14 @@ func New(uc UseCases) *Handler {
 // @Description  Self-leave only: userId must be the caller's own. The owner cannot leave (transfer ownership or delete the server first).
 // @Tags         membership
 // @Security     BearerAuth
-// @Param        serverId  path  string  true  "Server ID"
-// @Param        userId    path  string  true  "Must match the caller's own user ID"
+// @Param        serverId  path  string  true  "Server ID" Format(uuid)
+// @Param        userId    path  string  true  "Must match the caller's own user ID" Format(uuid)
 // @Success      204  "no content"
 // @Failure      401  {object}  apierr.ErrorResponse
 // @Failure      403  {object}  apierr.ErrorResponse  "userId is not the caller"
 // @Failure      404  {object}  apierr.ErrorResponse
 // @Failure      409  {object}  apierr.ErrorResponse  "the owner cannot leave; transfer ownership or delete the server first"
+// @Failure      400  {object}  apierr.ErrorResponse
 // @Router       /v1/servers/{serverId}/members/{userId} [delete]
 func (h *Handler) LeaveServer(c *gin.Context) {
 	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
@@ -56,10 +57,10 @@ func (h *Handler) LeaveServer(c *gin.Context) {
 // @Tags         membership
 // @Produce      json
 // @Security     BearerAuth
-// @Param        serverId  path   string  true   "Server ID"
+// @Param        serverId  path   string  true   "Server ID" Format(uuid)
 // @Param        q         query  string  false  "Keep only members whose name contains this, ignoring case and accents. Members without a visible profile never match."
-// @Param        limit     query  int     false  "Page size" default(20)
-// @Param        offset    query  int     false  "Items to skip" default(0)
+// @Param        limit     query  int     false  "Page size" minimum(0) Format(int64) default(20)
+// @Param        offset    query  int     false  "Items to skip" minimum(0) Format(int64) default(0)
 // @Success      200  {object}  model.MemberListResponse
 // @Failure      400  {object}  apierr.ErrorResponse  "invalid limit/offset"
 // @Failure      401  {object}  apierr.ErrorResponse
