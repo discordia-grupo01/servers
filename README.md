@@ -456,8 +456,10 @@ permisos en el resto del servidor (HU #57). Se guardan en la tabla
 - **Boosts** (`GET /v1/servers/{serverId}/boosts`, para cualquier miembro): boosts
   activos, nivel, beneficios y cuánto falta para el siguiente nivel. Los puntos los
   cobra `billing`; este servicio decide si acepta el boost, en la cola
-  `servers.billing_events`. Un servidor suspendido o quien no es miembro reciben un
-  rechazo, y `billing` devuelve los puntos; una falla técnica reencola el evento.
+  `servers.billing_events`. Un servidor suspendido, quien no es miembro y un servidor
+  que ya tiene 30 boosts activos (el tope del nivel 3, `max_level_reached`) reciben un
+  rechazo, y `billing` devuelve los puntos; una falla técnica reencola el evento. Si
+  se retira un boost, el servidor vuelve a aceptar uno.
   Cada boost se guarda por `boost_id`, así un evento repetido recibe la misma
   respuesta. Niveles: 1 con 5 boosts (+20 emojis, ícono GIF), 2 con 15 (banner,
   adjuntos de 25 MB) y 3 con 30 (vanity, insignia). Si un servidor baja de nivel, los

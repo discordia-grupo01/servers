@@ -48,7 +48,7 @@ type VanityResponse struct {
 
 // Summary godoc
 // @Summary      See a server's boosts and perks
-// @Description  Any member of the server. next_level is null on the last level. Perks: extra_emoji_slots and animated_icon from level 1 (5 boosts), custom_banner and larger_attachments from level 2 (15), vanity_url and boosted_badge at level 3 (30).
+// @Description  Any member of the server. next_level is null on the last level, where the server takes no more boosts (30) until one is removed. Perks: extra_emoji_slots and animated_icon from level 1 (5 boosts), custom_banner and larger_attachments from level 2 (15), vanity_url and boosted_badge at level 3 (30).
 // @Tags         boosts
 // @Produce      json
 // @Security     BearerAuth
