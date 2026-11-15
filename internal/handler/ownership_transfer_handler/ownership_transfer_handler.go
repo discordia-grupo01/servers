@@ -42,7 +42,7 @@ func toResponse(t model.OwnershipTransfer) model.OwnershipTransferResponse {
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        serverId  path  string                                     true  "Server ID"
+// @Param        serverId  path  string                                     true  "Server ID" Format(uuid)
 // @Param        body      body  model.InitiateOwnershipTransferRequest     true  "Target member's user ID"
 // @Success      201  {object}  model.OwnershipTransferResponse
 // @Failure      400  {object}  apierr.ErrorResponse  "to_user_id required, not a member, or already the owner"
@@ -81,11 +81,12 @@ func (h *Handler) Initiate(c *gin.Context) {
 // @Tags         ownership-transfers
 // @Produce      json
 // @Security     BearerAuth
-// @Param        serverId  path  string  true  "Server ID"
+// @Param        serverId  path  string  true  "Server ID" Format(uuid)
 // @Success      200  {object}  model.OwnershipTransferResponse
 // @Failure      401  {object}  apierr.ErrorResponse
 // @Failure      403  {object}  apierr.ErrorResponse  "caller is not a member"
 // @Failure      404  {object}  apierr.ErrorResponse  "no pending transfer"
+// @Failure      400  {object}  apierr.ErrorResponse
 // @Router       /v1/servers/{serverId}/ownership-transfers/pending [get]
 func (h *Handler) GetPending(c *gin.Context) {
 	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
@@ -110,13 +111,14 @@ func (h *Handler) GetPending(c *gin.Context) {
 // @Tags         ownership-transfers
 // @Produce      json
 // @Security     BearerAuth
-// @Param        serverId    path  string  true  "Server ID"
-// @Param        transferId  path  string  true  "Transfer ID"
+// @Param        serverId    path  string  true  "Server ID" Format(uuid)
+// @Param        transferId  path  string  true  "Transfer ID" Format(uuid)
 // @Success      200  {object}  model.OwnershipTransferResponse
 // @Failure      401  {object}  apierr.ErrorResponse
 // @Failure      403  {object}  apierr.ErrorResponse  "not the recipient"
 // @Failure      404  {object}  apierr.ErrorResponse
 // @Failure      409  {object}  apierr.ErrorResponse  "no longer pending (expired, cancelled, or already resolved)"
+// @Failure      400  {object}  apierr.ErrorResponse
 // @Router       /v1/servers/{serverId}/ownership-transfers/{transferId}/accept [post]
 func (h *Handler) Accept(c *gin.Context) {
 	t, ok := h.respond(c, func(uc UseCases, ctx context.Context, p ownership_transfer_service.RespondParams) (model.OwnershipTransfer, error) {
@@ -134,13 +136,14 @@ func (h *Handler) Accept(c *gin.Context) {
 // @Tags         ownership-transfers
 // @Produce      json
 // @Security     BearerAuth
-// @Param        serverId    path  string  true  "Server ID"
-// @Param        transferId  path  string  true  "Transfer ID"
+// @Param        serverId    path  string  true  "Server ID" Format(uuid)
+// @Param        transferId  path  string  true  "Transfer ID" Format(uuid)
 // @Success      200  {object}  model.OwnershipTransferResponse
 // @Failure      401  {object}  apierr.ErrorResponse
 // @Failure      403  {object}  apierr.ErrorResponse  "not the recipient"
 // @Failure      404  {object}  apierr.ErrorResponse
 // @Failure      409  {object}  apierr.ErrorResponse  "no longer pending"
+// @Failure      400  {object}  apierr.ErrorResponse
 // @Router       /v1/servers/{serverId}/ownership-transfers/{transferId}/reject [post]
 func (h *Handler) Reject(c *gin.Context) {
 	t, ok := h.respond(c, func(uc UseCases, ctx context.Context, p ownership_transfer_service.RespondParams) (model.OwnershipTransfer, error) {
@@ -158,13 +161,14 @@ func (h *Handler) Reject(c *gin.Context) {
 // @Tags         ownership-transfers
 // @Produce      json
 // @Security     BearerAuth
-// @Param        serverId    path  string  true  "Server ID"
-// @Param        transferId  path  string  true  "Transfer ID"
+// @Param        serverId    path  string  true  "Server ID" Format(uuid)
+// @Param        transferId  path  string  true  "Transfer ID" Format(uuid)
 // @Success      200  {object}  model.OwnershipTransferResponse
 // @Failure      401  {object}  apierr.ErrorResponse
 // @Failure      403  {object}  apierr.ErrorResponse  "not the initiator"
 // @Failure      404  {object}  apierr.ErrorResponse
 // @Failure      409  {object}  apierr.ErrorResponse  "no longer pending"
+// @Failure      400  {object}  apierr.ErrorResponse
 // @Router       /v1/servers/{serverId}/ownership-transfers/{transferId}/cancel [post]
 func (h *Handler) Cancel(c *gin.Context) {
 	t, ok := h.respond(c, func(uc UseCases, ctx context.Context, p ownership_transfer_service.RespondParams) (model.OwnershipTransfer, error) {

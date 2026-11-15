@@ -26,7 +26,7 @@ func New(uc UseCases) *Handler {
 }
 
 type BannedWordsRequest struct {
-	Words []string `json:"words"`
+	Words []string `json:"words" validate:"required" maxLength:"50" maxItems:"100"`
 }
 
 type BannedWordsResponse struct {
@@ -39,11 +39,12 @@ type BannedWordsResponse struct {
 // @Tags         moderation
 // @Produce      json
 // @Security     BearerAuth
-// @Param        serverId  path  string  true  "Server ID"
+// @Param        serverId  path  string  true  "Server ID" Format(uuid)
 // @Success      200  {object}  BannedWordsResponse
 // @Failure      401  {object}  apierr.ErrorResponse
 // @Failure      403  {object}  apierr.ErrorResponse  "missing MANAGE_MESSAGES"
 // @Failure      404  {object}  apierr.ErrorResponse  "server not found or not a member"
+// @Failure      400  {object}  apierr.ErrorResponse
 // @Router       /v1/servers/{serverId}/banned-words [get]
 func (h *Handler) List(c *gin.Context) {
 	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
@@ -67,7 +68,7 @@ func (h *Handler) List(c *gin.Context) {
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        serverId  path  string              true  "Server ID"
+// @Param        serverId  path  string              true  "Server ID" Format(uuid)
 // @Param        body      body  BannedWordsRequest  true  "The whole list"
 // @Success      200  {object}  BannedWordsResponse  "the list as saved"
 // @Failure      400  {object}  apierr.ErrorResponse  "empty, too long or invalid word, or more than 100"

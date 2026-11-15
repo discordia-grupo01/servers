@@ -31,7 +31,7 @@ func New(uc CategoryUseCases) *Handler {
 }
 
 type createCategoryRequest struct {
-	Name string `json:"name"`
+	Name string `json:"name" validate:"required" minLength:"1" maxLength:"100"`
 }
 
 // CreateCategory godoc
@@ -41,7 +41,7 @@ type createCategoryRequest struct {
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        serverId  path  string                  true  "Server ID"
+// @Param        serverId  path  string                  true  "Server ID" Format(uuid)
 // @Param        body      body  createCategoryRequest   true  "Category name"
 // @Success      201  {object}  categoryview.Response
 // @Failure      400  {object}  apierr.ErrorResponse
@@ -74,7 +74,7 @@ func (h *Handler) CreateCategory(c *gin.Context) {
 }
 
 type updateCategoryRequest struct {
-	Name string `json:"name"`
+	Name string `json:"name" validate:"required" minLength:"1" maxLength:"100"`
 }
 
 // UpdateCategory godoc
@@ -84,7 +84,7 @@ type updateCategoryRequest struct {
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        categoryId  path  string                  true  "Category ID"
+// @Param        categoryId  path  string                  true  "Category ID" Format(uuid)
 // @Param        body        body  updateCategoryRequest   true  "New category name"
 // @Success      200  {object}  categoryview.Response
 // @Failure      400  {object}  apierr.ErrorResponse
@@ -117,7 +117,7 @@ func (h *Handler) UpdateCategory(c *gin.Context) {
 }
 
 type reorderCategoriesRequest struct {
-	CategoryIDs []string `json:"category_ids"`
+	CategoryIDs []string `json:"category_ids" validate:"required" minItems:"1" format:"uuid"`
 }
 
 // Reorder godoc
@@ -126,7 +126,7 @@ type reorderCategoriesRequest struct {
 // @Tags         categories
 // @Accept       json
 // @Security     BearerAuth
-// @Param        serverId  path  string                      true  "Server ID"
+// @Param        serverId  path  string                      true  "Server ID" Format(uuid)
 // @Param        body      body  reorderCategoriesRequest    true  "Category IDs in their new order"
 // @Success      200  "ok"
 // @Failure      400  {object}  apierr.ErrorResponse

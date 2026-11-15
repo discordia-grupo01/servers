@@ -45,9 +45,9 @@ func parseOptionalUUID(c *gin.Context, field string, raw *string) (*uuid.UUID, b
 }
 
 type createChannelRequest struct {
-	Name       string  `json:"name"`
-	Kind       string  `json:"kind"`
-	CategoryID *string `json:"category_id"`
+	Name       string  `json:"name" validate:"required" minLength:"1" maxLength:"100"`
+	Kind       string  `json:"kind" validate:"required" enums:"text,voice"`
+	CategoryID *string `json:"category_id" format:"uuid" extensions:"x-nullable"`
 }
 
 // CreateChannel godoc
@@ -57,7 +57,7 @@ type createChannelRequest struct {
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        serverId  path  string                 true  "Server ID"
+// @Param        serverId  path  string                 true  "Server ID" Format(uuid)
 // @Param        body      body  createChannelRequest   true  "Channel name, kind and optional category"
 // @Success      201  {object}  channelview.Response
 // @Failure      400  {object}  apierr.ErrorResponse
@@ -97,8 +97,8 @@ func (h *Handler) CreateChannel(c *gin.Context) {
 }
 
 type updateChannelRequest struct {
-	Name  *string `json:"name"`
-	Topic *string `json:"topic"`
+	Name  *string `json:"name" maxLength:"100" extensions:"x-nullable"`
+	Topic *string `json:"topic" extensions:"x-nullable"`
 }
 
 // UpdateChannel godoc
@@ -108,7 +108,7 @@ type updateChannelRequest struct {
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        channelId  path  string                 true  "Channel ID"
+// @Param        channelId  path  string                 true  "Channel ID" Format(uuid)
 // @Param        body       body  updateChannelRequest   true  "Fields to update"
 // @Success      200  {object}  channelview.Response
 // @Failure      400  {object}  apierr.ErrorResponse
@@ -146,11 +146,12 @@ func (h *Handler) UpdateChannel(c *gin.Context) {
 // @Description  Administrators only (the owner, or a member with ADMINISTRATOR). A channel hidden from the caller by a permission override (no VIEW_CHANNELS there) is reported as 404, as if it didn't exist.
 // @Tags         channels
 // @Security     BearerAuth
-// @Param        channelId  path  string  true  "Channel ID"
+// @Param        channelId  path  string  true  "Channel ID" Format(uuid)
 // @Success      204  "no content"
 // @Failure      401  {object}  apierr.ErrorResponse
 // @Failure      403  {object}  apierr.ErrorResponse  "not a server administrator"
 // @Failure      404  {object}  apierr.ErrorResponse
+// @Failure      400  {object}  apierr.ErrorResponse
 // @Router       /v1/channels/{channelId} [delete]
 func (h *Handler) DeleteChannel(c *gin.Context) {
 	channelID, ok := apierr.ParseUUIDParam(c, "channelId")
@@ -170,7 +171,7 @@ func (h *Handler) DeleteChannel(c *gin.Context) {
 }
 
 type moveChannelRequest struct {
-	CategoryID *string `json:"category_id"`
+	CategoryID *string `json:"category_id" format:"uuid" extensions:"x-nullable"`
 }
 
 // MoveToCategory godoc
@@ -180,7 +181,7 @@ type moveChannelRequest struct {
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        channelId  path  string               true  "Channel ID"
+// @Param        channelId  path  string               true  "Channel ID" Format(uuid)
 // @Param        body       body  moveChannelRequest   true  "Target category (or null)"
 // @Success      200  {object}  channelview.Response
 // @Failure      400  {object}  apierr.ErrorResponse
@@ -218,8 +219,8 @@ func (h *Handler) MoveToCategory(c *gin.Context) {
 }
 
 type reorderChannelsRequest struct {
-	CategoryID *string  `json:"category_id"`
-	ChannelIDs []string `json:"channel_ids"`
+	CategoryID *string  `json:"category_id" format:"uuid" extensions:"x-nullable"`
+	ChannelIDs []string `json:"channel_ids" format:"uuid"`
 }
 
 // Reorder godoc
@@ -228,7 +229,7 @@ type reorderChannelsRequest struct {
 // @Tags         channels
 // @Accept       json
 // @Security     BearerAuth
-// @Param        serverId  path  string                    true  "Server ID"
+// @Param        serverId  path  string                    true  "Server ID" Format(uuid)
 // @Param        body      body  reorderChannelsRequest    true  "Category and the channel IDs in their new order"
 // @Success      200  "ok"
 // @Failure      400  {object}  apierr.ErrorResponse

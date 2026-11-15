@@ -1,4 +1,4 @@
-.PHONY: run test mutation build db-reset migrate openapi backfill-voice
+.PHONY: run test mutation build db-reset migrate openapi backfill-voice contract-deps-up contract-deps-down contract-test
 
 -include .env
 export
@@ -51,3 +51,18 @@ openapi:
 # periódica: ARGS="--interval 5m".
 backfill-voice:
 	go run ./cmd/backfillvoice $(ARGS)
+
+# Tests de contrato: Schemathesis contra el servicio levantado con un Postgres y
+# un RabbitMQ efimeros y locales (puertos 55505 y 55515). Ver README.
+contract-deps-up:
+	docker run -d --rm --name contract-servers-pg -p 55505:5432 -e POSTGRES_USER=discordia -e POSTGRES_PASSWORD=discordia -e POSTGRES_DB=discordia_servers_contract postgres:16-alpine
+	docker run -d --rm --name contract-servers-rabbitmq -p 55515:5672 rabbitmq:3.13-alpine
+	until docker exec contract-servers-pg pg_isready -U discordia -d discordia_servers_contract >/dev/null 2>&1; do sleep 1; done
+	sleep 2
+	MSYS_NO_PATHCONV=1 docker run --rm -v $(shell pwd)/migrations:/migrations --network container:contract-servers-pg migrate/migrate -path=/migrations -database "postgres://discordia:discordia@localhost:5432/discordia_servers_contract?sslmode=disable" up
+
+contract-deps-down:
+	-docker rm -f contract-servers-pg contract-servers-rabbitmq
+
+contract-test:
+	bash scripts/contract-test.sh

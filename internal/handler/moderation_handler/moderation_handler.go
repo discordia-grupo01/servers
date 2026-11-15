@@ -23,8 +23,8 @@ func New(uc UseCases) *Handler {
 }
 
 type banRequest struct {
-	UserID string  `json:"user_id"`
-	Reason *string `json:"reason"`
+	UserID string  `json:"user_id" validate:"required" format:"uuid"`
+	Reason *string `json:"reason" maxLength:"512" extensions:"x-nullable"`
 }
 
 // Ban godoc
@@ -34,7 +34,7 @@ type banRequest struct {
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        serverId  path  string      true  "Server ID"
+// @Param        serverId  path  string      true  "Server ID" Format(uuid)
 // @Param        body      body  banRequest  true  "Who to ban and, optionally, why"
 // @Success      201  {object}  moderation.BanResponse
 // @Failure      400  {object}  apierr.ErrorResponse  "missing user_id, banning yourself, or invalid reason"
@@ -69,13 +69,13 @@ func (h *Handler) Ban(c *gin.Context) {
 }
 
 type kickRequest struct {
-	UserID string `json:"user_id"`
+	UserID string `json:"user_id" validate:"required" format:"uuid"`
 }
 
 type muteRequest struct {
-	UserID  string    `json:"user_id"`
-	UntilAt time.Time `json:"until_at"`
-	Reason  *string   `json:"reason"`
+	UserID  string    `json:"user_id" validate:"required" format:"uuid"`
+	UntilAt time.Time `json:"until_at" validate:"required" format:"date-time"`
+	Reason  *string   `json:"reason" maxLength:"512" extensions:"x-nullable"`
 }
 
 // Mute godoc
@@ -84,7 +84,7 @@ type muteRequest struct {
 // @Tags         moderation
 // @Accept       json
 // @Security     BearerAuth
-// @Param        serverId path string true "Server ID"
+// @Param        serverId path string true "Server ID" Format(uuid)
 // @Param        body body muteRequest true "Mute details"
 // @Success      204
 // @Failure      400  {object}  apierr.ErrorResponse  "missing user_id, muting yourself, until_at not in the future, or invalid reason"
@@ -116,10 +116,12 @@ func (h *Handler) Mute(c *gin.Context) {
 // @Summary      Remove a member mute
 // @Tags         moderation
 // @Security     BearerAuth
-// @Param        serverId path string true "Server ID"
-// @Param        userId path string true "Muted user ID"
+// @Param        serverId path string true "Server ID" Format(uuid)
+// @Param        userId path string true "Muted user ID" Format(uuid)
 // @Success      204
 // @Failure      404  {object} apierr.ErrorResponse  "user is not muted in this server"
+// @Failure      400  {object}  apierr.ErrorResponse
+// @Failure      401  {object}  apierr.ErrorResponse
 // @Router       /v1/servers/{serverId}/mutes/{userId} [delete]
 func (h *Handler) Unmute(c *gin.Context) {
 	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
@@ -142,7 +144,7 @@ func (h *Handler) Unmute(c *gin.Context) {
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        serverId  path  string       true  "Server ID"
+// @Param        serverId  path  string       true  "Server ID" Format(uuid)
 // @Param        body      body  kickRequest  true  "Who to kick"
 // @Success      204
 // @Failure      400  {object}  apierr.ErrorResponse  "missing user_id, or kicking yourself"
@@ -180,8 +182,8 @@ func (h *Handler) Kick(c *gin.Context) {
 // @Tags         moderation
 // @Produce      json
 // @Security     BearerAuth
-// @Param        serverId  path  string  true  "Server ID"
-// @Param        userId    path  string  true  "ID of the banned user"
+// @Param        serverId  path  string  true  "Server ID" Format(uuid)
+// @Param        userId    path  string  true  "ID of the banned user" Format(uuid)
 // @Success      204
 // @Failure      400  {object}  apierr.ErrorResponse  "invalid server id"
 // @Failure      401  {object}  apierr.ErrorResponse
@@ -212,9 +214,9 @@ func (h *Handler) Unban(c *gin.Context) {
 // @Tags         moderation
 // @Produce      json
 // @Security     BearerAuth
-// @Param        serverId  path   string  true   "Server ID"
-// @Param        limit     query  int     false  "Page size (max 100)" default(20)
-// @Param        offset    query  int     false  "Items to skip" default(0)
+// @Param        serverId  path   string  true   "Server ID" Format(uuid)
+// @Param        limit     query  int     false  "Page size (max 100)" minimum(0) Format(int64) default(20)
+// @Param        offset    query  int     false  "Items to skip" minimum(0) Format(int64) default(0)
 // @Success      200  {object}  moderation.BanListResponse
 // @Failure      400  {object}  apierr.ErrorResponse  "invalid limit/offset"
 // @Failure      401  {object}  apierr.ErrorResponse
@@ -264,9 +266,9 @@ func (h *Handler) ListBans(c *gin.Context) {
 // @Tags         moderation
 // @Produce      json
 // @Security     BearerAuth
-// @Param        serverId path string true "Server ID"
-// @Param        limit query int false "Page size (max 100)" default(20)
-// @Param        offset query int false "Items to skip" default(0)
+// @Param        serverId path string true "Server ID" Format(uuid)
+// @Param        limit query int false "Page size (max 100)" minimum(0) Format(int64) default(20)
+// @Param        offset query int false "Items to skip" minimum(0) Format(int64) default(0)
 // @Success      200 {object} moderation.AuditPage
 // @Failure      400 {object} apierr.ErrorResponse
 // @Failure      401 {object} apierr.ErrorResponse

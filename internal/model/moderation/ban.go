@@ -72,10 +72,10 @@ type BanPage struct {
 type BanResponse struct {
 	ServerID string                       `json:"server_id"`
 	UserID   string                       `json:"user_id"`
-	Reason   *string                      `json:"reason"`
-	BannedBy *string                      `json:"banned_by"`
+	Reason   *string                      `json:"reason" extensions:"x-nullable"`
+	BannedBy *string                      `json:"banned_by" extensions:"x-nullable"`
 	BannedAt time.Time                    `json:"banned_at"`
-	Profile  *model.MemberProfileResponse `json:"profile"`
+	Profile  *model.MemberProfileResponse `json:"profile" extensions:"x-nullable"`
 }
 
 func ToResponse(b Ban) BanResponse {

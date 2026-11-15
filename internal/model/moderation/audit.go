@@ -26,8 +26,8 @@ type AuditEntry struct {
 	OccurredAt   time.Time `json:"occurred_at"`
 	// Replicated from identify; nil until it arrives. The target of a kick or
 	// ban is no longer a member, so this is the only way to name them.
-	ActorProfile  *model.MemberProfileResponse `json:"actor_profile"`
-	TargetProfile *model.MemberProfileResponse `json:"target_profile"`
+	ActorProfile  *model.MemberProfileResponse `json:"actor_profile" extensions:"x-nullable"`
+	TargetProfile *model.MemberProfileResponse `json:"target_profile" extensions:"x-nullable"`
 }
 
 type AuditPage struct {

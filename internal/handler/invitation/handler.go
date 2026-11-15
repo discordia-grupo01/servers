@@ -50,7 +50,7 @@ func toResponse(i model.Invitation) model.InvitationResponse {
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        serverId  path  string                             true   "Server ID"
+// @Param        serverId  path  string                             true   "Server ID" Format(uuid)
 // @Param        body      body  model.GenerateInvitationRequest    false  "Optional max_uses"
 // @Success      201  {object}  model.InvitationResponse
 // @Failure      400  {object}  apierr.ErrorResponse  "invalid max_uses"
@@ -85,11 +85,12 @@ func (h *Handler) generate(c *gin.Context) {
 // @Tags         invitations
 // @Produce      json
 // @Security     BearerAuth
-// @Param        serverId  path  string  true  "Server ID"
+// @Param        serverId  path  string  true  "Server ID" Format(uuid)
 // @Success      200  {array}   model.InvitationResponse
 // @Failure      401  {object}  apierr.ErrorResponse
 // @Failure      403  {object}  apierr.ErrorResponse  "caller cannot invite (not an administrator nor holds CREATE_INVITE)"
 // @Failure      404  {object}  apierr.ErrorResponse
+// @Failure      400  {object}  apierr.ErrorResponse
 // @Router       /v1/servers/{serverId}/invites [get]
 func (h *Handler) list(c *gin.Context) {
 	invitations, err := h.uc.ListInvitations(c.Request.Context(), invitationsvc.ListParams{
@@ -118,6 +119,7 @@ func (h *Handler) list(c *gin.Context) {
 // @Failure      401  {object}  apierr.ErrorResponse
 // @Failure      403  {object}  apierr.ErrorResponse  "not an administrator nor the invitation's creator"
 // @Failure      404  {object}  apierr.ErrorResponse  "invitation not found"
+// @Failure      400  {object}  apierr.ErrorResponse
 // @Router       /v1/invites/{code} [delete]
 func (h *Handler) revoke(c *gin.Context) {
 	err := h.uc.RevokeInvitation(c.Request.Context(), invitationsvc.RevokeParams{
@@ -143,6 +145,7 @@ func (h *Handler) revoke(c *gin.Context) {
 // @Failure      401  {object}  apierr.ErrorResponse
 // @Failure      403  {object}  apierr.ErrorResponse  "user is banned from the server"
 // @Failure      404  {object}  apierr.ErrorResponse  "invalid, revoked, expired or exhausted code"
+// @Failure      400  {object}  apierr.ErrorResponse
 // @Router       /v1/invites/{code}/join [post]
 func (h *Handler) join(c *gin.Context) {
 	res, err := h.uc.JoinServer(c.Request.Context(), invitationsvc.JoinParams{

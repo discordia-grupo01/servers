@@ -5,3 +5,9 @@
 /api
 /data/
 /.openapi-tmp/
+/.contract-venv/
+/.contract-servers-api
+/.contract-servers-api.exe
+/.schemathesis/
+/schemathesis-report/
+__pycache__/

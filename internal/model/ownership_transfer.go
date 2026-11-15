@@ -30,7 +30,7 @@ type OwnershipTransfer struct {
 func (t OwnershipTransfer) IsPending() bool { return t.Status == OwnershipTransferPending }
 
 type InitiateOwnershipTransferRequest struct {
-	ToUserID string `json:"to_user_id"`
+	ToUserID string `json:"to_user_id" validate:"required" format:"uuid"`
 }
 
 type OwnershipTransferResponse struct {
@@ -40,5 +40,5 @@ type OwnershipTransferResponse struct {
 	ToUserID   string     `json:"to_user_id"`
 	Status     string     `json:"status"`
 	CreatedAt  time.Time  `json:"created_at"`
-	ResolvedAt *time.Time `json:"resolved_at"`
+	ResolvedAt *time.Time `json:"resolved_at" extensions:"x-nullable"`
 }
