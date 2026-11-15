@@ -2,13 +2,48 @@ services:
   api:
     build: .
     ports:
-      - "8080:8080"
-    env_file: .env
+      - "${API_PORT:-8080}:8080"
+    env_file:
+      - path: .env
+        required: false
     environment:
+      ENVIRONMENT: development
+      HOST: 0.0.0.0
+      PORT: 8080
       DATABASE_HOST: db
+      DATABASE_PORT: 5432
+      DATABASE_NAME: ${DATABASE_NAME:-discordia_servicio}
+      DATABASE_USER: ${DATABASE_USER:-discordia}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-discordia}
+      DATABASE_SSLMODE: disable
+      DATABASE_SCHEMA: ""
+      USER_ID_HEADER: X-User-Id
       ICON_DIR: /data/icons
+      RABBITMQ_URL: ${RABBITMQ_URL_DOCKER:-}
+      ADMIN_EVENTS_HMAC_SECRET: ${ADMIN_EVENTS_HMAC_SECRET:-secreto-admin-solo-local}
+      BILLING_EVENTS_HMAC_SECRET: ${BILLING_EVENTS_HMAC_SECRET:-secreto-billing-solo-local}
     volumes:
       - icons_data:/data/icons
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/livez || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  migrate:
+    image: migrate/migrate
+    command:
+      - "-path=/migrations"
+      - "-database=postgres://${DATABASE_USER:-discordia}:${DATABASE_PASSWORD:-discordia}@db:5432/${DATABASE_NAME:-discordia_servicio}?sslmode=disable"
+      - "up"
+    volumes:
+      - ./migrations:/migrations:ro
     depends_on:
       db:
         condition: service_healthy
@@ -16,16 +51,15 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: ${DATABASE_NAME}
-      POSTGRES_USER: ${DATABASE_USER}
-      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      POSTGRES_DB: ${DATABASE_NAME:-discordia_servicio}
+      POSTGRES_USER: ${DATABASE_USER:-discordia}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-discordia}
     ports:
-      - "${DATABASE_PORT}:5432"
+      - "${DATABASE_PORT:-5432}:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
-      - ./migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER} -d ${DATABASE_NAME}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER:-discordia} -d ${DATABASE_NAME:-discordia_servicio}"]
       interval: 5s
       timeout: 5s
       retries: 5
