@@ -48,7 +48,7 @@ type createRoleRequest struct {
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        serverId  path  string             true  "Server ID"
+// @Param        serverId  path  string             true  "Server ID" Format(uuid)
 // @Param        body      body  createRoleRequest  true  "Role name and color"
 // @Success      201  {object}  roleview.Response
 // @Failure      400  {object}  apierr.ErrorResponse
@@ -87,11 +87,12 @@ func (h *Handler) CreateRole(c *gin.Context) {
 // @Tags         roles
 // @Produce      json
 // @Security     BearerAuth
-// @Param        serverId  path  string  true  "Server ID"
+// @Param        serverId  path  string  true  "Server ID" Format(uuid)
 // @Success      200  {array}   roleview.Response
 // @Failure      401  {object}  apierr.ErrorResponse
 // @Failure      403  {object}  apierr.ErrorResponse  "the caller is not a member of the server"
 // @Failure      404  {object}  apierr.ErrorResponse
+// @Failure      400  {object}  apierr.ErrorResponse
 // @Router       /v1/servers/{serverId}/roles [get]
 func (h *Handler) ListRoles(c *gin.Context) {
 	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
@@ -118,11 +119,12 @@ func (h *Handler) ListRoles(c *gin.Context) {
 // @Tags         roles
 // @Produce      json
 // @Security     BearerAuth
-// @Param        roleId  path  string  true  "Role ID"
+// @Param        roleId  path  string  true  "Role ID" Format(uuid)
 // @Success      200  {object}  roleview.Response
 // @Failure      401  {object}  apierr.ErrorResponse
 // @Failure      403  {object}  apierr.ErrorResponse  "the caller is not a member of the role's server"
 // @Failure      404  {object}  apierr.ErrorResponse
+// @Failure      400  {object}  apierr.ErrorResponse
 // @Router       /v1/roles/{roleId} [get]
 func (h *Handler) GetRole(c *gin.Context) {
 	roleID, ok := apierr.ParseUUIDParam(c, "roleId")
@@ -151,7 +153,7 @@ type updateRolePermissionsRequest struct {
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        roleId  path  string                          true  "Role ID"
+// @Param        roleId  path  string                          true  "Role ID" Format(uuid)
 // @Param        body    body  updateRolePermissionsRequest    true  "Fields to update"
 // @Success      200  {object}  roleview.Response
 // @Failure      400  {object}  apierr.ErrorResponse
@@ -200,7 +202,7 @@ type reorderRolesRequest struct {
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        serverId  path  string               true  "Server ID"
+// @Param        serverId  path  string               true  "Server ID" Format(uuid)
 // @Param        body      body  reorderRolesRequest  true  "Role IDs in their new order, highest first"
 // @Success      200  {array}   roleview.Response
 // @Failure      400  {object}  apierr.ErrorResponse  "invalid body, or the list doesn't match the server's roles"
@@ -256,7 +258,7 @@ func (h *Handler) ReorderRoles(c *gin.Context) {
 // @Tags         roles
 // @Accept       json
 // @Security     BearerAuth
-// @Param        serverId  path  string                  true  "Server ID"
+// @Param        serverId  path  string                  true  "Server ID" Format(uuid)
 // @Param        body      body  setDefaultRoleRequest    true  "ID of the role to use as default"
 // @Success      204  "no content"
 // @Failure      400  {object}  apierr.ErrorResponse
@@ -298,11 +300,12 @@ func (h *Handler) SetDefaultRole(c *gin.Context) {
 // @Description  Administrators only (the owner, or a member with ADMINISTRATOR).
 // @Tags         roles
 // @Security     BearerAuth
-// @Param        roleId  path  string  true  "Role ID"
+// @Param        roleId  path  string  true  "Role ID" Format(uuid)
 // @Success      204  "no content"
 // @Failure      401  {object}  apierr.ErrorResponse
 // @Failure      403  {object}  apierr.ErrorResponse  "not a server administrator, or deleting a role with ADMINISTRATOR that you hold, or the role is not below your highest role"
 // @Failure      404  {object}  apierr.ErrorResponse
+// @Failure      400  {object}  apierr.ErrorResponse
 // @Router       /v1/roles/{roleId} [delete]
 func (h *Handler) DeleteRole(c *gin.Context) {
 	roleID, ok := apierr.ParseUUIDParam(c, "roleId")
@@ -327,7 +330,7 @@ func (h *Handler) DeleteRole(c *gin.Context) {
 // @Tags         roles
 // @Produce      json
 // @Security     BearerAuth
-// @Param        roleId    path   string  true   "Role ID"
+// @Param        roleId    path   string  true   "Role ID" Format(uuid)
 // @Param        has_role  query  bool    false  "false lists the members without the role" default(true)
 // @Param        q         query  string  false  "Keep only members whose name contains this, ignoring case and accents"
 // @Param        limit     query  int     false  "Page size" default(20)

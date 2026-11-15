@@ -41,7 +41,7 @@ type createCategoryRequest struct {
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        serverId  path  string                  true  "Server ID"
+// @Param        serverId  path  string                  true  "Server ID" Format(uuid)
 // @Param        body      body  createCategoryRequest   true  "Category name"
 // @Success      201  {object}  categoryview.Response
 // @Failure      400  {object}  apierr.ErrorResponse
@@ -84,7 +84,7 @@ type updateCategoryRequest struct {
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        categoryId  path  string                  true  "Category ID"
+// @Param        categoryId  path  string                  true  "Category ID" Format(uuid)
 // @Param        body        body  updateCategoryRequest   true  "New category name"
 // @Success      200  {object}  categoryview.Response
 // @Failure      400  {object}  apierr.ErrorResponse
@@ -126,7 +126,7 @@ type reorderCategoriesRequest struct {
 // @Tags         categories
 // @Accept       json
 // @Security     BearerAuth
-// @Param        serverId  path  string                      true  "Server ID"
+// @Param        serverId  path  string                      true  "Server ID" Format(uuid)
 // @Param        body      body  reorderCategoriesRequest    true  "Category IDs in their new order"
 // @Success      200  "ok"
 // @Failure      400  {object}  apierr.ErrorResponse

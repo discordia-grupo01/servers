@@ -147,7 +147,7 @@ func (h *serverHandler) createServer(c *gin.Context) {
 // @Accept       multipart/form-data
 // @Produce      json
 // @Security     BearerAuth
-// @Param        serverId       path      string  true   "Server ID"
+// @Param        serverId       path      string  true   "Server ID" Format(uuid)
 // @Param        name           formData  string  false  "New server name"
 // @Param        icon           formData  file    false  "New icon image"
 // @Param        banner         formData  file    false  "New banner image (boost level 2)"
@@ -208,7 +208,7 @@ type deleteServerRequest struct {
 // @Tags         servers
 // @Accept       json
 // @Security     BearerAuth
-// @Param        serverId  path  string               true  "Server id (UUID)"
+// @Param        serverId  path  string               true  "Server id (UUID)" Format(uuid)
 // @Param        body      body  deleteServerRequest  true  "Confirmation"
 // @Success      204  "deleted"
 // @Failure      400  {object}  apierr.ErrorResponse  "invalid body, or confirm_name missing or different from the server name"
@@ -269,7 +269,7 @@ func (h *serverHandler) listMyServers(c *gin.Context) {
 // @Tags         servers
 // @Produce      json
 // @Security     BearerAuth
-// @Param        serverId  path  string  true  "Server ID"
+// @Param        serverId  path  string  true  "Server ID" Format(uuid)
 // @Success      200  {object}  serverResponse
 // @Failure      400  {object}  apierr.ErrorResponse  "malformed serverId"
 // @Failure      404  {object}  apierr.ErrorResponse
@@ -298,7 +298,7 @@ type membershipResponse struct {
 // @Tags         servers
 // @Produce      json
 // @Security     BearerAuth
-// @Param        serverId  path  string  true  "Server ID"
+// @Param        serverId  path  string  true  "Server ID" Format(uuid)
 // @Success      200  {object} membershipResponse
 // @Failure      400  {object} apierr.ErrorResponse
 // @Failure      401  {object} apierr.ErrorResponse
@@ -322,7 +322,7 @@ func (h *serverHandler) getMembership(c *gin.Context) {
 // @Description  Public (no JWT required) -- binary image, so a plain `<img src>` can load it.
 // @Tags         servers
 // @Produce      png
-// @Param        serverId  path  string  true  "Server ID"
+// @Param        serverId  path  string  true  "Server ID" Format(uuid)
 // @Success      200  {file}    file  "the icon image"
 // @Failure      400  {object}  apierr.ErrorResponse
 // @Failure      404  {object}  apierr.ErrorResponse  "server, or icon, not found"
@@ -363,7 +363,7 @@ func (h *serverHandler) getIcon(c *gin.Context) {
 // @Description  Public (no JWT required) -- binary image, so a plain `<img src>` can load it.
 // @Tags         servers
 // @Produce      png
-// @Param        serverId  path  string  true  "Server ID"
+// @Param        serverId  path  string  true  "Server ID" Format(uuid)
 // @Success      200  {file}    file  "the banner image"
 // @Failure      400  {object}  apierr.ErrorResponse
 // @Failure      404  {object}  apierr.ErrorResponse  "server has no banner, or not found"
