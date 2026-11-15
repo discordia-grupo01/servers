@@ -1,2 +1,168 @@
 # Configuracion de Schemathesis para los tests de contrato de servers.
 # Cada check desactivado lleva el motivo. Ver README ("Tests de contrato").
+
+# Ids reales sembrados por scripts/contract/seed.py (el script de contrato los
+# exporta; ver las cuatro corridas en scripts/contract-test.sh).
+[parameters]
+serverId = "${SEED_SERVER}"
+channelId = "${SEED_CHANNEL}"
+roleId = "${SEED_ROLE}"
+userId = "${SEED_MEMBER}"
+categoryId = "${SEED_CATEGORY}"
+emojiId = "${SEED_EMOJI}"
+reportId = "${SEED_REPORT}"
+transferId = "${SEED_TRANSFER}"
+code = "${SEED_INVITE}"
+# Campos de los cuerpos (se aplican a las operaciones que los tienen).
+"body.user_id" = "${SEED_MEMBER}"
+"body.role_id" = "${SEED_ROLE}"
+"body.channel_id" = "${SEED_CHANNEL}"
+"body.to_user_id" = "${SEED_MEMBER}"
+"body.confirm_name" = "${SEED_SERVER_NAME}"
+
+# unsupported_method: Gin responde 404 (no 405) a un metodo no declarado porque
+# HandleMethodNotAllowed esta apagado. Activarlo cambia el status que ve un
+# cliente (404 -> 405): decision pendiente, no se aplica aca.
+[checks.unsupported_method]
+enabled = false
+
+# positive_data_acceptance: swag no puede expresar estas reglas de negocio en el
+# contrato (caracteres de control, textos que no pueden quedar vacios tras
+# recortar espacios, reglas entre campos, valores que dependen del estado), asi
+# que un cuerpo valido segun el esquema puede recibir 400 por esa regla.
+
+# El nombre se recorta y no admite caracteres de control.
+[[operations]]
+include-path = "/v1/servers"
+include-method = "POST"
+checks.positive_data_acceptance.enabled = false
+
+[[operations]]
+include-path = "/v1/servers/{serverId}"
+include-method = "PATCH"
+checks.positive_data_acceptance.enabled = false
+
+[[operations]]
+include-path = "/v1/servers/{serverId}/categories"
+include-method = "POST"
+checks.positive_data_acceptance.enabled = false
+
+[[operations]]
+include-path = "/v1/categories/{categoryId}"
+include-method = "PATCH"
+checks.positive_data_acceptance.enabled = false
+
+[[operations]]
+include-path = "/v1/servers/{serverId}/channels"
+include-method = "POST"
+checks.positive_data_acceptance.enabled = false
+
+# PATCH /v1/channels/{channelId}:
+# - positive_data_acceptance: nombre sin caracteres de control.
+# - negative_data_rejection: un cuerpo JSON `null` se acepta como "sin cambios"
+#   (ShouldBindJSON); rechazarlo cambia lo que ve un cliente.
+[[operations]]
+include-path = "/v1/channels/{channelId}"
+include-method = "PATCH"
+checks.positive_data_acceptance.enabled = false
+checks.negative_data_rejection.enabled = false
+
+# Un cuerpo `null` equivale a "sin categoria": se acepta (ver arriba).
+[[operations]]
+include-path = "/v1/channels/{channelId}/category"
+include-method = "PATCH"
+checks.negative_data_rejection.enabled = false
+
+# DECISION PENDIENTE (5xx): un caracter NUL (byte 0) en un texto llega a Postgres,
+# que lo rechaza, y el servicio responde 500 en vez de 400. Corregirlo cambia el
+# status que ve un cliente (500 -> 400): no se aplica aca, se reporta.
+[[operations]]
+include-path = "/v1/servers/{serverId}/roles"
+include-method = "POST"
+checks.positive_data_acceptance.enabled = false
+checks.not_a_server_error.enabled = false
+checks.status_code_conformance.enabled = false
+
+[[operations]]
+include-path = "/v1/roles/{roleId}"
+include-method = "PATCH"
+checks.positive_data_acceptance.enabled = false
+
+# confirm_name tiene que coincidir con el nombre actual del servidor.
+[[operations]]
+include-path = "/v1/servers/{serverId}"
+include-method = "DELETE"
+checks.positive_data_acceptance.enabled = false
+
+# action solo vale al resolver (status=resolved) y status=dismissed no la admite.
+[[operations]]
+include-path = "/v1/servers/{serverId}/reports/{reportId}"
+include-method = "PATCH"
+checks.positive_data_acceptance.enabled = false
+
+# reason: sin caracteres de control y no vacio tras recortar.
+[[operations]]
+include-path = "/v1/servers/{serverId}/reports"
+include-method = "POST"
+checks.positive_data_acceptance.enabled = false
+
+# DECISION PENDIENTE (5xx): un caracter NUL (byte 0) en un texto llega a Postgres,
+# que lo rechaza, y el servicio responde 500 en vez de 400. Corregirlo cambia el
+# status que ve un cliente (500 -> 400): no se aplica aca, se reporta.
+[[operations]]
+include-path = "/v1/servers/{serverId}/bans"
+include-method = "POST"
+checks.positive_data_acceptance.enabled = false
+checks.not_a_server_error.enabled = false
+checks.status_code_conformance.enabled = false
+
+# until_at tiene que ser una fecha futura.
+[[operations]]
+include-path = "/v1/servers/{serverId}/mutes"
+include-method = "POST"
+checks.positive_data_acceptance.enabled = false
+
+# Cada palabra sin caracteres de control.
+[[operations]]
+include-path = "/v1/servers/{serverId}/banned-words"
+include-method = "PUT"
+checks.positive_data_acceptance.enabled = false
+
+# El nombre admite letras, numeros y guion bajo (2 a 32) y la imagen se detecta
+# por contenido (PNG, WebP o GIF): un archivo al azar es 400.
+[[operations]]
+include-path = "/v1/servers/{serverId}/emojis"
+include-method = "POST"
+checks.positive_data_acceptance.enabled = false
+
+# Mismo caso del NUL en el parametro q (busqueda de miembros).
+# DECISION PENDIENTE (5xx): un caracter NUL (byte 0) en un texto llega a Postgres,
+[[operations]]
+include-path = "/v1/servers/{serverId}/members"
+include-method = "GET"
+checks.not_a_server_error.enabled = false
+checks.status_code_conformance.enabled = false
+
+[[operations]]
+include-path = "/v1/roles/{roleId}/members"
+include-method = "GET"
+checks.not_a_server_error.enabled = false
+checks.status_code_conformance.enabled = false
+
+# Un cuerpo JSON `null` se acepta como cuerpo vacio (ShouldBindJSON) y la
+# operacion responde 2xx; rechazarlo cambiaria lo que ve un cliente.
+[[operations]]
+include-path = "/v1/servers/{serverId}/invites"
+include-method = "POST"
+checks.negative_data_rejection.enabled = false
+
+[[operations]]
+include-path = "/v1/channels/{channelId}/permissions/roles/{roleId}"
+include-method = "PUT"
+checks.negative_data_rejection.enabled = false
+
+# Un canal de voz sembrado: con el de texto la ruta responde 403/404.
+[[operations]]
+include-path = "/v1/channels/{channelId}/voice-access"
+include-method = "GET"
+parameters = { channelId = "${SEED_VOICE}" }

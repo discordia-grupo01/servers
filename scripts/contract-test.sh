@@ -50,6 +50,8 @@ else
   if [ -x "$VENV/bin/schemathesis" ]; then ST="$VENV/bin/schemathesis"; else ST="$VENV/Scripts/schemathesis.exe"; fi
 fi
 
+if [ -x "$VENV/Scripts/python.exe" ]; then PY_VENV="$VENV/Scripts/python.exe"; elif [ -x "$VENV/bin/python" ]; then PY_VENV="$VENV/bin/python"; else PY_VENV="$PY"; fi
+
 # servers no verifica la firma del JWT (la valida Kong): toma el `sub` del payload.
 TOKEN="$("$PY" scripts/contract/make_token.py "$USER_ID")"
 
@@ -64,6 +66,7 @@ export ADMIN_EVENTS_HMAC_SECRET="contract-test-hmac" BILLING_EVENTS_HMAC_SECRET=
 export ICON_DIR="$ICONS"
 unset USER_ID_HEADER SUPABASE_STORAGE_URL SUPABASE_STORAGE_BUCKET SUPABASE_SERVICE_KEY DATABASE_MAX_CONNS
 
+rm -rf "$REPORT_DIR"
 BIN=.contract-servers-api
 go build -o "$BIN" ./cmd/api
 "./$BIN" >"$LOG" 2>&1 &
@@ -72,7 +75,7 @@ cleanup() {
   kill "$APP_PID" 2>/dev/null || true
   # En Windows (Git Bash) kill no alcanza al proceso nativo: se mata por PID de Windows.
   if command -v taskkill >/dev/null 2>&1; then
-    WINPID="$(ps -p "$APP_PID" -W 2>/dev/null | awk 'NR>1 {print $4}')"
+    WINPID="$(ps -p "$APP_PID" -W 2>/dev/null | awk 'NR>1 {print $4}' || true)"
     if [ -n "${WINPID:-}" ]; then taskkill //F //PID "$WINPID" >/dev/null 2>&1 || true; fi
   fi
   rm -rf "$BIN" "$BIN.exe" "$LOG" "$ICONS"
@@ -99,10 +102,60 @@ if [ "$ready" -ne 1 ]; then
   exit 1
 fi
 
-"$ST" --config-file scripts/contract/schemathesis.toml run openapi.yaml \
-  --url "$BASE" \
-  -H "Authorization: Bearer $TOKEN" \
-  --max-examples "$MAX_EXAMPLES" \
-  --seed 1 \
-  --workers 1 \
-  --report junit --report-dir "$REPORT_DIR"
+# Datos de prueba por la API (ids reales para Schemathesis); ver seed.py. Las
+# operaciones que borran o que consumen estado se corren aparte, cada una con un
+# juego de datos nuevo, para que no destruyan lo que usan las demas:
+#   1) todo menos DELETE y menos aceptar/rechazar transferencias
+#   2) DELETE que deshacen algo        3) DELETE de baneos
+#   4) DELETE de canal, rol, invitacion y emoji   5) DELETE del servidor
+#   6) abandonar el servidor (como el propio miembro)
+#   7) aceptar y 8) rechazar la transferencia (como el destinatario)
+# Despues, scenario.py recorre el camino feliz de los flujos que el fuzzing no
+# alcanza y coverage.py mide cuantas operaciones tuvieron un 2xx real.
+seed() {
+  "$PY" scripts/contract/seed.py "$BASE" "$USER_ID" | tr -d '\r'
+}
+DESTRUCTIVE='^(/v1/channels/\{channelId\}|/v1/roles/\{roleId\}|/v1/invites/\{code\}|/v1/servers/\{serverId\}/emojis/\{emojiId\})$'
+NOT_DELETE='^(GET|POST|PUT|PATCH)$'
+TRANSFER_DECISION='/ownership-transfers/\{transferId\}/(accept|reject)$'
+
+run_st() {
+  local tok="$TOKEN"
+  if [ -n "${AS_TOKEN:-}" ]; then tok="$AS_TOKEN"; fi
+  "$ST" --config-file scripts/contract/schemathesis.toml run openapi.yaml \
+    --url "$BASE" \
+    -H "Authorization: Bearer $tok" \
+    --max-examples "$MAX_EXAMPLES" \
+    --seed 1 \
+    --workers 1 \
+    --report junit,har --report-dir "$REPORT_DIR" "$@"
+}
+
+status=0
+step() { echo "== $1"; eval "$(seed)"; }
+
+step "1/8: operaciones que no son DELETE ni aceptar/rechazar"
+run_st --exclude-method DELETE --exclude-path-regex "$TRANSFER_DECISION" || status=1
+step "2/8: DELETE que deshacen algo"
+run_st --include-method DELETE --exclude-path-regex "$DESTRUCTIVE|/bans/|^/v1/servers/\{serverId\}(/members/\{userId\})?$" || status=1
+step "3/8: DELETE de baneos"
+SEED_MEMBER="$SEED_BAN" run_st --include-path-regex '/bans/' || status=1
+step "4/8: DELETE de canal, rol, invitacion y emoji"
+run_st --include-path-regex "$DESTRUCTIVE" --exclude-method-regex "$NOT_DELETE" || status=1
+step "5/8: DELETE del servidor"
+SEED_SERVER="$SEED_SERVER_DEL" SEED_SERVER_NAME="$SEED_SERVER_DEL_NAME" \
+  run_st --include-path-regex '^/v1/servers/\{serverId\}$' --exclude-method-regex "$NOT_DELETE" || status=1
+step "6/8: abandonar el servidor"
+SEED_MEMBER="$SEED_LEAVER" AS_TOKEN="$SEED_LEAVER_TOKEN" \
+  run_st --include-path-regex '^/v1/servers/\{serverId\}/members/\{userId\}$' || status=1
+step "7/8: aceptar la transferencia"
+AS_TOKEN="$SEED_MEMBER_TOKEN" run_st --include-path-regex '/ownership-transfers/\{transferId\}/accept$' || status=1
+step "8/8: rechazar la transferencia"
+AS_TOKEN="$SEED_MEMBER_TOKEN" run_st --include-path-regex '/ownership-transfers/\{transferId\}/reject$' || status=1
+
+echo "== escenario de camino feliz"
+"$PY_VENV" scripts/contract/scenario.py openapi.yaml "$BASE" "$REPORT_DIR/har-scenario.json" || status=1
+
+echo "== cobertura de contrato"
+"$PY_VENV" scripts/contract/coverage.py openapi.yaml "$REPORT_DIR"/har-*.json || status=1
+exit "$status"

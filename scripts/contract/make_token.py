@@ -13,11 +13,15 @@ def b64(data: dict) -> str:
     return base64.urlsafe_b64encode(json.dumps(data, separators=(",", ":")).encode()).rstrip(b"=").decode()
 
 
+def token(sub: str) -> str:
+    return b64({"alg": "none", "typ": "JWT"}) + "." + b64({"sub": sub}) + ".contract"
+
+
 def main() -> int:
     if len(sys.argv) < 2:
         print("uso: make_token.py <sub-uuid>", file=sys.stderr)
         return 2
-    print(b64({"alg": "none", "typ": "JWT"}) + "." + b64({"sub": sys.argv[1]}) + ".contract")
+    print(token(sys.argv[1]))
     return 0
 
 
