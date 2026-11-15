@@ -40,9 +40,10 @@ func NewRepository(pool *pgxpool.Pool, secret string) *Repository {
 func (r *Repository) Request(ctx context.Context, b model.Boost) error {
 	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
 		var suspendedAt *time.Time
+		var boostCount int
 		err := tx.QueryRow(ctx,
-			`SELECT suspended_at FROM servers WHERE id = $1 FOR NO KEY UPDATE`, b.ServerID,
-		).Scan(&suspendedAt)
+			`SELECT suspended_at, boost_count FROM servers WHERE id = $1 FOR NO KEY UPDATE`, b.ServerID,
+		).Scan(&suspendedAt, &boostCount)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return r.insertSaga(ctx, tx, boosts.RoutingKeyRejected, b, boosts.ReasonServerNotFound)
 		}
@@ -62,7 +63,7 @@ func (r *Repository) Request(ctx context.Context, b model.Boost) error {
 			return fmt.Errorf("select boost: %w", err)
 		}
 
-		rejection, err := rejectionReason(ctx, tx, b, suspendedAt)
+		rejection, err := rejectionReason(ctx, tx, b, suspendedAt, boostCount)
 		if err != nil {
 			return err
 		}
@@ -163,7 +164,9 @@ func (r *Repository) repeatAnswer(ctx context.Context, tx pgx.Tx, b model.Boost,
 	}
 }
 
-func rejectionReason(ctx context.Context, tx pgx.Tx, b model.Boost, suspendedAt *time.Time) (string, error) {
+// rejectionReason runs under the server's lock, so two requests on a server one
+// boost short of the cap can't both be applied.
+func rejectionReason(ctx context.Context, tx pgx.Tx, b model.Boost, suspendedAt *time.Time, boostCount int) (string, error) {
 	if suspendedAt != nil {
 		return boosts.ReasonServerSuspended, nil
 	}
@@ -176,6 +179,9 @@ func rejectionReason(ctx context.Context, tx pgx.Tx, b model.Boost, suspendedAt 
 	}
 	if !member {
 		return boosts.ReasonNotAMember, nil
+	}
+	if model.BoostCapReached(boostCount) {
+		return boosts.ReasonMaxLevelReached, nil
 	}
 	return "", nil
 }
