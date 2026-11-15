@@ -896,6 +896,8 @@ paths:
                 name:
                   description: Server name
                   type: string
+                  minLength: 1
+                  maxLength: 100
                 icon:
                   description: Server icon image
                   type: string
@@ -918,6 +920,12 @@ paths:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "403":
+          description: a GIF icon needs boost level 1
           content:
             application/json:
               schema:
@@ -1009,6 +1017,12 @@ paths:
                 $ref: "#/components/schemas/handler.serverResponse"
         "400":
           description: malformed serverId
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "401":
+          description: Unauthorized
           content:
             application/json:
               schema:
@@ -1228,16 +1242,26 @@ paths:
               schema:
                 type: string
                 format: binary
+            application/json:
+              schema:
+                type: string
+                format: binary
         "400":
           description: Bad Request
           content:
             image/png:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
         "404":
           description: server has no banner, or not found
           content:
             image/png:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
       summary: Get a server's banner
@@ -1945,16 +1969,26 @@ paths:
               schema:
                 type: string
                 format: binary
+            application/json:
+              schema:
+                type: string
+                format: binary
         "400":
           description: Bad Request
           content:
             image/png:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
         "404":
           description: server, or icon, not found
           content:
             image/png:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
       summary: Get a server's icon
@@ -2747,6 +2781,12 @@ paths:
           description: No Content
         "400":
           description: Bad Request
+          content:
+            "*/*":
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "401":
+          description: Unauthorized
           content:
             "*/*":
               schema:
@@ -3579,7 +3619,10 @@ components:
       properties:
         name:
           maxLength: 100
+          minLength: 1
           type: string
+      required:
+        - name
       type: object
     category_handler.reorderCategoriesRequest:
       properties:
@@ -3588,12 +3631,17 @@ components:
             format: uuid
             type: string
           type: array
+      required:
+        - category_ids
       type: object
     category_handler.updateCategoryRequest:
       properties:
         name:
           maxLength: 100
+          minLength: 1
           type: string
+      required:
+        - name
       type: object
     categoryview.Response:
       properties:
@@ -3613,10 +3661,17 @@ components:
           type: string
           nullable: true
         kind:
+          enum:
+            - text
+            - voice
           type: string
         name:
           maxLength: 100
+          minLength: 1
           type: string
+      required:
+        - kind
+        - name
       type: object
     channel_handler.moveChannelRequest:
       properties:
@@ -3743,6 +3798,8 @@ components:
         confirm_name:
           example: Mi Comunidad
           type: string
+      required:
+        - confirm_name
       type: object
     handler.membershipResponse:
       properties:
@@ -3802,6 +3859,8 @@ components:
         role_id:
           format: uuid
           type: string
+      required:
+        - role_id
       type: object
     member_role_handler.memberPermissionsResponse:
       properties:
@@ -3848,16 +3907,24 @@ components:
             format: uuid
             type: string
           type: array
+      required:
+        - channel_id
       type: object
     model.GenerateInvitationRequest:
       properties:
         max_uses:
+          format: int64
+          minimum: 1
           type: integer
+          nullable: true
       type: object
     model.InitiateOwnershipTransferRequest:
       properties:
         to_user_id:
+          format: uuid
           type: string
+      required:
+        - to_user_id
       type: object
     model.InvitationResponse:
       properties:
@@ -3869,10 +3936,13 @@ components:
           type: string
         expires_at:
           type: string
+          nullable: true
         max_uses:
           type: integer
+          nullable: true
         revoked_at:
           type: string
+          nullable: true
         server_id:
           type: string
         url:
@@ -3926,6 +3996,7 @@ components:
 
             speak until then), null if they aren't muted.
           type: string
+          nullable: true
         profile:
           allOf:
             - $ref: "#/components/schemas/model.MemberProfileResponse"
@@ -3936,6 +4007,7 @@ components:
             identify yet; clients can fall back to GET /v1/users/{id} then. It is also
 
             null for a member suspended at platform level, who stays listed.
+          nullable: true
         role_ids:
           description: >-
             RoleIDs are the roles the member holds, @everyone included, so
@@ -3960,6 +4032,7 @@ components:
           type: string
         resolved_at:
           type: string
+          nullable: true
         server_id:
           type: string
         status:
@@ -3979,6 +4052,7 @@ components:
             or
 
             ban is no longer a member, so this is the only way to name them.
+          nullable: true
         actor_user_id:
           type: string
         id:
@@ -3988,7 +4062,9 @@ components:
         server_id:
           type: string
         target_profile:
-          $ref: "#/components/schemas/model.MemberProfileResponse"
+          allOf:
+            - $ref: "#/components/schemas/model.MemberProfileResponse"
+          nullable: true
         target_user_id:
           type: string
       type: object
@@ -4024,10 +4100,14 @@ components:
           type: string
         banned_by:
           type: string
+          nullable: true
         profile:
-          $ref: "#/components/schemas/model.MemberProfileResponse"
+          allOf:
+            - $ref: "#/components/schemas/model.MemberProfileResponse"
+          nullable: true
         reason:
           type: string
+          nullable: true
         server_id:
           type: string
         user_id:
@@ -4042,12 +4122,16 @@ components:
         user_id:
           format: uuid
           type: string
+      required:
+        - user_id
       type: object
     moderation_handler.kickRequest:
       properties:
         user_id:
           format: uuid
           type: string
+      required:
+        - user_id
       type: object
     moderation_handler.muteRequest:
       properties:
@@ -4056,10 +4140,14 @@ components:
           type: string
           nullable: true
         until_at:
+          format: date-time
           type: string
         user_id:
           format: uuid
           type: string
+      required:
+        - until_at
+        - user_id
       type: object
     report.ListResponse:
       properties:
@@ -4139,6 +4227,8 @@ components:
             - dismissed
           example: resolved
           type: string
+      required:
+        - status
       type: object
     report_handler.CreateRequest:
       properties:
@@ -4154,6 +4244,7 @@ components:
           type: string
         message_id:
           example: 01a1b2c3-d4e5-7f60-8a9b-0c1d2e3f4a5b
+          format: uuid
           type: string
         reason:
           example: Insultos repetidos hacia otros miembros
@@ -4163,6 +4254,8 @@ components:
           example: a3f1c0de-1111-4222-8333-444455556666
           format: uuid
           type: string
+      required:
+        - kind
       type: object
     role_handler.createRoleRequest:
       properties:
@@ -4170,7 +4263,10 @@ components:
           type: string
         name:
           maxLength: 100
+          minLength: 1
           type: string
+      required:
+        - name
       type: object
     role_handler.reorderRolesRequest:
       properties:
@@ -4179,12 +4275,16 @@ components:
             format: uuid
             type: string
           type: array
+      required:
+        - role_ids
       type: object
     role_handler.setDefaultRoleRequest:
       properties:
         role_id:
           format: uuid
           type: string
+      required:
+        - role_id
       type: object
     role_handler.updateRolePermissionsRequest:
       properties:
@@ -4243,6 +4343,8 @@ components:
             maxLength: 50
             type: string
           type: array
+      required:
+        - words
       type: object
     word_filter_handler.BannedWordsResponse:
       properties:
