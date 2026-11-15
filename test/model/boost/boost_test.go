@@ -41,6 +41,17 @@ func TestSummarizeBoosts_SaysHowManyAreMissing(t *testing.T) {
 	}
 }
 
+func TestBoostCapReached_AtTheLastLevel(t *testing.T) {
+	if model.BoostLevelFor(model.MaxBoostCount) != 3 || model.BoostLevelFor(model.MaxBoostCount-1) != 2 {
+		t.Errorf("MaxBoostCount = %d is not the threshold of level 3", model.MaxBoostCount)
+	}
+	for count, want := range map[int]bool{0: false, 29: false, 30: true, 31: true} {
+		if got := model.BoostCapReached(count); got != want {
+			t.Errorf("BoostCapReached(%d) = %v, want %v", count, got, want)
+		}
+	}
+}
+
 func TestEmojiSlots(t *testing.T) {
 	for level, want := range map[int]int{0: 50, 1: 70, 2: 70, 3: 70} {
 		if got := emoji.Slots(level); got != want {

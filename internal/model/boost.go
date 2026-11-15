@@ -31,7 +31,11 @@ const (
 	PerkBoostedBadge      = "boosted_badge"
 )
 
-var boostLevelThresholds = []int{5, 15, 30}
+// MaxBoostCount is the boosts of the last level. A server with that many active
+// boosts takes no more until someone removes one.
+const MaxBoostCount = 30
+
+var boostLevelThresholds = []int{5, 15, MaxBoostCount}
 
 var vanityPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$`)
 
@@ -65,6 +69,12 @@ func BoostLevelFor(count int) int {
 		}
 	}
 	return level
+}
+
+// BoostCapReached reports whether a server already has the boosts of the last
+// level, so one more would add nothing.
+func BoostCapReached(count int) bool {
+	return count >= MaxBoostCount
 }
 
 func BoostPerks(level int) []string {
