@@ -262,6 +262,48 @@ func TestRequest_Rejections(t *testing.T) {
 		assertAnswer(t, pool, boosts.RoutingKeyRejected, boosts.ReasonServerSuspended, b)
 		assertBoosts(t, pool, b.ServerID, 0, 0)
 	})
+
+	t.Run("max level reached, and removing a boost frees a place", func(t *testing.T) {
+		serverID := seedServer(t, pool)
+		var first model.Boost
+		for i := 0; i < model.MaxBoostCount; i++ {
+			b := newBoost(serverID)
+			if i == 0 {
+				first = b
+			}
+			if err := repo.Request(ctx, b); err != nil {
+				t.Fatal(err)
+			}
+		}
+		assertBoosts(t, pool, serverID, model.MaxBoostCount, 3)
+
+		clearOutbox(t, pool)
+		extra := newBoost(serverID)
+		if err := repo.Request(ctx, extra); err != nil {
+			t.Fatal(err)
+		}
+		assertAnswer(t, pool, boosts.RoutingKeyRejected, boosts.ReasonMaxLevelReached, extra)
+		assertBoosts(t, pool, serverID, model.MaxBoostCount, 3)
+
+		if err := repo.Remove(ctx, first); err != nil {
+			t.Fatal(err)
+		}
+		assertBoosts(t, pool, serverID, model.MaxBoostCount-1, 2)
+
+		clearOutbox(t, pool)
+		if err := repo.Request(ctx, extra); err != nil {
+			t.Fatal(err)
+		}
+		assertAnswer(t, pool, boosts.RoutingKeyRejected, boosts.ReasonMaxLevelReached, extra)
+
+		clearOutbox(t, pool)
+		again := newBoost(serverID)
+		if err := repo.Request(ctx, again); err != nil {
+			t.Fatal(err)
+		}
+		assertAnswer(t, pool, boosts.RoutingKeyApplied, "", again)
+		assertBoosts(t, pool, serverID, model.MaxBoostCount, 3)
+	})
 }
 
 func TestCancel_BeforeTheRequestRejectsItWhenItArrives(t *testing.T) {
@@ -393,6 +435,50 @@ func TestRequest_ConcurrentBoostsAllCount(t *testing.T) {
 	}
 
 	assertBoosts(t, pool, serverID, 15, 2)
+}
+
+func TestRequest_ConcurrentBoostsStopAtTheCap(t *testing.T) {
+	repo, pool := setup(t)
+	ctx := context.Background()
+	serverID := seedServer(t, pool)
+	const extra = 5
+	tries := model.MaxBoostCount + extra
+
+	var wg sync.WaitGroup
+	errs := make(chan error, tries)
+	for i := 0; i < tries; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errs <- repo.Request(ctx, newBoost(serverID))
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	assertBoosts(t, pool, serverID, model.MaxBoostCount, 3)
+	rejected := 0
+	for _, row := range outboxRows(t, pool) {
+		if row.routingKey != boosts.RoutingKeyRejected {
+			continue
+		}
+		var evt boosts.SagaEvent
+		if err := json.Unmarshal(row.payload, &evt); err != nil {
+			t.Fatal(err)
+		}
+		if evt.Reason != boosts.ReasonMaxLevelReached {
+			t.Errorf("reason = %q", evt.Reason)
+		}
+		rejected++
+	}
+	if rejected != extra {
+		t.Errorf("%d rejected, want %d", rejected, extra)
+	}
 }
 
 func TestLeavingKeepsTheBoost(t *testing.T) {
