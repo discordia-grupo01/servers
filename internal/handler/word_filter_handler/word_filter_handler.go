@@ -26,7 +26,7 @@ func New(uc UseCases) *Handler {
 }
 
 type BannedWordsRequest struct {
-	Words []string `json:"words" maxLength:"50" maxItems:"100"`
+	Words []string `json:"words" validate:"required" maxLength:"50" maxItems:"100"`
 }
 
 type BannedWordsResponse struct {

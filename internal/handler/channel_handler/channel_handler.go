@@ -45,8 +45,8 @@ func parseOptionalUUID(c *gin.Context, field string, raw *string) (*uuid.UUID, b
 }
 
 type createChannelRequest struct {
-	Name       string  `json:"name" maxLength:"100"`
-	Kind       string  `json:"kind"`
+	Name       string  `json:"name" validate:"required" minLength:"1" maxLength:"100"`
+	Kind       string  `json:"kind" validate:"required" enums:"text,voice"`
 	CategoryID *string `json:"category_id" format:"uuid" extensions:"x-nullable"`
 }
 

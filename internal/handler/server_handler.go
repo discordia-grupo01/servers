@@ -111,11 +111,12 @@ func extractUpload(c *gin.Context, field string) (data []byte, provided bool, ok
 // @Accept       multipart/form-data
 // @Produce      json
 // @Security     BearerAuth
-// @Param        name  formData  string  true   "Server name"
+// @Param        name  formData  string  true   "Server name" minlength(1) maxlength(100)
 // @Param        icon  formData  file    false  "Server icon image"
 // @Success      201  {object}  serverResponse
 // @Failure      400  {object}  apierr.ErrorResponse  "invalid name, or icon too large/unreadable"
 // @Failure      401  {object}  apierr.ErrorResponse
+// @Failure      403  {object}  apierr.ErrorResponse  "a GIF icon needs boost level 1"
 // @Failure      409  {object}  apierr.ErrorResponse  "name already taken"
 // @Router       /v1/servers [post]
 func (h *serverHandler) createServer(c *gin.Context) {
@@ -199,7 +200,7 @@ func (h *serverHandler) updateServer(c *gin.Context) {
 }
 
 type deleteServerRequest struct {
-	ConfirmName string `json:"confirm_name" example:"Mi Comunidad"`
+	ConfirmName string `json:"confirm_name" example:"Mi Comunidad" validate:"required"`
 }
 
 // deleteServer godoc
@@ -273,6 +274,7 @@ func (h *serverHandler) listMyServers(c *gin.Context) {
 // @Success      200  {object}  serverResponse
 // @Failure      400  {object}  apierr.ErrorResponse  "malformed serverId"
 // @Failure      404  {object}  apierr.ErrorResponse
+// @Failure      401  {object}  apierr.ErrorResponse
 // @Router       /v1/servers/{serverId} [get]
 func (h *serverHandler) getServer(c *gin.Context) {
 	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
@@ -321,7 +323,7 @@ func (h *serverHandler) getMembership(c *gin.Context) {
 // @Summary      Get a server's icon
 // @Description  Public (no JWT required) -- binary image, so a plain `<img src>` can load it.
 // @Tags         servers
-// @Produce      png
+// @Produce      png,json
 // @Param        serverId  path  string  true  "Server ID" Format(uuid)
 // @Success      200  {file}    file  "the icon image"
 // @Failure      400  {object}  apierr.ErrorResponse
@@ -362,7 +364,7 @@ func (h *serverHandler) getIcon(c *gin.Context) {
 // @Summary      Get a server's banner
 // @Description  Public (no JWT required) -- binary image, so a plain `<img src>` can load it.
 // @Tags         servers
-// @Produce      png
+// @Produce      png,json
 // @Param        serverId  path  string  true  "Server ID" Format(uuid)
 // @Success      200  {file}    file  "the banner image"
 // @Failure      400  {object}  apierr.ErrorResponse

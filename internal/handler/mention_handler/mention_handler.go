@@ -23,7 +23,7 @@ func New(uc UseCases) *Handler {
 }
 
 type resolveRequest struct {
-	ChannelID string   `json:"channel_id" format:"uuid"`
+	ChannelID string   `json:"channel_id" validate:"required" format:"uuid"`
 	UserIDs   []string `json:"user_ids" format:"uuid" maxItems:"50"`
 	RoleIDs   []string `json:"role_ids" format:"uuid" maxItems:"20"`
 	Everyone  bool     `json:"everyone"`

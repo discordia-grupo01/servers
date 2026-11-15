@@ -28,15 +28,15 @@ func New(uc UseCases) *Handler {
 }
 
 type CreateRequest struct {
-	Kind      string `json:"kind" example:"message" enums:"message,user"`
+	Kind      string `json:"kind" example:"message" enums:"message,user" validate:"required"`
 	ChannelID string `json:"channel_id" example:"0b6f6a2e-6a41-4a42-9d0a-2c6a2d1f7c11" format:"uuid"`
-	MessageID string `json:"message_id" example:"01a1b2c3-d4e5-7f60-8a9b-0c1d2e3f4a5b"`
+	MessageID string `json:"message_id" example:"01a1b2c3-d4e5-7f60-8a9b-0c1d2e3f4a5b" format:"uuid"`
 	UserID    string `json:"user_id" example:"a3f1c0de-1111-4222-8333-444455556666" format:"uuid"`
 	Reason    string `json:"reason" example:"Insultos repetidos hacia otros miembros" maxLength:"512"`
 }
 
 type CloseRequest struct {
-	Status string `json:"status" example:"resolved" enums:"resolved,dismissed"`
+	Status string `json:"status" example:"resolved" enums:"resolved,dismissed" validate:"required"`
 	Action string `json:"action" example:"mute" enums:"delete_message,mute,kick,ban"`
 }
 

@@ -37,7 +37,7 @@ func New(uc RoleUseCases) *Handler {
 }
 
 type createRoleRequest struct {
-	Name  string `json:"name" maxLength:"100"`
+	Name  string `json:"name" validate:"required" minLength:"1" maxLength:"100"`
 	Color string `json:"color"`
 }
 
@@ -188,11 +188,11 @@ func (h *Handler) UpdateRolePermissions(c *gin.Context) {
 }
 
 type setDefaultRoleRequest struct {
-	RoleID string `json:"role_id" format:"uuid"`
+	RoleID string `json:"role_id" validate:"required" format:"uuid"`
 }
 
 type reorderRolesRequest struct {
-	RoleIDs []string `json:"role_ids" format:"uuid"`
+	RoleIDs []string `json:"role_ids" validate:"required" minItems:"1" format:"uuid"`
 }
 
 // ReorderRoles godoc

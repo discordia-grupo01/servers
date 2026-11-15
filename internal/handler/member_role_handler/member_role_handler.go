@@ -33,7 +33,7 @@ func New(uc MemberRoleUseCases) *Handler {
 }
 
 type assignRoleRequest struct {
-	RoleID string `json:"role_id" format:"uuid"`
+	RoleID string `json:"role_id" validate:"required" format:"uuid"`
 }
 
 // AssignRole godoc

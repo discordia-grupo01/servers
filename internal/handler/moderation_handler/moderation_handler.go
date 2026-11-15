@@ -23,7 +23,7 @@ func New(uc UseCases) *Handler {
 }
 
 type banRequest struct {
-	UserID string  `json:"user_id" format:"uuid"`
+	UserID string  `json:"user_id" validate:"required" format:"uuid"`
 	Reason *string `json:"reason" maxLength:"512" extensions:"x-nullable"`
 }
 
@@ -69,12 +69,12 @@ func (h *Handler) Ban(c *gin.Context) {
 }
 
 type kickRequest struct {
-	UserID string `json:"user_id" format:"uuid"`
+	UserID string `json:"user_id" validate:"required" format:"uuid"`
 }
 
 type muteRequest struct {
-	UserID  string    `json:"user_id" format:"uuid"`
-	UntilAt time.Time `json:"until_at"`
+	UserID  string    `json:"user_id" validate:"required" format:"uuid"`
+	UntilAt time.Time `json:"until_at" validate:"required" format:"date-time"`
 	Reason  *string   `json:"reason" maxLength:"512" extensions:"x-nullable"`
 }
 
@@ -121,6 +121,7 @@ func (h *Handler) Mute(c *gin.Context) {
 // @Success      204
 // @Failure      404  {object} apierr.ErrorResponse  "user is not muted in this server"
 // @Failure      400  {object}  apierr.ErrorResponse
+// @Failure      401  {object}  apierr.ErrorResponse
 // @Router       /v1/servers/{serverId}/mutes/{userId} [delete]
 func (h *Handler) Unmute(c *gin.Context) {
 	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
