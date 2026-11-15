@@ -10,6 +10,7 @@ Servicio de servidores de Discordia.
 - [Variables de entorno](#variables-de-entorno)
 - [Comandos Docker](#comandos-docker)
 - [Tests](#tests)
+  - [Tests de contrato](#tests-de-contrato)
 - [Más documentación](#más-documentación)
 
 ## Introducción
@@ -190,6 +191,20 @@ El repositorio se formatea con gofmt. Activá el hook una vez por clon, y el CI 
 ```bash
 git config core.hooksPath .githooks
 ```
+
+### Tests de contrato
+Schemathesis (`schemathesis==4.33.4`) ejecuta `openapi.yaml` contra el servicio real y falla si el codigo se desvia del contrato: respuestas 5xx, status no declarados, cuerpos que no cumplen el esquema, datos validos rechazados o invalidos aceptados.
+
+```bash
+make contract-deps-up   # Postgres 16 (55505) y RabbitMQ 3.13 (55515) efimeros, y migra la base
+make contract-test      # arranca el servicio en 18085, corre Schemathesis y lo apaga
+make contract-deps-down
+```
+Hace falta Docker, Go y Python 3 (el script crea `.contract-venv/` e instala Schemathesis la primera vez). `scripts/contract-test.sh` se niega a correr si la base o RabbitMQ no son `localhost`/`127.0.0.1`, usa iconos en disco temporal (sin storage de objetos), firma tokens sin valor real (servers no verifica la firma; la valida Kong) y usa valores de juguete. La semilla es fija y por defecto son 10 casos por operacion (`CONTRACT_MAX_EXAMPLES`). El job `contract` del CI hace lo mismo con los servicios del runner y sin secrets.
+
+Como casi todas las rutas necesitan un servidor, miembros, canales o roles reales, `scripts/contract/seed.py` los crea por la API antes de cada corrida y los ids se inyectan en `schemathesis.toml`. Las operaciones que borran o consumen estado (DELETE, aceptar/rechazar transferencia) corren en pasos separados, cada uno con datos nuevos. `scripts/contract/scenario.py` recorre con datos validos el camino feliz de lo que el fuzzing no alcanza (reordenar, silenciar, expulsar, reportar, transferir) y `scripts/contract/coverage.py` mide, desde los HAR de la corrida, cuantas operaciones tuvieron al menos un 2xx real: el script falla si falta alguna fuera de `EXPECTED_NO_2XX` (hoy `GET /v1/servers/{serverId}/banner`, que solo existe con boost nivel 2).
+
+Checks desactivados (con el motivo en `scripts/contract/schemathesis.toml`): `unsupported_method` (Gin responde 404 y no 405 a metodos no declarados), `positive_data_acceptance` en operaciones cuyas reglas de negocio swag no puede expresar (nombres sin caracteres de control, fechas futuras, confirmaciones), `negative_data_rejection` donde un cuerpo `null` se acepta como vacio, y `not_a_server_error` / `status_code_conformance` en cuatro operaciones donde un caracter NUL en un texto produce 500 (decision pendiente: deberia ser 400).
 
 ## Más documentación
 
