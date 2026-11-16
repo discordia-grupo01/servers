@@ -93,8 +93,8 @@ func (r *MemberRepository) AssignRole(ctx context.Context, serverID uuid.UUID, u
 // count so the caller can render pagination. Each member carries their
 // replicated public profile, or a nil Profile if it hasn't arrived yet, and
 // when their active mute ends, if they have one. A platform-suspended member
-// is still listed but with a nil Profile: their own name and avatar are not
-// shown while the suspension lasts.
+// is still listed but with a nil Profile and no RoleIDs: their own name,
+// avatar and role color are not shown while the suspension lasts.
 //
 // A non-empty search keeps only the members whose name contains it, ignoring
 // case and accents; members without a visible profile never match it.
@@ -154,8 +154,10 @@ func (r *MemberRepository) listMembers(ctx context.Context, f memberFilter, limi
 
 	rows, err := r.pool.Query(ctx, `
 		SELECT sm.user_id, sm.is_owner, sm.joined_at, mu.until_at,
-		       COALESCE((SELECT array_agg(mr.role_id::text) FROM member_roles mr
-		                  WHERE mr.server_id = sm.server_id AND mr.user_id = sm.user_id), '{}'),
+		       CASE WHEN su.user_id IS NOT NULL THEN '{}'::text[]
+		            ELSE COALESCE((SELECT array_agg(mr.role_id::text) FROM member_roles mr
+		                            WHERE mr.server_id = sm.server_id AND mr.user_id = sm.user_id), '{}')
+		       END,
 		       p.user_id, p.name, p.avatar_url, p.description, p.status_text, p.status_emoji, p.version`+
 		memberFromSQL+`
 		  LEFT JOIN server_mutes mu
