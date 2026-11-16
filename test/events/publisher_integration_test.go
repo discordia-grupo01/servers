@@ -414,3 +414,47 @@ func TestAMQPPublisher_Publish_CarriesTheTraceInTheHeaders(t *testing.T) {
 		t.Fatal("timed out waiting for the message")
 	}
 }
+
+// A queue that is full and rejects new messages makes the broker nack the
+// publish: PublishOrError has to say so, or the outbox would mark as published
+// an event nobody got.
+func TestAMQPPublisher_PublishOrError_FailsWhenTheBrokerRejectsTheMessage(t *testing.T) {
+	url := os.Getenv("RABBITMQ_URL")
+	if url == "" {
+		t.Skip("RABBITMQ_URL not set: skipping integration test")
+	}
+
+	conn, err := amqp.Dial(url)
+	if err != nil {
+		t.Fatalf("amqp.Dial: %v", err)
+	}
+	t.Cleanup(func() { conn.Close() })
+	ch, err := conn.Channel()
+	if err != nil {
+		t.Fatalf("conn.Channel: %v", err)
+	}
+	t.Cleanup(func() { ch.Close() })
+
+	if err := ch.ExchangeDeclare("discordia.events", "topic", true, false, false, false, nil); err != nil {
+		t.Fatalf("ExchangeDeclare: %v", err)
+	}
+	routingKey := "servers.rejected_" + uuid.NewString()
+	q, err := ch.QueueDeclare("", false, true, true, false, amqp.Table{
+		"x-max-length": int32(0),
+		"x-overflow":   "reject-publish",
+	})
+	if err != nil {
+		t.Fatalf("QueueDeclare: %v", err)
+	}
+	if err := ch.QueueBind(q.Name, routingKey, "discordia.events", false, nil); err != nil {
+		t.Fatalf("QueueBind: %v", err)
+	}
+
+	publisher := events.NewAMQPPublisher(url)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := publisher.PublishOrError(ctx, routingKey, map[string]string{"k": "v"}); err == nil {
+		t.Fatal("PublishOrError() = nil, quería un error porque el broker rechazó el mensaje")
+	}
+}
