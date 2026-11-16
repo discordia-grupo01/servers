@@ -80,16 +80,13 @@ func (p *Poller) listen(ctx context.Context, wake chan<- struct{}) {
 }
 
 func (p *Poller) waitForInserts(ctx context.Context, wake chan<- struct{}) error {
-	conn, err := p.pool.Acquire(ctx)
+	// Its own connection, outside the pool: pool.Close does not wait for it
+	// and it does not take a slot from the requests.
+	conn, err := pgx.ConnectConfig(ctx, p.pool.Config().ConnConfig.Copy())
 	if err != nil {
-		return fmt.Errorf("acquire connection: %w", err)
+		return fmt.Errorf("connect: %w", err)
 	}
-	// Closed instead of returned to the pool so no request gets a connection
-	// that is still listening.
-	defer func() {
-		_ = conn.Conn().Close(context.Background())
-		conn.Release()
-	}()
+	defer conn.Close(context.Background())
 
 	if _, err := conn.Exec(ctx, "LISTEN "+NotifyChannel); err != nil {
 		return fmt.Errorf("listen: %w", err)
@@ -100,7 +97,7 @@ func (p *Poller) waitForInserts(ctx context.Context, wake chan<- struct{}) error
 	default:
 	}
 	for {
-		if _, err := conn.Conn().WaitForNotification(ctx); err != nil {
+		if _, err := conn.WaitForNotification(ctx); err != nil {
 			return fmt.Errorf("wait for notification: %w", err)
 		}
 		select {
