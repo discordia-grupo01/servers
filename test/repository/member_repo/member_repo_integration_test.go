@@ -507,12 +507,18 @@ func setSuspended(ctx context.Context, t *testing.T, pool *pgxpool.Pool, user st
 
 // A suspended member stays in the list (and in the total) but their own name
 // and avatar are not returned; everyone else keeps their profile.
-func TestMemberRepo_ListMembers_SuspendedMemberHasNoProfile(t *testing.T) {
-	members, servers, _, pool := newRepo(t)
+func TestMemberRepo_ListMembers_SuspendedMemberHasNoProfileNorRoles(t *testing.T) {
+	members, servers, roles, pool := newRepo(t)
 	ctx := context.Background()
 	srv, member := seedServerWithMember(ctx, t, servers, pool)
 	seedProfile(ctx, t, pool, member, "Suspendido")
 	seedProfile(ctx, t, pool, srv.OwnerID, "Dueño")
+	rl := seedRole(ctx, t, roles, srv.ID, "Moderador")
+	for _, user := range []string{member, srv.OwnerID} {
+		if err := members.AssignRole(ctx, srv.ID, user, rl.ID); err != nil {
+			t.Fatalf("AssignRole: %v", err)
+		}
+	}
 	setSuspended(ctx, t, pool, member, true, 1)
 
 	all, total, err := members.ListMembers(ctx, srv.ID, "", 10, 0)
@@ -528,9 +534,16 @@ func TestMemberRepo_ListMembers_SuspendedMemberHasNoProfile(t *testing.T) {
 			if m.Profile != nil {
 				t.Errorf("suspended member Profile = %+v, want nil", *m.Profile)
 			}
+			// Without roles the clients don't paint "Usuario desconocido" with the role color.
+			if len(m.RoleIDs) != 0 {
+				t.Errorf("suspended member RoleIDs = %v, want none", m.RoleIDs)
+			}
 		case srv.OwnerID:
 			if m.Profile == nil || m.Profile.Name != "Dueño" {
 				t.Errorf("owner Profile = %+v, want the replicated one", m.Profile)
+			}
+			if !slices.Contains(m.RoleIDs, rl.ID.String()) {
+				t.Errorf("owner RoleIDs = %v, want %s among them", m.RoleIDs, rl.ID)
 			}
 		}
 	}
