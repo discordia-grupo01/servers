@@ -3,6 +3,7 @@ package events
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -22,6 +23,11 @@ import (
 // (network partition, dropped packets) rather than actively refusing the
 // connection.
 const dialTimeout = 3 * time.Second
+
+// confirmTimeout bounds how long a publish waits for the broker to confirm
+// it. Without a confirm the outbox would mark as published an event the
+// broker never took.
+const confirmTimeout = 5 * time.Second
 
 // ConnectionName is set as the client_properties.connection_name on every
 // AMQP connection this publisher opens -- shows up in the RabbitMQ
@@ -70,6 +76,11 @@ func (p *AMQPPublisher) connect() error {
 		conn.Close()
 		return err
 	}
+	if err := ch.Confirm(false); err != nil {
+		ch.Close()
+		conn.Close()
+		return err
+	}
 
 	p.mu.Lock()
 	p.conn = conn
@@ -113,14 +124,29 @@ func (p *AMQPPublisher) publish(ctx context.Context, routingKey string, payload 
 		DeliveryMode: amqp.Persistent,
 		Headers:      telemetry.InjectAMQP(ctx, nil),
 	}
-	if err := ch.PublishWithContext(ctx, broker.ExchangeName, routingKey, false, false, msg); err != nil {
+	confirm, err := ch.PublishWithDeferredConfirmWithContext(ctx, broker.ExchangeName, routingKey, false, false, msg)
+	if err != nil {
 		p.dropChannel()
 		if err := p.connect(); err != nil {
 			return fmt.Errorf("reconnect after failed publish: %w", err)
 		}
-		if err := p.currentChannel().PublishWithContext(ctx, broker.ExchangeName, routingKey, false, false, msg); err != nil {
+		confirm, err = p.currentChannel().PublishWithDeferredConfirmWithContext(ctx, broker.ExchangeName, routingKey, false, false, msg)
+		if err != nil {
 			return fmt.Errorf("publish failed again after reconnect: %w", err)
 		}
+	}
+	return waitForConfirm(ctx, confirm)
+}
+
+func waitForConfirm(ctx context.Context, confirm *amqp.DeferredConfirmation) error {
+	ctx, cancel := context.WithTimeout(ctx, confirmTimeout)
+	defer cancel()
+	acked, err := confirm.WaitContext(ctx)
+	if err != nil {
+		return fmt.Errorf("waiting for the broker to confirm: %w", err)
+	}
+	if !acked {
+		return errors.New("broker rejected the message")
 	}
 	return nil
 }
