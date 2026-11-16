@@ -25,7 +25,13 @@ type Publisher interface {
 	PublishOrError(ctx context.Context, routingKey string, payload any) error
 }
 
+// PollInterval is the fallback when no notification arrives: LISTEN does
+// not work behind a transaction pooler, and a notification can be missed
+// while the listener reconnects.
 const PollInterval = 2 * time.Second
+
+// listenRetry is how long the listener waits before reconnecting.
+const listenRetry = 5 * time.Second
 
 // maxPerTick bounds how many events one tick publishes. With a backlog the
 // poller keeps going instead of waiting for the next tick: a cap of 20 per 2s
@@ -42,6 +48,9 @@ func NewPoller(pool *pgxpool.Pool, publisher Publisher) *Poller {
 }
 
 func (p *Poller) Start(ctx context.Context) {
+	wake := make(chan struct{}, 1)
+	go p.listen(ctx, wake)
+
 	ticker := time.NewTicker(PollInterval)
 	defer ticker.Stop()
 	for {
@@ -49,7 +58,51 @@ func (p *Poller) Start(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			p.drain(ctx)
+		case <-wake:
+		}
+		p.drain(ctx)
+	}
+}
+
+func (p *Poller) listen(ctx context.Context, wake chan<- struct{}) {
+	for ctx.Err() == nil {
+		err := p.waitForInserts(ctx, wake)
+		if ctx.Err() != nil {
+			return
+		}
+		logging.Warnf("outbox: listening for new events failed, polling every %s meanwhile: %v", PollInterval, err)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(listenRetry):
+		}
+	}
+}
+
+func (p *Poller) waitForInserts(ctx context.Context, wake chan<- struct{}) error {
+	// Its own connection, outside the pool: pool.Close does not wait for it
+	// and it does not take a slot from the requests.
+	conn, err := pgx.ConnectConfig(ctx, p.pool.Config().ConnConfig.Copy())
+	if err != nil {
+		return fmt.Errorf("connect: %w", err)
+	}
+	defer conn.Close(context.Background())
+
+	if _, err := conn.Exec(ctx, "LISTEN "+NotifyChannel); err != nil {
+		return fmt.Errorf("listen: %w", err)
+	}
+	// Events committed before LISTEN took effect are caught by this drain.
+	select {
+	case wake <- struct{}{}:
+	default:
+	}
+	for {
+		if _, err := conn.WaitForNotification(ctx); err != nil {
+			return fmt.Errorf("wait for notification: %w", err)
+		}
+		select {
+		case wake <- struct{}{}:
+		default:
 		}
 	}
 }

@@ -213,3 +213,22 @@ func TestPollerDrainsABacklogInASingleTick(t *testing.T) {
 		}
 	}
 }
+
+func TestPollerPublishesRightAfterTheCommitWithoutWaitingForTheTick(t *testing.T) {
+	tracing(t)
+	pool := newPool(t)
+
+	publisher := capturingPublisher{published: make(chan trace.SpanContext, 1)}
+	pollCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go outbox.NewPoller(pool, publisher).Start(pollCtx)
+	time.Sleep(300 * time.Millisecond)
+
+	insert(t, pool, context.Background(), "servers.notified")
+
+	select {
+	case <-publisher.published:
+	case <-time.After(outbox.PollInterval / 2):
+		t.Fatal("el poller debería publicar apenas se commitea el evento, sin esperar el próximo tick")
+	}
+}
