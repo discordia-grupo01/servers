@@ -7,6 +7,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -85,21 +86,20 @@ func extractUpload(c *gin.Context, field string) (data []byte, provided bool, ok
 	switch {
 	case err == nil && fileHeader != nil:
 		if fileHeader.Size > maxIconUploadBytes {
-			apierr.RespondError(c, http.StatusBadRequest,
-				fmt.Sprintf("%s file exceeds the maximum allowed size (%d MB)", field, maxIconUploadBytes>>20),
+			apierr.RespondError(c, http.StatusBadRequest, apierr.CodeInvalidBody, fmt.Sprintf("%s file exceeds the maximum allowed size (%d MB)", field, maxIconUploadBytes>>20),
 				apierr.FieldErr(field, field+"_too_large"))
 			return nil, false, false
 		}
 		data, oerr := readUpload(fileHeader)
 		if oerr != nil {
-			apierr.RespondError(c, http.StatusBadRequest, "could not read the "+field+" file", apierr.FieldErr(field, field+"_unreadable"))
+			apierr.RespondError(c, http.StatusBadRequest, strings.ToUpper(field)+"_UNREADABLE", "could not read the "+field+" file", apierr.FieldErr(field, field+"_unreadable"))
 			return nil, false, false
 		}
 		return data, true, true
 	case errors.Is(err, http.ErrMissingFile):
 		return nil, false, true
 	default:
-		apierr.RespondError(c, http.StatusBadRequest, "invalid multipart form", map[string]any{"reason": "invalid_multipart"})
+		apierr.RespondError(c, http.StatusBadRequest, apierr.CodeInvalidBody, "invalid multipart form", map[string]any{"reason": "invalid_multipart"})
 		return nil, false, false
 	}
 }
@@ -225,7 +225,7 @@ func (h *serverHandler) deleteServer(c *gin.Context) {
 
 	var body deleteServerRequest
 	if err := c.ShouldBindJSON(&body); err != nil && !errors.Is(err, io.EOF) {
-		apierr.RespondError(c, http.StatusBadRequest, "invalid request body", map[string]any{"reason": "invalid_json"})
+		apierr.InvalidJSON(c)
 		return
 	}
 
@@ -340,7 +340,7 @@ func (h *serverHandler) getIcon(c *gin.Context) {
 		return
 	}
 	if iconURL == nil {
-		apierr.RespondError(c, http.StatusNotFound, "icon not found", nil)
+		apierr.RespondError(c, http.StatusNotFound, apierr.CodeIconNotFound, "icon not found", nil)
 		return
 	}
 
@@ -351,10 +351,10 @@ func (h *serverHandler) getIcon(c *gin.Context) {
 	data, contentType, err := h.icons.Get(key)
 	if err != nil {
 		if errors.Is(err, model.ErrIconNotFound) {
-			apierr.RespondError(c, http.StatusNotFound, "icon not found", nil)
+			apierr.RespondError(c, http.StatusNotFound, apierr.CodeIconNotFound, "icon not found", nil)
 			return
 		}
-		apierr.RespondError(c, http.StatusInternalServerError, "could not read icon", nil)
+		apierr.RespondError(c, http.StatusInternalServerError, apierr.CodeInternal, "could not read icon", nil)
 		return
 	}
 	c.Data(http.StatusOK, contentType, data)
@@ -381,7 +381,7 @@ func (h *serverHandler) getBanner(c *gin.Context) {
 		return
 	}
 	if bannerURL == nil {
-		apierr.RespondError(c, http.StatusNotFound, "banner not found", nil)
+		apierr.RespondError(c, http.StatusNotFound, apierr.CodeBannerNotFound, "banner not found", nil)
 		return
 	}
 
@@ -392,10 +392,10 @@ func (h *serverHandler) getBanner(c *gin.Context) {
 	data, contentType, err := h.icons.Get(key)
 	if err != nil {
 		if errors.Is(err, model.ErrIconNotFound) {
-			apierr.RespondError(c, http.StatusNotFound, "banner not found", nil)
+			apierr.RespondError(c, http.StatusNotFound, apierr.CodeBannerNotFound, "banner not found", nil)
 			return
 		}
-		apierr.RespondError(c, http.StatusInternalServerError, "could not read banner", nil)
+		apierr.RespondError(c, http.StatusInternalServerError, apierr.CodeInternal, "could not read banner", nil)
 		return
 	}
 	c.Data(http.StatusOK, contentType, data)

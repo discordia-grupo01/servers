@@ -63,7 +63,7 @@ func (h *Handler) Create(c *gin.Context) {
 	}
 	var req CreateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		apierr.RespondError(c, http.StatusBadRequest, "invalid request body", map[string]any{"reason": "invalid_json"})
+		apierr.InvalidJSON(c)
 		return
 	}
 	channelID, ok := parseOptionalUUID(c, "channel_id", req.ChannelID)
@@ -161,7 +161,7 @@ func (h *Handler) Close(c *gin.Context) {
 	}
 	var req CloseRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		apierr.RespondError(c, http.StatusBadRequest, "invalid request body", map[string]any{"reason": "invalid_json"})
+		apierr.InvalidJSON(c)
 		return
 	}
 	closed, err := h.uc.Close(c.Request.Context(), report_service.CloseParams{
@@ -184,7 +184,7 @@ func parseOptionalUUID(c *gin.Context, field, raw string) (*uuid.UUID, bool) {
 	}
 	id, err := uuid.Parse(raw)
 	if err != nil {
-		apierr.RespondError(c, http.StatusBadRequest, "invalid "+field, apierr.FieldErr(field, "invalid_uuid"))
+		apierr.RespondError(c, http.StatusBadRequest, apierr.CodeInvalidBody, "invalid "+field, apierr.FieldErr(field, "invalid_uuid"))
 		return nil, false
 	}
 	return &id, true

@@ -61,12 +61,12 @@ func (h *Handler) AssignRole(c *gin.Context) {
 
 	var req assignRoleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		apierr.RespondError(c, http.StatusBadRequest, "invalid request body", map[string]any{"reason": "invalid_json"})
+		apierr.InvalidJSON(c)
 		return
 	}
 	roleID, err := uuid.Parse(req.RoleID)
 	if err != nil {
-		apierr.RespondError(c, http.StatusBadRequest, "invalid role_id", apierr.FieldErr("role_id", "invalid_uuid"))
+		apierr.RespondError(c, http.StatusBadRequest, apierr.CodeInvalidBody, "invalid role_id", apierr.FieldErr("role_id", "invalid_uuid"))
 		return
 	}
 

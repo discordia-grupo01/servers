@@ -64,7 +64,7 @@ func (h *Handler) CreateRole(c *gin.Context) {
 
 	var req createRoleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		apierr.RespondError(c, http.StatusBadRequest, "invalid request body", map[string]any{"reason": "invalid_json"})
+		apierr.InvalidJSON(c)
 		return
 	}
 
@@ -169,7 +169,7 @@ func (h *Handler) UpdateRolePermissions(c *gin.Context) {
 
 	var req updateRolePermissionsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		apierr.RespondError(c, http.StatusBadRequest, "invalid request body", map[string]any{"reason": "invalid_json"})
+		apierr.InvalidJSON(c)
 		return
 	}
 
@@ -218,18 +218,18 @@ func (h *Handler) ReorderRoles(c *gin.Context) {
 
 	var req reorderRolesRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		apierr.RespondError(c, http.StatusBadRequest, "invalid request body", map[string]any{"reason": "invalid_json"})
+		apierr.InvalidJSON(c)
 		return
 	}
 	if req.RoleIDs == nil {
-		apierr.RespondError(c, http.StatusBadRequest, "role_ids must be provided", apierr.FieldErr("role_ids", "required"))
+		apierr.RespondError(c, http.StatusBadRequest, apierr.CodeInvalidBody, "role_ids must be provided", apierr.FieldErr("role_ids", "required"))
 		return
 	}
 	roleIDs := make([]uuid.UUID, 0, len(req.RoleIDs))
 	for _, raw := range req.RoleIDs {
 		id, err := uuid.Parse(raw)
 		if err != nil {
-			apierr.RespondError(c, http.StatusBadRequest, "invalid role id in role_ids", apierr.FieldErr("role_ids", "invalid_uuid"))
+			apierr.RespondError(c, http.StatusBadRequest, apierr.CodeInvalidBody, "invalid role id in role_ids", apierr.FieldErr("role_ids", "invalid_uuid"))
 			return
 		}
 		roleIDs = append(roleIDs, id)
@@ -274,12 +274,12 @@ func (h *Handler) SetDefaultRole(c *gin.Context) {
 
 	var req setDefaultRoleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		apierr.RespondError(c, http.StatusBadRequest, "invalid request body", map[string]any{"reason": "invalid_json"})
+		apierr.InvalidJSON(c)
 		return
 	}
 	roleID, err := uuid.Parse(req.RoleID)
 	if err != nil {
-		apierr.RespondError(c, http.StatusBadRequest, "invalid role_id", apierr.FieldErr("role_id", "invalid_uuid"))
+		apierr.RespondError(c, http.StatusBadRequest, apierr.CodeInvalidBody, "invalid role_id", apierr.FieldErr("role_id", "invalid_uuid"))
 		return
 	}
 

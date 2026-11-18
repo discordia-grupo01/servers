@@ -57,7 +57,7 @@ func (h *Handler) CreateCategory(c *gin.Context) {
 
 	var req createCategoryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		apierr.RespondError(c, http.StatusBadRequest, "invalid request body", map[string]any{"reason": "invalid_json"})
+		apierr.InvalidJSON(c)
 		return
 	}
 
@@ -100,7 +100,7 @@ func (h *Handler) UpdateCategory(c *gin.Context) {
 
 	var req updateCategoryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		apierr.RespondError(c, http.StatusBadRequest, "invalid request body", map[string]any{"reason": "invalid_json"})
+		apierr.InvalidJSON(c)
 		return
 	}
 
@@ -142,7 +142,7 @@ func (h *Handler) Reorder(c *gin.Context) {
 
 	var req reorderCategoriesRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		apierr.RespondError(c, http.StatusBadRequest, "invalid request body", map[string]any{"reason": "invalid_json"})
+		apierr.InvalidJSON(c)
 		return
 	}
 
@@ -150,7 +150,7 @@ func (h *Handler) Reorder(c *gin.Context) {
 	for _, raw := range req.CategoryIDs {
 		id, err := uuid.Parse(raw)
 		if err != nil {
-			apierr.RespondError(c, http.StatusBadRequest, "invalid category id in category_ids", apierr.FieldErr("category_ids", "invalid_uuid"))
+			apierr.RespondError(c, http.StatusBadRequest, apierr.CodeInvalidBody, "invalid category id in category_ids", apierr.FieldErr("category_ids", "invalid_uuid"))
 			return
 		}
 		categoryIDs = append(categoryIDs, id)

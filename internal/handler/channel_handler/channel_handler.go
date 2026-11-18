@@ -38,7 +38,7 @@ func parseOptionalUUID(c *gin.Context, field string, raw *string) (*uuid.UUID, b
 	}
 	id, err := uuid.Parse(*raw)
 	if err != nil {
-		apierr.RespondError(c, http.StatusBadRequest, "invalid "+field, apierr.FieldErr(field, "invalid_uuid"))
+		apierr.RespondError(c, http.StatusBadRequest, apierr.CodeInvalidBody, "invalid "+field, apierr.FieldErr(field, "invalid_uuid"))
 		return nil, false
 	}
 	return &id, true
@@ -73,7 +73,7 @@ func (h *Handler) CreateChannel(c *gin.Context) {
 
 	var req createChannelRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		apierr.RespondError(c, http.StatusBadRequest, "invalid request body", map[string]any{"reason": "invalid_json"})
+		apierr.InvalidJSON(c)
 		return
 	}
 
@@ -124,7 +124,7 @@ func (h *Handler) UpdateChannel(c *gin.Context) {
 
 	var req updateChannelRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		apierr.RespondError(c, http.StatusBadRequest, "invalid request body", map[string]any{"reason": "invalid_json"})
+		apierr.InvalidJSON(c)
 		return
 	}
 
@@ -197,7 +197,7 @@ func (h *Handler) MoveToCategory(c *gin.Context) {
 
 	var req moveChannelRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		apierr.RespondError(c, http.StatusBadRequest, "invalid request body", map[string]any{"reason": "invalid_json"})
+		apierr.InvalidJSON(c)
 		return
 	}
 
@@ -245,7 +245,7 @@ func (h *Handler) Reorder(c *gin.Context) {
 
 	var req reorderChannelsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		apierr.RespondError(c, http.StatusBadRequest, "invalid request body", map[string]any{"reason": "invalid_json"})
+		apierr.InvalidJSON(c)
 		return
 	}
 
@@ -258,7 +258,7 @@ func (h *Handler) Reorder(c *gin.Context) {
 	for _, raw := range req.ChannelIDs {
 		id, err := uuid.Parse(raw)
 		if err != nil {
-			apierr.RespondError(c, http.StatusBadRequest, "invalid channel id in channel_ids", apierr.FieldErr("channel_ids", "invalid_uuid"))
+			apierr.RespondError(c, http.StatusBadRequest, apierr.CodeInvalidBody, "invalid channel id in channel_ids", apierr.FieldErr("channel_ids", "invalid_uuid"))
 			return
 		}
 		channelIDs = append(channelIDs, id)

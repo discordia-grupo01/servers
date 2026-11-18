@@ -63,7 +63,7 @@ func resolvePath(serverID uuid.UUID) string {
 
 type errorBody struct {
 	Error struct {
-		Code    int            `json:"code"`
+		Code    string         `json:"code"`
 		Details map[string]any `json:"details"`
 	} `json:"error"`
 }

@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/discordia-grupo01/servers/test/errshape"
+
 	"github.com/gin-gonic/gin"
 
 	"github.com/discordia-grupo01/servers/internal/handler"
@@ -50,7 +52,7 @@ func (okPinger) Ping(context.Context) error { return nil }
 
 type errJSON struct {
 	Error struct {
-		Code    int            `json:"code"`
+		Code    string         `json:"code"`
 		Message string         `json:"message"`
 		Details map[string]any `json:"details"`
 	} `json:"error"`
@@ -94,8 +96,6 @@ func decodeError(t *testing.T, w *httptest.ResponseRecorder) errJSON {
 	if err := json.Unmarshal(w.Body.Bytes(), &e); err != nil {
 		t.Fatalf("bad error body %q: %v", w.Body.String(), err)
 	}
-	if e.Error.Code != w.Code {
-		t.Errorf("error.code=%d but HTTP status=%d", e.Error.Code, w.Code)
-	}
+	errshape.CheckCode(t, e.Error.Code, w.Code)
 	return e
 }

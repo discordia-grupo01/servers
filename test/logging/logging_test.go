@@ -14,6 +14,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/discordia-grupo01/servers/test/errshape"
+
 	"github.com/gin-gonic/gin"
 	"go.opentelemetry.io/otel/trace"
 
@@ -343,6 +345,9 @@ func TestRecoveryReturns500WithoutLeakingHeaders(t *testing.T) {
 
 	if recorder.Code != http.StatusInternalServerError {
 		t.Fatalf("status: %d", recorder.Code)
+	}
+	if code := errshape.Envelope(t, recorder.Body.Bytes()); code != "INTERNAL_ERROR" {
+		t.Errorf("code = %q, want INTERNAL_ERROR", code)
 	}
 	line := buf.String()
 	for _, leaked := range []string{"super-secreto", "galleta-secreta", "a@b.com"} {
