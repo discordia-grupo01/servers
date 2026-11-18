@@ -90,7 +90,7 @@ func do(t *testing.T, r http.Handler, method, path, user, body string) *httptest
 
 type errJSON struct {
 	Error struct {
-		Code    int            `json:"code"`
+		Code    string         `json:"code"`
 		Message string         `json:"message"`
 		Details map[string]any `json:"details"`
 	} `json:"error"`

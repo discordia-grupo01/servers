@@ -55,7 +55,7 @@ func serve(guard *middleware.SuspensionGuard, user string) (w *httptest.Response
 
 type errorBody struct {
 	Error struct {
-		Code    int            `json:"code"`
+		Code    string         `json:"code"`
 		Message string         `json:"message"`
 		Details map[string]any `json:"details"`
 	} `json:"error"`
@@ -79,8 +79,8 @@ func TestRejectSuspended_SuspendedUserGets403WithAccountSuspended(t *testing.T) 
 	if err := json.Unmarshal(w.Body.Bytes(), &e); err != nil {
 		t.Fatalf("bad error body %q: %v", w.Body.String(), err)
 	}
-	if e.Error.Code != http.StatusForbidden || e.Error.Details["error_code"] != "ACCOUNT_SUSPENDED" {
-		t.Errorf("error = %+v, want code 403 and details.error_code ACCOUNT_SUSPENDED", e.Error)
+	if e.Error.Code != "ACCOUNT_SUSPENDED" || e.Error.Details["error_code"] != "ACCOUNT_SUSPENDED" {
+		t.Errorf("error = %+v, want code and details.error_code ACCOUNT_SUSPENDED", e.Error)
 	}
 }
 
