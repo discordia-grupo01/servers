@@ -52,12 +52,12 @@ func (h *Handler) Resolve(c *gin.Context) {
 
 	var req resolveRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		apierr.RespondError(c, http.StatusBadRequest, "invalid request body", map[string]any{"reason": "invalid_json"})
+		apierr.InvalidJSON(c)
 		return
 	}
 	channelID, err := uuid.Parse(req.ChannelID)
 	if err != nil {
-		apierr.RespondError(c, http.StatusBadRequest, "invalid channel_id", apierr.FieldErr("channel_id", "invalid_uuid"))
+		apierr.RespondError(c, http.StatusBadRequest, apierr.CodeInvalidBody, "invalid channel_id", apierr.FieldErr("channel_id", "invalid_uuid"))
 		return
 	}
 	roleIDs, ok := parseRoleIDs(c, req.RoleIDs)
@@ -85,7 +85,7 @@ func parseRoleIDs(c *gin.Context, raw []string) ([]uuid.UUID, bool) {
 	for _, s := range raw {
 		id, err := uuid.Parse(s)
 		if err != nil {
-			apierr.RespondError(c, http.StatusBadRequest, "invalid role id", apierr.FieldErr("role_ids", "invalid_uuid"))
+			apierr.RespondError(c, http.StatusBadRequest, apierr.CodeInvalidBody, "invalid role id", apierr.FieldErr("role_ids", "invalid_uuid"))
 			return nil, false
 		}
 		ids = append(ids, id)

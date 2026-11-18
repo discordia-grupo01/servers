@@ -3,10 +3,11 @@ package middleware
 import (
 	"encoding/base64"
 	"encoding/json"
-	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/discordia-grupo01/servers/internal/apierr"
 )
 
 const ctxUserID = "auth.user_id"
@@ -19,13 +20,7 @@ func Auth(cfg AuthConfig) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		uid := resolveUserID(c, cfg)
 		if uid == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"error": gin.H{
-					"code":    http.StatusUnauthorized,
-					"message": "missing authentication credential",
-					"details": gin.H{},
-				},
-			})
+			apierr.Unauthorized(c, "missing authentication credential")
 			return
 		}
 		c.Set(ctxUserID, uid)

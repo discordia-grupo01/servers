@@ -48,7 +48,7 @@ type response struct {
 func (h *Handler) AuthorizeVoice(c *gin.Context) {
 	channelID, err := uuid.Parse(c.Param("channelId"))
 	if err != nil {
-		apierr.RespondError(c, http.StatusBadRequest, "invalid channelId", apierr.FieldErr("channelId", "invalid_uuid"))
+		apierr.RespondError(c, http.StatusBadRequest, apierr.CodeInvalidBody, "invalid channelId", apierr.FieldErr("channelId", "invalid_uuid"))
 		return
 	}
 
