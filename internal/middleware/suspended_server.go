@@ -91,12 +91,12 @@ func (g *ServerSuspensionGuard) RejectSuspendedServer() gin.HandlerFunc {
 		if err != nil {
 			logging.Errorf("server suspension check failed, %s=%s: %v", scope.kind, scope.value, err)
 			c.Abort()
-			apierr.RespondError(c, http.StatusServiceUnavailable, "could not verify server status", nil)
+			apierr.RespondError(c, http.StatusServiceUnavailable, apierr.CodeServiceUnavailable, "could not verify server status", nil)
 			return
 		}
 		if found && suspended {
 			c.Abort()
-			apierr.RespondError(c, http.StatusForbidden, "server suspended", map[string]any{"error_code": ErrorCodeServerSuspended})
+			apierr.RespondError(c, http.StatusForbidden, apierr.CodeServerSuspended, "server suspended", map[string]any{"error_code": ErrorCodeServerSuspended})
 			return
 		}
 		c.Next()

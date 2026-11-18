@@ -3555,19 +3555,26 @@ components:
     apierr.ErrorDetail:
       properties:
         code:
-          example: 404
-          type: integer
+          example: SERVER_NOT_FOUND
+          type: string
         details:
           additionalProperties: {}
           type: object
         message:
           example: server not found
+          minLength: 1
           type: string
+      required:
+        - code
+        - details
+        - message
       type: object
     apierr.ErrorResponse:
       properties:
         error:
           $ref: "#/components/schemas/apierr.ErrorDetail"
+      required:
+        - error
       type: object
     boost_handler.NextLevelResponse:
       properties:

@@ -59,7 +59,7 @@ func (h *Handler) Initiate(c *gin.Context) {
 
 	var req model.InitiateOwnershipTransferRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		apierr.RespondError(c, http.StatusBadRequest, "invalid request body", map[string]any{"reason": "invalid_json"})
+		apierr.InvalidJSON(c)
 		return
 	}
 

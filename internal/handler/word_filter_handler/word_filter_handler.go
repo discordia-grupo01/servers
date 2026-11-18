@@ -83,7 +83,7 @@ func (h *Handler) Replace(c *gin.Context) {
 	}
 	var req BannedWordsRequest
 	if err := c.ShouldBindJSON(&req); err != nil || req.Words == nil {
-		apierr.RespondError(c, http.StatusBadRequest, "invalid request body", map[string]any{"reason": "invalid_json"})
+		apierr.InvalidJSON(c)
 		return
 	}
 	words, err := h.uc.Replace(c.Request.Context(), word_filter_service.ReplaceParams{

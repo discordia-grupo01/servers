@@ -99,7 +99,7 @@ func (h *Handler) SetVanity(c *gin.Context) {
 	}
 	var req VanityRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		apierr.RespondError(c, http.StatusBadRequest, "invalid request body", nil)
+		apierr.RespondError(c, http.StatusBadRequest, apierr.CodeInvalidBody, "invalid request body", nil)
 		return
 	}
 	code, err := h.uc.SetVanity(c.Request.Context(), serverID, middleware.UserID(c), req.Code)

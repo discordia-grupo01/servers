@@ -84,12 +84,12 @@ func (g *SuspensionGuard) RejectSuspended() gin.HandlerFunc {
 		if err != nil {
 			logging.Errorf("suspension check failed, user_id=%s: %v", userID, err)
 			c.Abort()
-			apierr.RespondError(c, http.StatusServiceUnavailable, "could not verify account status", nil)
+			apierr.RespondError(c, http.StatusServiceUnavailable, apierr.CodeServiceUnavailable, "could not verify account status", nil)
 			return
 		}
 		if suspended {
 			c.Abort()
-			apierr.RespondError(c, http.StatusForbidden, "account suspended", map[string]any{"error_code": ErrorCodeAccountSuspended})
+			apierr.RespondError(c, http.StatusForbidden, apierr.CodeAccountSuspended, "account suspended", map[string]any{"error_code": ErrorCodeAccountSuspended})
 			return
 		}
 		c.Next()

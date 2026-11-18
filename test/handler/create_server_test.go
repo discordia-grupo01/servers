@@ -201,7 +201,7 @@ func TestCreate_ErrorBodyShape(t *testing.T) {
 	r, _ := newRouter(t, oneMB, nil)
 	w := postCreate(t, r, testUser, "", nil)
 	e := decodeError(t, w)
-	if e.Error.Code != 400 || e.Error.Message == "" {
+	if e.Error.Code != "NAME_REQUIRED" || e.Error.Message == "" {
 		t.Errorf("error = %+v", e.Error)
 	}
 }

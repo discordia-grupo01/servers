@@ -87,10 +87,10 @@ func NewRouter(d Deps) *gin.Engine {
 	r.MaxMultipartMemory = maxIconUploadBytes
 	r.HandleMethodNotAllowed = true
 	r.NoRoute(func(c *gin.Context) {
-		apierr.RespondError(c, http.StatusNotFound, "route not found", nil)
+		apierr.NotFound(c)
 	})
 	r.NoMethod(func(c *gin.Context) {
-		apierr.RespondError(c, http.StatusMethodNotAllowed, "method not allowed", nil)
+		apierr.MethodNotAllowed(c)
 	})
 
 	r.GET("/livez", livez)

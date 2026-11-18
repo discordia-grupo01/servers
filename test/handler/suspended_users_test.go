@@ -80,15 +80,15 @@ func TestRouter_SuspendedUserIsRejectedOnRepresentativeRoutes(t *testing.T) {
 			}
 			var e struct {
 				Error struct {
-					Code    int            `json:"code"`
+					Code    string         `json:"code"`
 					Details map[string]any `json:"details"`
 				} `json:"error"`
 			}
 			if err := json.Unmarshal(w.Body.Bytes(), &e); err != nil {
 				t.Fatalf("bad error body %q: %v", w.Body.String(), err)
 			}
-			if e.Error.Code != http.StatusForbidden || e.Error.Details["error_code"] != "ACCOUNT_SUSPENDED" {
-				t.Errorf("error = %+v, want code 403 / details.error_code ACCOUNT_SUSPENDED", e.Error)
+			if e.Error.Code != "ACCOUNT_SUSPENDED" || e.Error.Details["error_code"] != "ACCOUNT_SUSPENDED" {
+				t.Errorf("error = %+v, want code and details.error_code ACCOUNT_SUSPENDED", e.Error)
 			}
 		})
 	}

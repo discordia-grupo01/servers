@@ -166,18 +166,18 @@ func readImage(c *gin.Context) ([]byte, bool) {
 			apierr.WriteDomainError(c, model.ErrEmojiImageTooLarge)
 			return nil, false
 		}
-		apierr.RespondError(c, http.StatusBadRequest, "invalid multipart form", map[string]any{"reason": "invalid_multipart"})
+		apierr.RespondError(c, http.StatusBadRequest, apierr.CodeInvalidBody, "invalid multipart form", map[string]any{"reason": "invalid_multipart"})
 		return nil, false
 	}
 	file, err := header.Open()
 	if err != nil {
-		apierr.RespondError(c, http.StatusBadRequest, "could not read the image file", apierr.FieldErr("image", "emoji_image_unreadable"))
+		apierr.RespondError(c, http.StatusBadRequest, apierr.CodeEmojiImageUnreadable, "could not read the image file", apierr.FieldErr("image", "emoji_image_unreadable"))
 		return nil, false
 	}
 	defer file.Close()
 	data, err := io.ReadAll(io.LimitReader(file, emoji.MaxImageBytes+1))
 	if err != nil {
-		apierr.RespondError(c, http.StatusBadRequest, "could not read the image file", apierr.FieldErr("image", "emoji_image_unreadable"))
+		apierr.RespondError(c, http.StatusBadRequest, apierr.CodeEmojiImageUnreadable, "could not read the image file", apierr.FieldErr("image", "emoji_image_unreadable"))
 		return nil, false
 	}
 	return data, true

@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/discordia-grupo01/servers/test/errshape"
+
 	"github.com/gin-gonic/gin"
 
 	"github.com/discordia-grupo01/servers/internal/middleware"
@@ -79,6 +81,9 @@ func TestAuth_NoCredential(t *testing.T) {
 	w := run(middleware.AuthConfig{UserIDHeader: "X-User-Id"}, nil)
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("code=%d", w.Code)
+	}
+	if code := errshape.Envelope(t, w.Body.Bytes()); code != "UNAUTHORIZED" {
+		t.Errorf("code = %q, want UNAUTHORIZED", code)
 	}
 }
 

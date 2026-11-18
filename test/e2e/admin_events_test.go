@@ -315,12 +315,13 @@ func TestAdminEvents_SuspendedUserIsRejectedAndVoiceAccessDenied(t *testing.T) {
 				if want {
 					var e struct {
 						Error struct {
+							Code    string         `json:"code"`
 							Details map[string]any `json:"details"`
 						} `json:"error"`
 					}
 					_ = json.Unmarshal(w.Body.Bytes(), &e)
-					if e.Error.Details["error_code"] != "ACCOUNT_SUSPENDED" {
-						t.Fatalf("403 body = %s, want details.error_code ACCOUNT_SUSPENDED", w.Body.String())
+					if e.Error.Code != "ACCOUNT_SUSPENDED" || e.Error.Details["error_code"] != "ACCOUNT_SUSPENDED" {
+						t.Fatalf("403 body = %s, want error.code and details.error_code ACCOUNT_SUSPENDED", w.Body.String())
 					}
 				}
 				return

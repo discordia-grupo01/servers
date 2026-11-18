@@ -51,7 +51,7 @@ func (h *Handler) Ban(c *gin.Context) {
 
 	var req banRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		apierr.RespondError(c, http.StatusBadRequest, "invalid request body", map[string]any{"reason": "invalid_json"})
+		apierr.InvalidJSON(c)
 		return
 	}
 
@@ -99,7 +99,7 @@ func (h *Handler) Mute(c *gin.Context) {
 	}
 	var req muteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		apierr.RespondError(c, http.StatusBadRequest, "invalid request body", map[string]any{"reason": "invalid_json"})
+		apierr.InvalidJSON(c)
 		return
 	}
 	if err := h.uc.MuteMember(c.Request.Context(), moderation_service.MuteParams{
@@ -160,7 +160,7 @@ func (h *Handler) Kick(c *gin.Context) {
 
 	var req kickRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		apierr.RespondError(c, http.StatusBadRequest, "invalid request body", map[string]any{"reason": "invalid_json"})
+		apierr.InvalidJSON(c)
 		return
 	}
 

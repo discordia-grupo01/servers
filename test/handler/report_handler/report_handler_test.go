@@ -80,7 +80,7 @@ func basePath(serverID uuid.UUID) string { return "/v1/servers/" + serverID.Stri
 
 type errorBody struct {
 	Error struct {
-		Code    int            `json:"code"`
+		Code    string         `json:"code"`
 		Message string         `json:"message"`
 		Details map[string]any `json:"details"`
 	} `json:"error"`
