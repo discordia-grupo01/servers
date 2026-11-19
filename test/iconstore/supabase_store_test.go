@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/discordia-grupo01/servers/internal/circuitbreaker"
 	"github.com/discordia-grupo01/servers/internal/iconstore"
 	"github.com/discordia-grupo01/servers/internal/model"
 )
@@ -202,5 +203,47 @@ func TestSupabaseStore_Save_InvalidIcon_DoesNotUpload(t *testing.T) {
 	}
 	if _, _, err := st.Get("srv2-deadbeef"); !errors.Is(err, model.ErrIconNotFound) {
 		t.Error("an invalid icon was uploaded anyway")
+	}
+}
+
+func TestSupabaseStore_WhenStorageKeepsFailing_StopsCallingItAndFailsFast(t *testing.T) {
+	var calls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer srv.Close()
+
+	st := iconstore.NewSupabaseStore(srv.URL, "icons", "key", max)
+
+	for i := 0; i < circuitbreaker.DefaultFailureThreshold; i++ {
+		if _, err := st.Save("srv1", png(64)); err == nil {
+			t.Fatalf("save %d: expected an error", i)
+		}
+	}
+	callsBeforeOpen := calls
+
+	_, err := st.Save("srv1", png(64))
+
+	if !errors.Is(err, circuitbreaker.ErrOpen) {
+		t.Fatalf("err = %v, want the circuit to be open", err)
+	}
+	if calls != callsBeforeOpen {
+		t.Fatalf("storage was called %d more times while the circuit was open", calls-callsBeforeOpen)
+	}
+}
+
+func TestSupabaseStore_NotFoundDoesNotOpenTheCircuit(t *testing.T) {
+	srv := fakeSupabase(t, "key")
+	defer srv.Close()
+	st := iconstore.NewSupabaseStore(srv.URL, "icons", "key", max)
+
+	for i := 0; i < circuitbreaker.DefaultFailureThreshold+2; i++ {
+		if _, _, err := st.Get("missing"); !errors.Is(err, model.ErrIconNotFound) {
+			t.Fatalf("get %d: err = %v", i, err)
+		}
+	}
+	if _, err := st.Save("srv1", png(64)); err != nil {
+		t.Fatalf("save after many 404s: %v", err)
 	}
 }

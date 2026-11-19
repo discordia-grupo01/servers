@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/discordia-grupo01/servers/internal/circuitbreaker"
+	"github.com/discordia-grupo01/servers/internal/logging"
 	"github.com/discordia-grupo01/servers/internal/model"
 )
 
@@ -16,7 +18,7 @@ type SupabaseStore struct {
 	Bucket     string
 	ServiceKey string
 	MaxBytes   int64
-	Client     *http.Client
+	Client     circuitbreaker.Doer
 }
 
 func NewSupabaseStore(baseURL, bucket, serviceKey string, maxBytes int64) *SupabaseStore {
@@ -25,8 +27,17 @@ func NewSupabaseStore(baseURL, bucket, serviceKey string, maxBytes int64) *Supab
 		Bucket:     bucket,
 		ServiceKey: serviceKey,
 		MaxBytes:   maxBytes,
-		Client:     &http.Client{Timeout: 10 * time.Second},
+		Client:     circuitbreaker.NewHTTPClient(newStorageBreaker(), &http.Client{Timeout: 10 * time.Second}),
 	}
+}
+
+func newStorageBreaker() *circuitbreaker.Breaker {
+	return circuitbreaker.New(circuitbreaker.Config{
+		Name: "supabase-storage",
+		OnStateChange: func(name string, from, to circuitbreaker.State) {
+			logging.Warnf("circuit_breaker_state_changed name=%s from=%s to=%s", name, from, to)
+		},
+	})
 }
 
 func (s *SupabaseStore) objectURL(id string) string {
