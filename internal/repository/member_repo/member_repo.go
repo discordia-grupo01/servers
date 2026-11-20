@@ -5,7 +5,6 @@ package member_repo
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -133,16 +132,8 @@ const memberFromSQL = `
 		  LEFT JOIN suspended_users su ON su.user_id = sm.user_id AND su.suspended
 		  LEFT JOIN user_profiles p ON p.user_id = sm.user_id AND su.user_id IS NULL`
 
-func likeContains(search string) string {
-	if search == "" {
-		return ""
-	}
-	escaped := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(search)
-	return "%" + escaped + "%"
-}
-
 func (r *MemberRepository) listMembers(ctx context.Context, f memberFilter, limit, offset int) ([]model.Member, int, error) {
-	args := []any{f.serverID, f.roleID, f.withoutRole, likeContains(strings.TrimSpace(f.search))}
+	args := []any{f.serverID, f.roleID, f.withoutRole, repository.LikeContains(f.search)}
 
 	var total int
 	if err := r.pool.QueryRow(ctx,

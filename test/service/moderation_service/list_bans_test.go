@@ -33,6 +33,19 @@ func TestListBans_ModeratorGetsThePage(t *testing.T) {
 	}
 }
 
+func TestListBans_PassesTheSearchToTheRepo(t *testing.T) {
+	f := newFixture()
+	_, err := f.svc.ListBans(context.Background(), moderation_service.ListBansParams{
+		ServerID: f.server.ID, ActorUserID: moderatorID, Search: "ana", Limit: 20,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if f.repo.gotSearch != "ana" {
+		t.Errorf("repo got search %q, want ana", f.repo.gotSearch)
+	}
+}
+
 func TestListBans_ClampsPagination(t *testing.T) {
 	cases := []struct {
 		limit, offset         int

@@ -49,6 +49,7 @@ func newRepo(t *testing.T) (*moderation_repo.Repository, *pgxpool.Pool) {
 		"../../../migrations/0004_member_roles.up.sql",
 		"../../../migrations/0006_ownership_transfers.up.sql",
 		"../../../migrations/0007_categories.up.sql",
+		"../../../migrations/0012_category_name_key.up.sql",
 		"../../../migrations/0008_ownership_transfer_cancelled_status.up.sql",
 		"../../../migrations/0011_outbox_events.up.sql",
 		"../../../migrations/0033_outbox_traceparent.up.sql",
@@ -467,7 +468,7 @@ func TestListBans_NewestFirstPaginatedAndScopedToTheServer(t *testing.T) {
 	exec(ctx, t, pool, `INSERT INTO server_bans (server_id, user_id, banned_at) VALUES ($1, 'legacy', $2)`, serverID, base.Add(-time.Hour))
 	exec(ctx, t, pool, `INSERT INTO server_bans (server_id, user_id) VALUES ($1, 'elsewhere')`, other)
 
-	bans, total, err := repo.ListBans(ctx, serverID, 2, 0)
+	bans, total, err := repo.ListBans(ctx, serverID, "", 2, 0)
 	if err != nil {
 		t.Fatalf("ListBans: %v", err)
 	}
@@ -478,7 +479,7 @@ func TestListBans_NewestFirstPaginatedAndScopedToTheServer(t *testing.T) {
 		t.Errorf("banned_by = %v", bans[0].BannedBy)
 	}
 
-	bans, _, err = repo.ListBans(ctx, serverID, 2, 2)
+	bans, _, err = repo.ListBans(ctx, serverID, "", 2, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -501,7 +502,7 @@ func TestListBans_JoinsReplicatedProfiles(t *testing.T) {
 		INSERT INTO user_profiles (user_id, name, avatar_url, description, status_text, status_emoji, version)
 		VALUES ('with-profile', 'Manu', 'https://cdn/a.png', 'hola', 'jugando', '🎮', 4)`)
 
-	bans, total, err := repo.ListBans(ctx, serverID, 10, 0)
+	bans, total, err := repo.ListBans(ctx, serverID, "", 10, 0)
 	if err != nil {
 		t.Fatalf("ListBans: %v", err)
 	}
@@ -517,10 +518,46 @@ func TestListBans_JoinsReplicatedProfiles(t *testing.T) {
 	}
 }
 
+// The search box matches the banned user's name ignoring case and accents,
+// LIKE wildcards are literal, and the total counts only the matches so the
+// pages still line up.
+func TestListBans_SearchesByNameIgnoringCaseAndAccents(t *testing.T) {
+	repo, pool := newRepo(t)
+	ctx := context.Background()
+	serverID := seedServer(ctx, t, pool)
+	base := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+	for i, u := range []string{"jose", "josefina", "ana", "pct", "ghost"} {
+		exec(ctx, t, pool, `INSERT INTO server_bans (server_id, user_id, banned_at) VALUES ($1, $2, $3)`,
+			serverID, u, base.Add(time.Duration(i)*time.Hour))
+	}
+	exec(ctx, t, pool, `
+		INSERT INTO user_profiles (user_id, name, avatar_url, description, status_text, status_emoji, version)
+		VALUES ('jose', 'José Pérez', '', '', '', '', 1), ('josefina', 'JOSEFINA', '', '', '', '', 1),
+		       ('ana', 'Ana', '', '', '', '', 1), ('pct', '100% real', '', '', '', '', 1)`)
+
+	bans, total, err := repo.ListBans(ctx, serverID, "  jose ", 10, 0)
+	if err != nil {
+		t.Fatalf("ListBans: %v", err)
+	}
+	if total != 2 || len(bans) != 2 || bans[0].UserID != "josefina" || bans[1].UserID != "jose" {
+		t.Errorf("search jose = %v (total %d), want [josefina jose]", userIDs(bans), total)
+	}
+
+	bans, total, _ = repo.ListBans(ctx, serverID, "jose", 1, 1)
+	if total != 2 || len(bans) != 1 || bans[0].UserID != "jose" {
+		t.Errorf("second page of jose = %v (total %d), want [jose]", userIDs(bans), total)
+	}
+
+	bans, total, _ = repo.ListBans(ctx, serverID, "%", 10, 0)
+	if total != 1 || len(bans) != 1 || bans[0].UserID != "pct" {
+		t.Errorf("search %% = %v (total %d), want only [pct]", userIDs(bans), total)
+	}
+}
+
 func TestListBans_NoBans_EmptyNotNil(t *testing.T) {
 	repo, pool := newRepo(t)
 	ctx := context.Background()
-	bans, total, err := repo.ListBans(ctx, seedServer(ctx, t, pool), 20, 0)
+	bans, total, err := repo.ListBans(ctx, seedServer(ctx, t, pool), "", 20, 0)
 	if err != nil || total != 0 || bans == nil || len(bans) != 0 {
 		t.Fatalf("got %v, %d, %v", bans, total, err)
 	}
