@@ -7,8 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       voice_instance_id:
-        description: "ID de instancia/réplica de signaling (si aplica)"
+        description: "ID de instancia/réplica de signaling (id de la máquina de Fly)"
         required: false
+        default: "891e74ef6e7d38"
         type: string
       dry_run:
         description: "Ejecutar en modo simulación (--dry-run)"
@@ -315,6 +316,27 @@ jobs:
           if [ -z "$DATABASE_HOST" ] || [ -z "$DATABASE_PASSWORD" ] || [ -z "$RABBITMQ_URL" ]; then
             echo "Faltan secrets requeridos (PROD_DATABASE_* o PROD_RABBITMQ_URL)" >&2
             exit 1
+          fi
+
+          # El runner recien entra a la tailnet: el camino hacia el broker (DERP/directo)
+          # tarda unos segundos en estar listo. Se espera antes de abrir la conexion AMQP.
+          if [ "${{ inputs.dry_run }}" != "true" ]; then
+            BROKER=$(printf '%s' "$RABBITMQ_URL" | sed -E 's#^[a-z]+://([^@/]*@)?([^:/?]+)(:([0-9]+))?.*#\2 \4#')
+            BROKER_HOST=${BROKER% *}
+            BROKER_PORT=${BROKER#* }
+            [ -z "$BROKER_PORT" ] || [ "$BROKER_PORT" = "$BROKER_HOST" ] && BROKER_PORT=5672
+            READY=""
+            for i in $(seq 1 30); do
+              tailscale ping -c 1 --timeout 3s "$BROKER_HOST" >/dev/null 2>&1 || true
+              if nc -z -w 3 "$BROKER_HOST" "$BROKER_PORT"; then READY=1; break; fi
+              sleep 2
+            done
+            if [ -z "$READY" ]; then
+              echo "El runner no llega a $BROKER_HOST:$BROKER_PORT por la tailnet." >&2
+              echo "Revisar las ACL de Tailscale (el tag de TS_AUTHKEY debe poder acceder al puerto $BROKER_PORT) y que el nodo del broker este en linea." >&2
+              tailscale status >&2 || true
+              exit 1
+            fi
           fi
 
           ARGS=""

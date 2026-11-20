@@ -406,13 +406,24 @@ func (r *Repository) ExpireMutes(ctx context.Context, at time.Time) (int, error)
 	return len(expired), nil
 }
 
+const banFilterSQL = `b.server_id = $1
+	   AND ($2::text = '' OR unaccent(lower(p.name)) LIKE unaccent(lower($2)) ESCAPE '\')`
+
 // ListBans returns a page of serverID's bans, newest first, and the total
-// number of bans. Each ban carries the banned user's replicated public
-// profile, or a nil Profile if it hasn't arrived yet.
-func (r *Repository) ListBans(ctx context.Context, serverID uuid.UUID, limit, offset int) ([]moderation.Ban, int, error) {
+// number of bans that match. Each ban carries the banned user's replicated
+// public profile, or a nil Profile if it hasn't arrived yet. A non-empty
+// search keeps only the bans whose user name contains it, ignoring case and
+// accents; bans without a replicated profile never match it.
+func (r *Repository) ListBans(ctx context.Context, serverID uuid.UUID, search string, limit, offset int) ([]moderation.Ban, int, error) {
+	pattern := repository.LikeContains(search)
+
 	var total int
-	if err := r.pool.QueryRow(ctx,
-		`SELECT COUNT(*) FROM server_bans WHERE server_id = $1`, serverID,
+	if err := r.pool.QueryRow(ctx, `
+		SELECT COUNT(*)
+		  FROM server_bans b
+		  LEFT JOIN user_profiles p ON p.user_id = b.user_id
+		 WHERE `+banFilterSQL,
+		serverID, pattern,
 	).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("count bans: %w", err)
 	}
@@ -422,10 +433,10 @@ func (r *Repository) ListBans(ctx context.Context, serverID uuid.UUID, limit, of
 		       p.user_id, p.name, p.avatar_url, p.description, p.status_text, p.status_emoji, p.version
 		  FROM server_bans b
 		  LEFT JOIN user_profiles p ON p.user_id = b.user_id
-		 WHERE b.server_id = $1
+		 WHERE `+banFilterSQL+`
 		 ORDER BY b.banned_at DESC, b.user_id
-		 LIMIT $2 OFFSET $3`,
-		serverID, limit, offset,
+		 LIMIT $3 OFFSET $4`,
+		serverID, pattern, limit, offset,
 	)
 	if err != nil {
 		return nil, 0, fmt.Errorf("list bans: %w", err)
