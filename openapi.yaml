@@ -1283,6 +1283,12 @@ paths:
           schema:
             type: string
             format: uuid
+        - description: Keep only bans whose user name contains this, ignoring case and
+            accents. Bans without a replicated profile never match.
+          in: query
+          name: q
+          schema:
+            type: string
         - description: Page size (max 100)
           in: query
           name: limit

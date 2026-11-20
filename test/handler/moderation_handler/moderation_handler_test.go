@@ -305,6 +305,18 @@ func TestListAudit_MissingIdentityReturns401(t *testing.T) {
 	}
 }
 
+func TestListBans_PassesTheSearch(t *testing.T) {
+	serverID := uuid.New()
+	f := &fakeModeration{}
+	w := do(t, newRouter(f), http.MethodGet, bansPath(serverID)+"?q=ana&limit=5", testUser, "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
+	}
+	if f.gotList.Search != "ana" || f.gotList.Limit != 5 {
+		t.Errorf("service got %+v", f.gotList)
+	}
+}
+
 func TestListBans_IncludesTheBannedUsersProfile(t *testing.T) {
 	serverID := uuid.New()
 	f := &fakeModeration{listResult: moderation.BanPage{

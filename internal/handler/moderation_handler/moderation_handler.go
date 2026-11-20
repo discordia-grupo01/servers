@@ -215,6 +215,7 @@ func (h *Handler) Unban(c *gin.Context) {
 // @Produce      json
 // @Security     BearerAuth
 // @Param        serverId  path   string  true   "Server ID" Format(uuid)
+// @Param        q         query  string  false  "Keep only bans whose user name contains this, ignoring case and accents. Bans without a replicated profile never match."
 // @Param        limit     query  int     false  "Page size (max 100)" minimum(0) Format(int64) default(20)
 // @Param        offset    query  int     false  "Items to skip" minimum(0) Format(int64) default(0)
 // @Success      200  {object}  moderation.BanListResponse
@@ -240,6 +241,7 @@ func (h *Handler) ListBans(c *gin.Context) {
 	page, err := h.uc.ListBans(c.Request.Context(), moderation_service.ListBansParams{
 		ServerID:    serverID,
 		ActorUserID: middleware.UserID(c),
+		Search:      c.Query("q"),
 		Limit:       limit,
 		Offset:      offset,
 	})

@@ -366,8 +366,9 @@ func (s *Service) UnbanMember(ctx context.Context, p UnbanParams) error {
 	return s.repo.UnbanMember(ctx, p.ServerID, target, memberUnbanned)
 }
 
-// ListBans returns a page of the server's bans, newest first. Only who can
-// ban (BAN_MEMBERS) can see them.
+// ListBans returns a page of the server's bans, newest first, optionally
+// filtered by the banned user's name. Only who can ban (BAN_MEMBERS) can see
+// them.
 func (s *Service) ListBans(ctx context.Context, p ListBansParams) (moderation.BanPage, error) {
 	if p.ActorUserID == "" {
 		return moderation.BanPage{}, model.ErrUnauthorized
@@ -392,7 +393,7 @@ func (s *Service) ListBans(ctx context.Context, p ListBansParams) (moderation.Ba
 		limit = moderation.ListMaxLimit
 	}
 	offset := max(p.Offset, 0)
-	bans, total, err := s.repo.ListBans(ctx, p.ServerID, limit, offset)
+	bans, total, err := s.repo.ListBans(ctx, p.ServerID, p.Search, limit, offset)
 	if err != nil {
 		return moderation.BanPage{}, err
 	}

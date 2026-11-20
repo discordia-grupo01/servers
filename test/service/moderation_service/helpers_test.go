@@ -70,6 +70,7 @@ type fakeRepo struct {
 	listBans  []moderation.Ban
 	listTotal int
 	listErr   error
+	gotSearch string
 	gotLimit  int
 	gotOffset int
 
@@ -145,8 +146,8 @@ func (f *fakeRepo) UnbanMember(_ context.Context, serverID uuid.UUID, userID str
 	return nil
 }
 
-func (f *fakeRepo) ListBans(_ context.Context, _ uuid.UUID, limit, offset int) ([]moderation.Ban, int, error) {
-	f.gotLimit, f.gotOffset = limit, offset
+func (f *fakeRepo) ListBans(_ context.Context, _ uuid.UUID, search string, limit, offset int) ([]moderation.Ban, int, error) {
+	f.gotSearch, f.gotLimit, f.gotOffset = search, limit, offset
 	return f.listBans, f.listTotal, f.listErr
 }
 
