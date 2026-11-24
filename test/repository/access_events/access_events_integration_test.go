@@ -153,6 +153,7 @@ func TestCreateRole_PublishesItsSnapshot(t *testing.T) {
 		"role_id":     created.ID.String(),
 		"permissions": []any{"SEND_MESSAGES", "VIEW_CHANNELS"},
 		"is_everyone": false,
+		"name":        "VIP",
 	})
 }
 
@@ -175,6 +176,7 @@ func TestUpdateRole_PublishesItsNewSnapshot(t *testing.T) {
 		"role_id":     w.modID.String(),
 		"permissions": []any{"MENTION_EVERYONE"},
 		"is_everyone": false,
+		"name":        mod.Name,
 	})
 }
 
@@ -445,7 +447,7 @@ func TestCreateServer_PublishesOwnerEveryoneRoleAndOwnerRoles(t *testing.T) {
 				t.Errorf("owner_id = %v", evt["owner_id"])
 			}
 		case permissions.RoutingKeyRoleUpdated:
-			if evt["is_everyone"] != true || !reflect.DeepEqual(evt["permissions"], []any{"ADD_REACTIONS", "CONNECT", "CREATE_INVITE", "SEND_MESSAGES", "VIEW_CHANNELS"}) {
+			if evt["is_everyone"] != true || evt["name"] != "@everyone" || !reflect.DeepEqual(evt["permissions"], []any{"ADD_REACTIONS", "CONNECT", "CREATE_INVITE", "SEND_MESSAGES", "VIEW_CHANNELS"}) {
 				t.Errorf("role = %v", evt)
 			}
 		case permissions.RoutingKeyMemberRolesUpdated:

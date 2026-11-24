@@ -22,9 +22,10 @@ func PublishRoleUpdated(ctx context.Context, tx pgx.Tx, roleID uuid.UUID) error 
 	var serverID uuid.UUID
 	var mask role.Permission
 	var isEveryone bool
+	var name string
 	err := tx.QueryRow(ctx,
-		`SELECT server_id, permissions, is_everyone FROM roles WHERE id = $1`, roleID,
-	).Scan(&serverID, &mask, &isEveryone)
+		`SELECT server_id, permissions, is_everyone, name FROM roles WHERE id = $1`, roleID,
+	).Scan(&serverID, &mask, &isEveryone, &name)
 	if err != nil {
 		return fmt.Errorf("read role for event: %w", err)
 	}
@@ -34,6 +35,7 @@ func PublishRoleUpdated(ctx context.Context, tx pgx.Tx, roleID uuid.UUID) error 
 		RoleID:      roleID.String(),
 		Permissions: role.PermissionNames(mask),
 		IsEveryone:  isEveryone,
+		Name:        name,
 	})
 }
 
