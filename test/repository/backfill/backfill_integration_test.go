@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	moderationevents "github.com/discordia-grupo01/events-contract/moderation"
+	"github.com/discordia-grupo01/events-contract/permissions"
 	"github.com/discordia-grupo01/events-contract/reports"
 	"github.com/discordia-grupo01/events-contract/servers"
 	"github.com/discordia-grupo01/events-contract/validate"
@@ -268,5 +269,53 @@ func TestBackfillsOnAnEmptyDatabasePublishNothing(t *testing.T) {
 	var n int
 	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM outbox_events`).Scan(&n); err != nil || n != 0 {
 		t.Errorf("events = %d, err = %v, want 0", n, err)
+	}
+}
+
+func TestBackfillRoleNames_RepublishesEveryRoleWithItsName(t *testing.T) {
+	pool := newPool(t)
+	ctx := context.Background()
+	dropRoles := func() { _, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS member_roles, roles CASCADE`) }
+	t.Cleanup(dropRoles)
+	dropRoles()
+	apply(ctx, t, pool, "0003_roles", "0004_member_roles", "0015_role_positions", "0019_everyone_role")
+
+	serverID, vip, everyone := uuid.New(), uuid.New(), uuid.New()
+	exec(ctx, t, pool, `INSERT INTO servers (id, name, name_key, owner_id, created_at) VALUES ($1, 'Srv', 'srv', $2, now())`,
+		serverID, uuid.NewString())
+	exec(ctx, t, pool, `INSERT INTO roles (id, server_id, name, color, permissions, position, is_everyone) VALUES ($1, $2, 'VIP', '#112233', 3, 1, false)`,
+		vip, serverID)
+	exec(ctx, t, pool, `INSERT INTO roles (id, server_id, name, color, permissions, position, is_everyone) VALUES ($1, $2, '@everyone', '#9e9e9e', 259, 0, true)`,
+		everyone, serverID)
+
+	before := time.Now().UTC().Add(-time.Second)
+	apply(ctx, t, pool, "0038_backfill_role_names")
+
+	raw := payloads(ctx, t, pool, permissions.RoutingKeyRoleUpdated)
+	if len(raw) != 2 {
+		t.Fatalf("events = %d, want one per role", len(raw))
+	}
+	byID := map[string]permissions.RoleUpdated{}
+	for _, p := range raw {
+		if err := validate.Validate(permissions.RoutingKeyRoleUpdated, p); err != nil {
+			t.Errorf("the event does not meet the contract: %v", err)
+		}
+		var e permissions.RoleUpdated
+		if err := json.Unmarshal(p, &e); err != nil {
+			t.Fatalf("payload doesn't decode with the contract type: %v: %s", err, p)
+		}
+		if e.EventID == "" || e.OccurredAt.Before(before) {
+			t.Errorf("occurred_at = %v: the backfill must be newer than any earlier live event", e.OccurredAt)
+		}
+		if e.ServerID != serverID.String() {
+			t.Errorf("server_id = %s, want %s", e.ServerID, serverID)
+		}
+		byID[e.RoleID] = e
+	}
+	if e := byID[vip.String()]; e.Name != "VIP" || e.IsEveryone || len(e.Permissions) != 2 || e.Permissions[0] != "SEND_MESSAGES" || e.Permissions[1] != "VIEW_CHANNELS" {
+		t.Errorf("VIP role = %+v", e)
+	}
+	if e := byID[everyone.String()]; e.Name != "@everyone" || !e.IsEveryone {
+		t.Errorf("@everyone role = %+v", e)
 	}
 }
