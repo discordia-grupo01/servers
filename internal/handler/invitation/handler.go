@@ -112,6 +112,7 @@ func (h *Handler) list(c *gin.Context) {
 // @Summary      Revoke an invitation
 // @Description  Administrators revoke any invitation of the server; any member can revoke the ones they created. Idempotent: revoking an already-revoked code still returns 204.
 // @Tags         invitations
+// @Produce      json
 // @Security     BearerAuth
 // @Param        code  path  string  true  "Invitation code"
 // @Success      204  "no content"

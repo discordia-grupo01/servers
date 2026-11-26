@@ -97,7 +97,7 @@ func (h *Handler) Create(c *gin.Context) {
 // @Produce      json
 // @Security     BearerAuth
 // @Param        serverId  path   string  true   "Server ID" Format(uuid)
-// @Param        status    query  string  false  "pending (default), resolved, dismissed or all"
+// @Param        status    query  string  false  "pending (default), resolved, dismissed or all" Enums(pending, resolved, dismissed, all)
 // @Param        limit     query  int     false  "Page size (default 20, max 100)" minimum(0) Format(int64)
 // @Param        offset    query  int     false  "Reports to skip" minimum(0) Format(int64)
 // @Success      200  {object}  report.ListResponse

@@ -207,6 +207,7 @@ type deleteServerRequest struct {
 // @Summary      Delete a server
 // @Description  Permanently deletes the server with its channels, categories, roles, members, invitations, bans and messages. Only the owner can do it, and only after confirming by sending the server's exact name in confirm_name. Not reversible.
 // @Tags         servers
+// @Produce      json
 // @Accept       json
 // @Security     BearerAuth
 // @Param        serverId  path  string               true  "Server id (UUID)" Format(uuid)

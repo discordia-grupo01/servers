@@ -105,25 +105,25 @@ paths:
         "400":
           description: Bad Request
           content:
-            "*/*":
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "401":
           description: Unauthorized
           content:
-            "*/*":
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "403":
           description: not a server administrator
           content:
-            "*/*":
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "404":
           description: Not Found
           content:
-            "*/*":
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
       security:
@@ -552,25 +552,25 @@ paths:
         "400":
           description: Bad Request
           content:
-            "*/*":
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "401":
           description: Unauthorized
           content:
-            "*/*":
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "403":
           description: not an administrator nor the invitation's creator
           content:
-            "*/*":
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "404":
           description: invitation not found
           content:
-            "*/*":
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
       security:
@@ -648,26 +648,26 @@ paths:
         "400":
           description: Bad Request
           content:
-            "*/*":
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "401":
           description: Unauthorized
           content:
-            "*/*":
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "403":
           description: not a server administrator, or deleting a role with ADMINISTRATOR
             that you hold, or the role is not below your highest role
           content:
-            "*/*":
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "404":
           description: Not Found
           content:
-            "*/*":
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
       security:
@@ -969,25 +969,25 @@ paths:
           description: invalid body, or confirm_name missing or different from the server
             name
           content:
-            "*/*":
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "401":
           description: Unauthorized
           content:
-            "*/*":
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "403":
           description: not the server owner
           content:
-            "*/*":
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "404":
           description: Not Found
           content:
-            "*/*":
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
       security:
@@ -1590,25 +1590,25 @@ paths:
         "400":
           description: Bad Request
           content:
-            "*/*":
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "401":
           description: Unauthorized
           content:
-            "*/*":
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "403":
           description: not a server administrator
           content:
-            "*/*":
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "404":
           description: Not Found
           content:
-            "*/*":
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
       security:
@@ -1702,25 +1702,25 @@ paths:
         "400":
           description: Bad Request
           content:
-            "*/*":
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "401":
           description: Unauthorized
           content:
-            "*/*":
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "403":
           description: not a server administrator
           content:
-            "*/*":
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "404":
           description: Not Found
           content:
-            "*/*":
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
       security:
@@ -1753,26 +1753,26 @@ paths:
         "400":
           description: Bad Request
           content:
-            "*/*":
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "401":
           description: Unauthorized
           content:
-            "*/*":
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "403":
           description: not a server administrator, or the role is not below your highest
             role
           content:
-            "*/*":
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "404":
           description: Not Found
           content:
-            "*/*":
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
       security:
@@ -2264,31 +2264,31 @@ paths:
         "400":
           description: Bad Request
           content:
-            "*/*":
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "401":
           description: Unauthorized
           content:
-            "*/*":
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "403":
           description: userId is not the caller
           content:
-            "*/*":
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "404":
           description: Not Found
           content:
-            "*/*":
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "409":
           description: the owner cannot leave; transfer ownership or delete the server first
           content:
-            "*/*":
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
       security:
@@ -2503,13 +2503,13 @@ paths:
         "400":
           description: Bad Request
           content:
-            "*/*":
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "401":
           description: Unauthorized
           content:
-            "*/*":
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "403":
@@ -2517,13 +2517,13 @@ paths:
             ADMINISTRATOR from yourself, or the role is not below your highest
             role
           content:
-            "*/*":
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "404":
           description: server or role not found, or the member doesn't have the role
           content:
-            "*/*":
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
       security:
@@ -2738,26 +2738,26 @@ paths:
           description: missing user_id, muting yourself, until_at not in the future, or
             invalid reason
           content:
-            "*/*":
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "401":
           description: Unauthorized
           content:
-            "*/*":
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "403":
           description: missing MANAGE_MESSAGES, target is the owner, or target has an
             equal or higher role
           content:
-            "*/*":
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "404":
           description: server not found, or target is not a member
           content:
-            "*/*":
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
       security:
@@ -2788,19 +2788,19 @@ paths:
         "400":
           description: Bad Request
           content:
-            "*/*":
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "401":
           description: Unauthorized
           content:
-            "*/*":
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "404":
           description: user is not muted in this server
           content:
-            "*/*":
+            application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
       security:
@@ -3123,6 +3123,11 @@ paths:
           name: status
           schema:
             type: string
+            enum:
+              - pending
+              - resolved
+              - dismissed
+              - all
         - description: Page size (default 20, max 100)
           in: query
           name: limit
