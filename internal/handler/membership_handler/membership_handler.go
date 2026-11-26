@@ -23,6 +23,7 @@ func New(uc UseCases) *Handler {
 // @Summary      Leave a server
 // @Description  Self-leave only: userId must be the caller's own. The owner cannot leave (transfer ownership or delete the server first).
 // @Tags         membership
+// @Produce      json
 // @Security     BearerAuth
 // @Param        serverId  path  string  true  "Server ID" Format(uuid)
 // @Param        userId    path  string  true  "Must match the caller's own user ID" Format(uuid)

@@ -82,6 +82,7 @@ type muteRequest struct {
 // @Summary      Temporarily mute a member
 // @Description  Requires MANAGE_MESSAGES. The member remains in the server and connected sessions stay open, but message sends and voice publishing are denied until until_at.
 // @Tags         moderation
+// @Produce      json
 // @Accept       json
 // @Security     BearerAuth
 // @Param        serverId path string true "Server ID" Format(uuid)
@@ -115,6 +116,7 @@ func (h *Handler) Mute(c *gin.Context) {
 // Unmute godoc
 // @Summary      Remove a member mute
 // @Tags         moderation
+// @Produce      json
 // @Security     BearerAuth
 // @Param        serverId path string true "Server ID" Format(uuid)
 // @Param        userId path string true "Muted user ID" Format(uuid)
