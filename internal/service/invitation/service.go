@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
+	"math"
 	"strings"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 
 const (
 	codeAttempts = 5
+	MaxUsesLimit = math.MaxInt32
 	// TTL es cuánto vive un link de invitación desde que se genera. Fijo:
 	// el cliente nunca lo manda.
 	TTL = 7 * 24 * time.Hour
@@ -72,7 +74,7 @@ func (s *Service) GenerateInvitation(ctx context.Context, p GenerateParams) (mod
 		return model.Invitation{}, err
 	}
 
-	if p.MaxUses != nil && *p.MaxUses <= 0 {
+	if p.MaxUses != nil && (*p.MaxUses <= 0 || *p.MaxUses > MaxUsesLimit) {
 		return model.Invitation{}, model.ErrInviteMaxUsesInvalid
 	}
 
