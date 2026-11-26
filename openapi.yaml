@@ -3937,7 +3937,8 @@ components:
     model.GenerateInvitationRequest:
       properties:
         max_uses:
-          format: int64
+          format: int32
+          maximum: 2147483647
           minimum: 1
           type: integer
           nullable: true

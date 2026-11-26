@@ -42,7 +42,7 @@ func (i Invitation) Validate(now time.Time) error {
 }
 
 type GenerateInvitationRequest struct {
-	MaxUses *int `json:"max_uses" minimum:"1" format:"int64" extensions:"x-nullable"`
+	MaxUses *int `json:"max_uses" minimum:"1" maximum:"2147483647" format:"int32" extensions:"x-nullable"`
 }
 
 type InvitationResponse struct {
