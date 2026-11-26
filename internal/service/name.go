@@ -13,10 +13,12 @@ func normalizeName(s string) string {
 	return norm.NFC.String(strings.TrimSpace(s))
 }
 
-var accentStripper = transform.Chain(norm.NFD, runes.Remove(runes.In(unicode.Mn)), norm.NFC)
+func accentStripper() transform.Transformer {
+	return transform.Chain(norm.NFD, runes.Remove(runes.In(unicode.Mn)), norm.NFC)
+}
 
 func NameKey(s string) string {
-	stripped, _, err := transform.String(accentStripper, s)
+	stripped, _, err := transform.String(accentStripper(), s)
 	if err != nil {
 		stripped = s
 	}

@@ -164,8 +164,8 @@ func TestGenerate_NonMemberCannotInvite(t *testing.T) {
 	}
 }
 
-func TestGenerate_RejectsNonPositiveMaxUses(t *testing.T) {
-	for _, n := range []int{0, -3} {
+func TestGenerate_RejectsMaxUsesOutOfRange(t *testing.T) {
+	for _, n := range []int{0, -3, invitation.MaxUsesLimit + 1, 358592356996273} {
 		p := genParams(uuid.NewString())
 		p.MaxUses = ptrInt(n)
 		_, err := newInviteService(inviterRepo()).GenerateInvitation(context.Background(), p)
