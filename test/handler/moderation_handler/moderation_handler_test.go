@@ -152,6 +152,19 @@ func TestUnmute_NotMuted_Returns404(t *testing.T) {
 	}
 }
 
+func TestMute_AlreadyMuted_Returns409(t *testing.T) {
+	f := &fakeModeration{muteErr: model.ErrAlreadyMuted}
+
+	w := do(t, newRouter(f), http.MethodPost, "/v1/servers/"+uuid.New().String()+"/mutes", testUser, `{"user_id":"member-1"}`)
+	if w.Code != http.StatusConflict {
+		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
+	}
+	e := decodeError(t, w)
+	if e.Error.Code != "ALREADY_MUTED" || e.Error.Details["reason"] != "already_muted" {
+		t.Fatalf("error = %+v", e.Error)
+	}
+}
+
 func TestBan_Returns201WithTheBan(t *testing.T) {
 	serverID := uuid.New()
 	reason, by := "spam", testUser

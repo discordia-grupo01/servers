@@ -85,6 +85,7 @@ const (
 	CodeTargetOutranks    = "TARGET_OUTRANKS_ACTOR"
 	CodeAlreadyBanned     = "ALREADY_BANNED"
 	CodeBanNotFound       = "BAN_NOT_FOUND"
+	CodeAlreadyMuted      = "ALREADY_MUTED"
 	CodeMuteNotFound      = "MUTE_NOT_FOUND"
 	CodeMuteTargetReq     = "MUTE_TARGET_REQUIRED"
 	CodeCannotMuteSelf    = "CANNOT_MUTE_SELF"

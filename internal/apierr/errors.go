@@ -253,6 +253,8 @@ func WriteDomainError(c *gin.Context, err error) {
 		RespondError(c, http.StatusConflict, CodeAlreadyBanned, err.Error(), map[string]any{"reason": "already_banned"})
 	case errors.Is(err, model.ErrBanNotFound):
 		RespondError(c, http.StatusNotFound, CodeBanNotFound, err.Error(), map[string]any{"reason": "ban_not_found"})
+	case errors.Is(err, model.ErrAlreadyMuted):
+		RespondError(c, http.StatusConflict, CodeAlreadyMuted, err.Error(), map[string]any{"reason": "already_muted"})
 	case errors.Is(err, model.ErrMuteNotFound):
 		RespondError(c, http.StatusNotFound, CodeMuteNotFound, err.Error(), map[string]any{"reason": "mute_not_found"})
 	case errors.Is(err, model.ErrMuteTargetRequired):
