@@ -2760,6 +2760,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
+        "409":
+          description: target is already muted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
       security:
         - BearerAuth: []
       summary: Temporarily mute a member
