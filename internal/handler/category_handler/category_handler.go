@@ -124,6 +124,7 @@ type reorderCategoriesRequest struct {
 // @Summary      Reorder a server's categories
 // @Description  Administrators only (the owner, or a member with ADMINISTRATOR). `category_ids` is the full, final order.
 // @Tags         categories
+// @Produce      json
 // @Accept       json
 // @Security     BearerAuth
 // @Param        serverId  path  string                      true  "Server ID" Format(uuid)

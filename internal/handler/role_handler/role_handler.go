@@ -256,6 +256,7 @@ func (h *Handler) ReorderRoles(c *gin.Context) {
 // @Summary      Set the server's default role
 // @Description  Administrators only (the owner, or a member with ADMINISTRATOR). The default role is assigned automatically to new members.
 // @Tags         roles
+// @Produce      json
 // @Accept       json
 // @Security     BearerAuth
 // @Param        serverId  path  string                  true  "Server ID" Format(uuid)
@@ -299,6 +300,7 @@ func (h *Handler) SetDefaultRole(c *gin.Context) {
 // @Summary      Delete a role
 // @Description  Administrators only (the owner, or a member with ADMINISTRATOR).
 // @Tags         roles
+// @Produce      json
 // @Security     BearerAuth
 // @Param        roleId  path  string  true  "Role ID" Format(uuid)
 // @Success      204  "no content"

@@ -87,6 +87,7 @@ func (h *Handler) AssignRole(c *gin.Context) {
 // @Summary      Remove a role from a member
 // @Description  Administrators only (the owner, or a member with ADMINISTRATOR).
 // @Tags         member-roles
+// @Produce      json
 // @Security     BearerAuth
 // @Param        serverId  path  string  true  "Server ID" Format(uuid)
 // @Param        userId    path  string  true  "Target member's user ID" Format(uuid)

@@ -145,6 +145,7 @@ func (h *Handler) UpdateChannel(c *gin.Context) {
 // @Summary      Delete a channel
 // @Description  Administrators only (the owner, or a member with ADMINISTRATOR). A channel hidden from the caller by a permission override (no VIEW_CHANNELS there) is reported as 404, as if it didn't exist.
 // @Tags         channels
+// @Produce      json
 // @Security     BearerAuth
 // @Param        channelId  path  string  true  "Channel ID" Format(uuid)
 // @Success      204  "no content"
@@ -227,6 +228,7 @@ type reorderChannelsRequest struct {
 // @Summary      Reorder channels within a category
 // @Description  Administrators only (the owner, or a member with ADMINISTRATOR). `channel_ids` is the full, final order of the channels of that category the caller can see (or of "sin categoria" if `category_id` is omitted/null). Channels hidden from the caller by a permission override must not be sent: they keep their place, and the visible ones fill the remaining places in the given order.
 // @Tags         channels
+// @Produce      json
 // @Accept       json
 // @Security     BearerAuth
 // @Param        serverId  path  string                    true  "Server ID" Format(uuid)
