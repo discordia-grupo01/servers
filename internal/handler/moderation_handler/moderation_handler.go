@@ -92,6 +92,7 @@ type muteRequest struct {
 // @Failure      401  {object}  apierr.ErrorResponse
 // @Failure      403  {object}  apierr.ErrorResponse  "missing MANAGE_MESSAGES, target is the owner, or target has an equal or higher role"
 // @Failure      404  {object}  apierr.ErrorResponse  "server not found, or target is not a member"
+// @Failure      409  {object}  apierr.ErrorResponse  "target is already muted"
 // @Router       /v1/servers/{serverId}/mutes [post]
 func (h *Handler) Mute(c *gin.Context) {
 	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
