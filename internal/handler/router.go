@@ -86,6 +86,8 @@ func NewRouter(d Deps) *gin.Engine {
 	r.Use(telemetry.Middleware(), logging.Middleware(), logging.Recovery())
 	r.MaxMultipartMemory = maxIconUploadBytes
 	r.HandleMethodNotAllowed = true
+	r.RedirectTrailingSlash = false
+	r.RedirectFixedPath = false
 	r.NoRoute(func(c *gin.Context) {
 		apierr.NotFound(c)
 	})
@@ -107,6 +109,7 @@ func NewRouter(d Deps) *gin.Engine {
 
 	v1 := r.Group("/v1")
 	v1.Use(middleware.Auth(d.Auth))
+	v1.Use(middleware.RejectInvalidParams())
 	if d.RejectSuspended != nil {
 		v1.Use(d.RejectSuspended)
 	}

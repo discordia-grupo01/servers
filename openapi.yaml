@@ -2792,13 +2792,19 @@ paths:
         "204":
           description: No Content
         "400":
-          description: Bad Request
+          description: malformed server id, or empty user id
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/apierr.ErrorResponse"
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/apierr.ErrorResponse"
+        "403":
+          description: missing MANAGE_MESSAGES
           content:
             application/json:
               schema:
