@@ -50,6 +50,7 @@ func TestWriteDomainError_MapsEveryCaseToAStableCode(t *testing.T) {
 		{model.ErrForbiddenMissingPermission, 403, "MISSING_PERMISSION", "missing_permission"},
 		{model.ErrAlreadyBanned, 409, "ALREADY_BANNED", "already_banned"},
 		{model.ErrAlreadyMuted, 409, "ALREADY_MUTED", "already_muted"},
+		{model.ErrUnmuteTargetRequired, 400, "MUTE_TARGET_REQUIRED", "required"},
 		{model.ErrInvitationExpired, 404, "INVITATION_INVALID", "invitation_invalid"},
 		{model.ErrUserBanned, 403, "USER_BANNED", "user_banned"},
 		{model.ErrUnauthorized, 401, "UNAUTHORIZED", ""},

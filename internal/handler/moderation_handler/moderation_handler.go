@@ -123,8 +123,9 @@ func (h *Handler) Mute(c *gin.Context) {
 // @Param        userId path string true "Muted user ID" Format(uuid)
 // @Success      204
 // @Failure      404  {object} apierr.ErrorResponse  "user is not muted in this server"
-// @Failure      400  {object}  apierr.ErrorResponse
+// @Failure      400  {object}  apierr.ErrorResponse  "malformed server id, or empty user id"
 // @Failure      401  {object}  apierr.ErrorResponse
+// @Failure      403  {object}  apierr.ErrorResponse  "missing MANAGE_MESSAGES"
 // @Router       /v1/servers/{serverId}/mutes/{userId} [delete]
 func (h *Handler) Unmute(c *gin.Context) {
 	serverID, ok := apierr.ParseUUIDParam(c, "serverId")
