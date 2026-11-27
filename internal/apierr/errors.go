@@ -259,6 +259,8 @@ func WriteDomainError(c *gin.Context, err error) {
 		RespondError(c, http.StatusNotFound, CodeMuteNotFound, err.Error(), map[string]any{"reason": "mute_not_found"})
 	case errors.Is(err, model.ErrMuteTargetRequired):
 		RespondError(c, http.StatusBadRequest, CodeMuteTargetReq, err.Error(), FieldErr("user_id", "required"))
+	case errors.Is(err, model.ErrUnmuteTargetRequired):
+		RespondError(c, http.StatusBadRequest, CodeMuteTargetReq, err.Error(), FieldErr("user_id", "required"))
 	case errors.Is(err, model.ErrCannotMuteSelf):
 		RespondError(c, http.StatusBadRequest, CodeCannotMuteSelf, err.Error(), FieldErr("user_id", "cannot_mute_self"))
 	case errors.Is(err, model.ErrCannotMuteOwner):
